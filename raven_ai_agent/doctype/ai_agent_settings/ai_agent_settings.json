@@ -1,0 +1,113 @@
+{
+    "doctype": "DocType",
+    "name": "AI Agent Settings",
+    "module": "Raven AI Agent",
+    "custom": 0,
+    "issingle": 1,
+    "is_submittable": 0,
+    "track_changes": 1,
+    "fields": [
+        {
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "label": "Enabled",
+            "default": 1
+        },
+        {
+            "fieldname": "sb_api",
+            "fieldtype": "Section Break",
+            "label": "API Configuration"
+        },
+        {
+            "fieldname": "openai_api_key",
+            "fieldtype": "Password",
+            "label": "OpenAI API Key",
+            "reqd": 1
+        },
+        {
+            "fieldname": "model",
+            "fieldtype": "Select",
+            "label": "Model",
+            "options": "gpt-4o-mini\ngpt-4o\ngpt-4-turbo\ngpt-3.5-turbo",
+            "default": "gpt-4o-mini"
+        },
+        {
+            "fieldname": "cb_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "max_tokens",
+            "fieldtype": "Int",
+            "label": "Max Tokens",
+            "default": 2000
+        },
+        {
+            "fieldname": "confidence_threshold",
+            "fieldtype": "Float",
+            "label": "Confidence Threshold",
+            "default": 0.7,
+            "description": "Minimum confidence to respond without caveats"
+        },
+        {
+            "fieldname": "sb_behavior",
+            "fieldtype": "Section Break",
+            "label": "Behavior Settings"
+        },
+        {
+            "fieldname": "default_autonomy",
+            "fieldtype": "Select",
+            "label": "Default Autonomy Level",
+            "options": "1 - Copilot\n2 - Command\n3 - Agent",
+            "default": "1 - Copilot"
+        },
+        {
+            "fieldname": "allow_level_3",
+            "fieldtype": "Check",
+            "label": "Allow Level 3 (Agent) Operations",
+            "default": 0,
+            "description": "Enable full autonomous operations"
+        },
+        {
+            "fieldname": "cb_2",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "memory_retention_days",
+            "fieldtype": "Int",
+            "label": "Memory Retention (Days)",
+            "default": 90,
+            "description": "How long to keep non-critical memories"
+        },
+        {
+            "fieldname": "generate_daily_summaries",
+            "fieldtype": "Check",
+            "label": "Generate Daily Summaries",
+            "default": 1
+        },
+        {
+            "fieldname": "sb_raven",
+            "fieldtype": "Section Break",
+            "label": "Raven Integration"
+        },
+        {
+            "fieldname": "raven_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Raven Integration",
+            "default": 1
+        },
+        {
+            "fieldname": "raven_trigger",
+            "fieldtype": "Data",
+            "label": "Trigger Word",
+            "default": "@ai",
+            "description": "Word to trigger AI response in Raven"
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1
+        }
+    ]
+}
