@@ -400,3 +400,4 @@ def handle_raven_message(doc, method):
             "message": result["response"],
             "message_type": "Text"
         }).insert(ignore_permissions=True)
+        frappe.db.commit()
