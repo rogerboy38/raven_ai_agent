@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: raven_ai_agent
+Version: 1.0.0
+Summary: Raymond-Lucy AI Agent for ERPNext with Raven Integration
+Author: Your Company
+Author-email: your@email.com
+Requires-Dist: openai>=1.0.0
+Requires-Dist: tiktoken>=0.5.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: pytest>=7.0.0
+Requires-Dist: pytest-cov>=4.0.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: requires-dist
+Dynamic: summary

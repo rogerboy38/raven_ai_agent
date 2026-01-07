@@ -54,16 +54,12 @@ Store important facts about user preferences and context:
 5. Format currency/dates according to user's locale
 
 ## RESPONSE FORMAT
-[CONFIDENCE: HIGH/MEDIUM/LOW/UNCERTAIN] [AUTONOMY: LEVEL 1/2/3]
+[CONFIDENCE: HIGH/MEDIUM/LOW/UNCERTAIN]
+[AUTONOMY: LEVEL 1/2/3]
 
-{Your response - be concise and actionable}
+{Your response}
 
-When showing documents:
-- Include clickable links if provided in context
-- Format as a clean list with key info (name, customer/party, amount, date, status)
-- Use markdown formatting for clarity
-
-[Sources: Document names queried]
+[Sources: Document names, field values queried]
 """
 
 
@@ -223,34 +219,6 @@ class RaymondLucyAgent:
             if orders:
                 context.append(f"Purchase Orders: {json.dumps(orders, default=str)}")
         
-        if any(word in query_lower for word in ["quotation", "quote", "cotización", "cotizacion"]):
-            quotations = frappe.get_list(
-                "Quotation",
-                filters={"docstatus": ["<", 2]},
-                fields=["name", "party_name", "grand_total", "status", "transaction_date", "valid_till"],
-                order_by="creation desc",
-                limit=10
-            )
-            if quotations:
-                site_name = frappe.local.site
-                for q in quotations:
-                    q["link"] = f"https://{site_name}/app/quotation/{q['name']}"
-                context.append(f"Quotations: {json.dumps(quotations, default=str)}")
-        
-        if any(word in query_lower for word in ["sales order", "orden de venta"]):
-            sales_orders = frappe.get_list(
-                "Sales Order",
-                filters={"docstatus": ["<", 2]},
-                fields=["name", "customer", "grand_total", "status", "transaction_date"],
-                order_by="creation desc",
-                limit=10
-            )
-            if sales_orders:
-                site_name = frappe.local.site
-                for so in sales_orders:
-                    so["link"] = f"https://{site_name}/app/sales-order/{so['name']}"
-                context.append(f"Sales Orders: {json.dumps(sales_orders, default=str)}")
-        
         return "\n".join(context) if context else "No specific ERPNext data found for this query."
     
     def determine_autonomy(self, query: str) -> int:
@@ -378,7 +346,16 @@ def process_message(message: str, conversation_history: str = None) -> Dict:
     
     return agent.process_query(message, history)
 
-
+@frappe.whitelist()
+def handle_raven_message(doc, method):
+    """Hook for Raven message integration"""
+    import frappe
+    frappe.log_error(f"Hook triggered: {doc.text}", "AI Agent Debug")
+    
+    # Check if message is directed at AI
+    if not doc.text or not doc.text.startswith("@ai"):
+        return
+    #...
 @frappe.whitelist()
 def handle_raven_message(doc, method):
     """Hook for Raven message integration"""
@@ -397,6 +374,6 @@ def handle_raven_message(doc, method):
         frappe.get_doc({
             "doctype": "Raven Message",
             "channel_id": doc.channel_id,
-            "message": result["response"],
+            "text": result["response"],
             "message_type": "Text"
         }).insert(ignore_permissions=True)
