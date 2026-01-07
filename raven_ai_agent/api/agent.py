@@ -394,10 +394,21 @@ def handle_raven_message(doc, method):
     
     if result["success"]:
         # Reply in Raven
-        frappe.get_doc({
+        reply_doc = frappe.get_doc({
             "doctype": "Raven Message",
             "channel_id": doc.channel_id,
-            "message": result["response"],
+            "text": result["response"],
             "message_type": "Text"
-        }).insert(ignore_permissions=True)
+        })
+        reply_doc.insert(ignore_permissions=True)
         frappe.db.commit()
+        
+        # Publish to realtime for immediate UI update
+        frappe.publish_realtime(
+            event="raven_message",
+            message={
+                "channel_id": doc.channel_id,
+                "message": reply_doc.as_dict()
+            },
+            after_commit=True
+        )
