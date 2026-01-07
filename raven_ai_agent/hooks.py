@@ -4,7 +4,7 @@ app_publisher = "Your Company"
 app_description = "Raymond-Lucy AI Agent for ERPNext - Anti-Hallucination + Persistent Memory"
 app_email = "your@email.com"
 app_license = "MIT"
-required_apps = ["frappe", "raven"]
+required_apps = ["frappe"]
 
 # App includes (required for build)
 # app_include_css = "/assets/raven_ai_agent/css/raven_ai_agent.css"
