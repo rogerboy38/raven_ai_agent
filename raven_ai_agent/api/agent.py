@@ -382,33 +382,33 @@ def process_message(message: str, conversation_history: str = None) -> Dict:
 @frappe.whitelist()
 def handle_raven_message(doc, method):
     """Hook for Raven message integration"""
-    # Check if message is directed at AI
-    if not doc.text or not doc.text.startswith("@ai"):
-        return
-    
-    query = doc.text.replace("@ai", "").strip()
-    user = doc.owner
-    
-    agent = RaymondLucyAgent(user)
-    result = agent.process_query(query)
-    
-    if result["success"]:
-        # Reply in Raven
-        reply_doc = frappe.get_doc({
-            "doctype": "Raven Message",
-            "channel_id": doc.channel_id,
-            "text": result["response"],
-            "message_type": "Text"
-        })
-        reply_doc.insert(ignore_permissions=True)
-        frappe.db.commit()
+    try:
+        # Check if message is directed at AI
+        if not doc.text or not doc.text.startswith("@ai"):
+            return
         
-        # Publish to realtime for immediate UI update
-        frappe.publish_realtime(
-            event="raven_message",
-            message={
+        query = doc.text.replace("@ai", "").strip()
+        user = doc.owner
+        
+        frappe.logger().info(f"[AI Agent] Processing query: {query}")
+        
+        agent = RaymondLucyAgent(user)
+        result = agent.process_query(query)
+        
+        frappe.logger().info(f"[AI Agent] Result success: {result.get('success')}, response length: {len(result.get('response', ''))}")
+        
+        if result["success"]:
+            # Reply in Raven - use same structure as incoming message
+            reply_doc = frappe.get_doc({
+                "doctype": "Raven Message",
                 "channel_id": doc.channel_id,
-                "message": reply_doc.as_dict()
-            },
-            after_commit=True
-        )
+                "text": result["response"],
+                "message_type": "Text"
+            })
+            reply_doc.insert(ignore_permissions=True)
+            frappe.db.commit()
+            
+            frappe.logger().info(f"[AI Agent] Reply saved: {reply_doc.name}")
+    except Exception as e:
+        frappe.logger().error(f"[AI Agent] Error: {str(e)}")
+        frappe.log_error(f"AI Agent Error: {str(e)}", "Raven AI Agent")
