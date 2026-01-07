@@ -6,6 +6,10 @@ app_email = "your@email.com"
 app_license = "MIT"
 required_apps = ["frappe", "raven"]
 
+# App includes (required for build)
+# app_include_css = "/assets/raven_ai_agent/css/raven_ai_agent.css"
+# app_include_js = "/assets/raven_ai_agent/js/raven_ai_agent.js"
+
 # Hooks
 doc_events = {
     "Raven Message": {

@@ -1,0 +1,8 @@
+{
+    "js/raven_ai_agent.min.js": [
+        "public/js/raven_ai_agent.js"
+    ],
+    "css/raven_ai_agent.min.css": [
+        "public/css/raven_ai_agent.css"
+    ]
+}
