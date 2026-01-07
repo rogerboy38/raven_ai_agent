@@ -1,17 +1,32 @@
 {
+    "actions": [],
+    "creation": "2026-01-06 00:00:00.000000",
     "doctype": "DocType",
-    "name": "AI Agent Settings",
-    "module": "Raven AI Agent",
-    "custom": 0,
-    "issingle": 1,
-    "is_submittable": 0,
-    "track_changes": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "enabled",
+        "sb_api",
+        "openai_api_key",
+        "model",
+        "cb_1",
+        "max_tokens",
+        "confidence_threshold",
+        "sb_behavior",
+        "default_autonomy",
+        "allow_level_3",
+        "cb_2",
+        "memory_retention_days",
+        "generate_daily_summaries",
+        "sb_raven",
+        "raven_enabled",
+        "raven_trigger"
+    ],
     "fields": [
         {
+            "default": "1",
             "fieldname": "enabled",
             "fieldtype": "Check",
-            "label": "Enabled",
-            "default": 1
+            "label": "Enabled"
         },
         {
             "fieldname": "sb_api",
@@ -25,28 +40,28 @@
             "reqd": 1
         },
         {
+            "default": "gpt-4o-mini",
             "fieldname": "model",
             "fieldtype": "Select",
             "label": "Model",
-            "options": "gpt-4o-mini\ngpt-4o\ngpt-4-turbo\ngpt-3.5-turbo",
-            "default": "gpt-4o-mini"
+            "options": "gpt-4o-mini\ngpt-4o\ngpt-4-turbo\ngpt-3.5-turbo"
         },
         {
             "fieldname": "cb_1",
             "fieldtype": "Column Break"
         },
         {
+            "default": "2000",
             "fieldname": "max_tokens",
             "fieldtype": "Int",
-            "label": "Max Tokens",
-            "default": 2000
+            "label": "Max Tokens"
         },
         {
+            "default": "0.7",
+            "description": "Minimum confidence to respond without caveats",
             "fieldname": "confidence_threshold",
             "fieldtype": "Float",
-            "label": "Confidence Threshold",
-            "default": 0.7,
-            "description": "Minimum confidence to respond without caveats"
+            "label": "Confidence Threshold"
         },
         {
             "fieldname": "sb_behavior",
@@ -54,35 +69,35 @@
             "label": "Behavior Settings"
         },
         {
+            "default": "1 - Copilot",
             "fieldname": "default_autonomy",
             "fieldtype": "Select",
             "label": "Default Autonomy Level",
-            "options": "1 - Copilot\n2 - Command\n3 - Agent",
-            "default": "1 - Copilot"
+            "options": "1 - Copilot\n2 - Command\n3 - Agent"
         },
         {
+            "default": "0",
+            "description": "Enable full autonomous operations",
             "fieldname": "allow_level_3",
             "fieldtype": "Check",
-            "label": "Allow Level 3 (Agent) Operations",
-            "default": 0,
-            "description": "Enable full autonomous operations"
+            "label": "Allow Level 3 (Agent) Operations"
         },
         {
             "fieldname": "cb_2",
             "fieldtype": "Column Break"
         },
         {
+            "default": "90",
+            "description": "How long to keep non-critical memories",
             "fieldname": "memory_retention_days",
             "fieldtype": "Int",
-            "label": "Memory Retention (Days)",
-            "default": 90,
-            "description": "How long to keep non-critical memories"
+            "label": "Memory Retention (Days)"
         },
         {
+            "default": "1",
             "fieldname": "generate_daily_summaries",
             "fieldtype": "Check",
-            "label": "Generate Daily Summaries",
-            "default": 1
+            "label": "Generate Daily Summaries"
         },
         {
             "fieldname": "sb_raven",
@@ -90,24 +105,34 @@
             "label": "Raven Integration"
         },
         {
+            "default": "1",
             "fieldname": "raven_enabled",
             "fieldtype": "Check",
-            "label": "Enable Raven Integration",
-            "default": 1
+            "label": "Enable Raven Integration"
         },
         {
+            "default": "@ai",
+            "description": "Word to trigger AI response in Raven",
             "fieldname": "raven_trigger",
             "fieldtype": "Data",
-            "label": "Trigger Word",
-            "default": "@ai",
-            "description": "Word to trigger AI response in Raven"
+            "label": "Trigger Word"
         }
     ],
+    "issingle": 1,
+    "links": [],
+    "modified": "2026-01-07 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Raven AI Agent",
+    "name": "AI Agent Settings",
+    "owner": "Administrator",
     "permissions": [
         {
-            "role": "System Manager",
             "read": 1,
+            "role": "System Manager",
             "write": 1
         }
-    ]
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
 }
