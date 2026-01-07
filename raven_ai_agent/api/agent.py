@@ -78,7 +78,7 @@ class RaymondLucyAgent:
         try:
             settings = frappe.get_single("AI Agent Settings")
             return {
-                "openai_api_key": settings.openai_api_key,
+                "openai_api_key": settings.get_password("openai_api_key"),
                 "model": settings.model or "gpt-4o-mini",
                 "max_tokens": settings.max_tokens or 2000,
                 "confidence_threshold": settings.confidence_threshold or 0.7
