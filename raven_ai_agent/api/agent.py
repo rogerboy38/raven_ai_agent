@@ -4,6 +4,7 @@ Anti-Hallucination + Persistent Memory + Autonomy Slider
 """
 import frappe
 import json
+import re
 from typing import Optional, Dict, List
 from openai import OpenAI
 
@@ -13,6 +14,13 @@ try:
     VECTOR_SEARCH_ENABLED = True
 except ImportError:
     VECTOR_SEARCH_ENABLED = False
+
+# Import workflow executor
+try:
+    from raven_ai_agent.api.workflows import WorkflowExecutor
+    WORKFLOWS_ENABLED = True
+except ImportError:
+    WORKFLOWS_ENABLED = False
 
 SYSTEM_PROMPT = """
 You are an AI assistant for ERPNext operating under the "Raymond-Lucy Protocol v2.0".
@@ -251,6 +259,34 @@ class RaymondLucyAgent:
                     so["link"] = f"https://{site_name}/app/sales-order/{so['name']}"
                 context.append(f"Sales Orders: {json.dumps(sales_orders, default=str)}")
         
+        if any(word in query_lower for word in ["work order", "manufacturing", "production"]):
+            work_orders = frappe.get_list(
+                "Work Order",
+                filters={"docstatus": ["<", 2]},
+                fields=["name", "production_item", "qty", "status", "sales_order"],
+                order_by="creation desc",
+                limit=10
+            )
+            if work_orders:
+                site_name = frappe.local.site
+                for wo in work_orders:
+                    wo["link"] = f"https://{site_name}/app/work-order/{wo['name']}"
+                context.append(f"Work Orders: {json.dumps(work_orders, default=str)}")
+        
+        if any(word in query_lower for word in ["delivery", "shipping", "shipment"]):
+            delivery_notes = frappe.get_list(
+                "Delivery Note",
+                filters={"docstatus": ["<", 2]},
+                fields=["name", "customer", "grand_total", "status", "posting_date"],
+                order_by="creation desc",
+                limit=10
+            )
+            if delivery_notes:
+                site_name = frappe.local.site
+                for dn in delivery_notes:
+                    dn["link"] = f"https://{site_name}/app/delivery-note/{dn['name']}"
+                context.append(f"Delivery Notes: {json.dumps(delivery_notes, default=str)}")
+        
         return "\n".join(context) if context else "No specific ERPNext data found for this query."
     
     def determine_autonomy(self, query: str) -> int:
@@ -261,18 +297,96 @@ class RaymondLucyAgent:
         if any(word in query_lower for word in ["delete", "cancel", "submit", "create invoice", "payment"]):
             return 3
         
-        # Level 2 keywords (modifications)
-        if any(word in query_lower for word in ["update", "change", "modify", "set", "add"]):
+        # Level 2 keywords (modifications/workflow)
+        if any(word in query_lower for word in ["update", "change", "modify", "set", "add", "convert", "create", "confirm"]):
             return 2
         
         # Default to Level 1 (read-only)
         return 1
+    
+    def execute_workflow_command(self, query: str) -> Optional[Dict]:
+        """Parse and execute workflow commands"""
+        if not WORKFLOWS_ENABLED:
+            return None
+        
+        query_lower = query.lower()
+        executor = WorkflowExecutor(self.user)
+        
+        # Pattern: confirm <action> from <doc>
+        confirm_match = re.search(r'confirm\s+(?:create\s+)?(\w+(?:\s+\w+)?)\s+(?:from|for)\s+([\w-]+)', query_lower)
+        is_confirm = "confirm" in query_lower
+        
+        # Quotation to Sales Order
+        if any(phrase in query_lower for phrase in ["sales order from quotation", "convert quotation", "quotation to sales order"]):
+            doc_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+            if doc_match:
+                return executor.create_sales_order_from_quotation(doc_match.group(1).upper(), confirm=is_confirm)
+        
+        # Sales Order to Work Order
+        if any(phrase in query_lower for phrase in ["work order from sales", "create work order", "sales order to work order"]):
+            doc_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
+            if doc_match:
+                return executor.create_work_orders_from_sales_order(doc_match.group(1).upper(), confirm=is_confirm)
+        
+        # Stock Entry for Work Order
+        if any(phrase in query_lower for phrase in ["stock entry for", "material transfer for"]):
+            doc_match = re.search(r'(MFG-WO-\d+-\d+|WO-\d+)', query, re.IGNORECASE)
+            if doc_match:
+                return executor.create_stock_entry_for_work_order(doc_match.group(1).upper(), confirm=is_confirm)
+        
+        # Delivery Note from Sales Order
+        if any(phrase in query_lower for phrase in ["delivery note from", "ship sales order", "deliver"]):
+            doc_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
+            if doc_match:
+                return executor.create_delivery_note_from_sales_order(doc_match.group(1).upper(), confirm=is_confirm)
+        
+        # Invoice from Delivery Note
+        if any(phrase in query_lower for phrase in ["invoice from delivery", "create invoice from dn"]):
+            doc_match = re.search(r'(MAT-DN-\d+-\d+|DN-\d+)', query, re.IGNORECASE)
+            if doc_match:
+                return executor.create_invoice_from_delivery_note(doc_match.group(1).upper(), confirm=is_confirm)
+        
+        # Workflow status
+        if "workflow status" in query_lower or "track" in query_lower:
+            q_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+            so_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
+            return executor.get_workflow_status(
+                quotation_name=q_match.group(1).upper() if q_match else None,
+                so_name=so_match.group(1).upper() if so_match else None
+            )
+        
+        return None
     
     def process_query(self, query: str, conversation_history: List[Dict] = None) -> Dict:
         """Main processing function"""
         
         # Determine autonomy level
         suggested_autonomy = self.determine_autonomy(query)
+        
+        # Try workflow command first (Level 2/3 operations)
+        workflow_result = self.execute_workflow_command(query)
+        if workflow_result:
+            if workflow_result.get("requires_confirmation"):
+                return {
+                    "success": True,
+                    "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{workflow_result['preview']}",
+                    "autonomy_level": 2,
+                    "context_used": {"workflow": True}
+                }
+            elif workflow_result.get("success"):
+                return {
+                    "success": True,
+                    "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{workflow_result.get('message', 'Operation completed.')}",
+                    "autonomy_level": 2,
+                    "context_used": {"workflow": True}
+                }
+            elif workflow_result.get("error"):
+                return {
+                    "success": False,
+                    "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n❌ Error: {workflow_result['error']}",
+                    "autonomy_level": 2,
+                    "context_used": {"workflow": True}
+                }
         
         # Build context
         morning_briefing = self.get_morning_briefing()
