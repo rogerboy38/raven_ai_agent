@@ -148,6 +148,33 @@ class WorkflowExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    # ========== SUBMIT SALES ORDER ==========
+    def submit_sales_order(self, so_name: str, confirm: bool = False) -> Dict:
+        """Submit a draft sales order"""
+        try:
+            so = frappe.get_doc("Sales Order", so_name)
+            
+            if so.docstatus == 1:
+                return {"success": True, "message": f"✅ Sales Order **{so_name}** is already submitted."}
+            
+            if so.docstatus == 2:
+                return {"success": False, "error": f"Sales Order {so_name} is Cancelled."}
+            
+            if not confirm:
+                return {
+                    "success": True,
+                    "requires_confirmation": True,
+                    "preview": f"**Submit Sales Order {so_name}?**\n\n| Field | Value |\n|-------|-------|\n| Customer | {so.customer} |\n| Total | {so.currency} {so.grand_total:,.2f} |\n\n⚠️ **Confirm?** Reply: `@ai confirm submit sales order {so_name}`"
+                }
+            
+            so.flags.ignore_permissions = True
+            so.submit()
+            frappe.db.commit()
+            
+            return {"success": True, "message": f"✅ Sales Order **{so_name}** submitted successfully!"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     # ========== SALES ORDER TO WORK ORDER ==========
     def get_sales_order_details(self, so_name: str) -> Dict:
         """Get Sales Order details for Work Order creation"""
@@ -301,6 +328,15 @@ class WorkflowExecutor:
 ⚠️ **Confirm?** Reply: `@ai confirm delivery note from """ + so_name + "`"
                 }
             
+            # Auto-submit draft Sales Order (migration mode)
+            if so.docstatus == 0:
+                try:
+                    so.flags.ignore_permissions = True
+                    so.submit()
+                    frappe.db.commit()
+                except Exception as e:
+                    return {"success": False, "error": f"Cannot auto-submit Sales Order: {str(e)}"}
+            
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so_name)
             dn.insert()
@@ -340,6 +376,15 @@ class WorkflowExecutor:
 
 ⚠️ **Confirm?** Reply: `@ai confirm invoice from """ + dn_name + "`"
                 }
+            
+            # Auto-submit draft Delivery Note (migration mode)
+            if dn.docstatus == 0:
+                try:
+                    dn.flags.ignore_permissions = True
+                    dn.submit()
+                    frappe.db.commit()
+                except Exception as e:
+                    return {"success": False, "error": f"Cannot auto-submit Delivery Note: {str(e)}"}
             
             from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
             si = make_sales_invoice(dn_name)

@@ -332,8 +332,14 @@ class RaymondLucyAgent:
             frappe.logger().info(f"[Workflow] Creating SO from {qtn_match.group(1)}, confirm={is_confirm}")
             return executor.create_sales_order_from_quotation(qtn_match.group(1).upper(), confirm=is_confirm)
         
-        # Sales Order to Work Order
+        # Sales Order patterns
         so_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
+        
+        # Submit Sales Order
+        if so_match and "submit" in query_lower and "sales order" in query_lower:
+            return executor.submit_sales_order(so_match.group(1).upper(), confirm=is_confirm)
+        
+        # Sales Order to Work Order
         if so_match and "work order" in query_lower:
             return executor.create_work_orders_from_sales_order(so_match.group(1).upper(), confirm=is_confirm)
         
