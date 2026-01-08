@@ -408,6 +408,13 @@ def handle_raven_message(doc, method):
             reply_doc.insert(ignore_permissions=True)
             frappe.db.commit()
             
+            # Publish to Raven's channel-specific realtime event
+            frappe.publish_realtime(
+                event=f"raven:channel:{doc.channel_id}",
+                message={"message": reply_doc.as_dict()},
+                after_commit=True
+            )
+            
             frappe.logger().info(f"[AI Agent] Reply saved: {reply_doc.name}")
     except Exception as e:
         frappe.logger().error(f"[AI Agent] Error: {str(e)}")
