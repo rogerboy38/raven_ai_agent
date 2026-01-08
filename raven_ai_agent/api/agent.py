@@ -306,7 +306,10 @@ class RaymondLucyAgent:
     
     def execute_workflow_command(self, query: str) -> Optional[Dict]:
         """Parse and execute workflow commands"""
+        frappe.logger().info(f"[Workflow] Checking query: {query}, WORKFLOWS_ENABLED: {WORKFLOWS_ENABLED}")
+        
         if not WORKFLOWS_ENABLED:
+            frappe.logger().info("[Workflow] Workflows disabled")
             return None
         
         query_lower = query.lower()
@@ -317,7 +320,10 @@ class RaymondLucyAgent:
         
         # Quotation to Sales Order - match any query with SAL-QTN and "sales order"
         qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+        frappe.logger().info(f"[Workflow] qtn_match: {qtn_match}, 'sales order' in query: {'sales order' in query_lower}")
+        
         if qtn_match and "sales order" in query_lower:
+            frappe.logger().info(f"[Workflow] Creating SO from {qtn_match.group(1)}, confirm={is_confirm}")
             return executor.create_sales_order_from_quotation(qtn_match.group(1).upper(), confirm=is_confirm)
         
         # Sales Order to Work Order
