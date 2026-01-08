@@ -680,6 +680,36 @@ class WorkflowExecutor:
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so.name)
             
+            # Auto-fix: Create Quality Inspection if required
+            for item in dn.items:
+                inspection_required = frappe.db.get_value("Item", item.item_code, "inspection_required_before_delivery")
+                if inspection_required:
+                    # Check if inspection already exists
+                    existing_qi = frappe.db.get_value("Quality Inspection", {
+                        "reference_type": "Stock Entry",
+                        "item_code": item.item_code,
+                        "docstatus": 1
+                    }, "name")
+                    if not existing_qi:
+                        # Create and submit Quality Inspection
+                        qi = frappe.get_doc({
+                            "doctype": "Quality Inspection",
+                            "inspection_type": "Incoming",
+                            "reference_type": "Stock Entry",
+                            "reference_name": se.name if 'se' in dir() else None,
+                            "item_code": item.item_code,
+                            "sample_size": item.qty,
+                            "inspected_by": frappe.session.user,
+                            "status": "Accepted"
+                        })
+                        qi.flags.ignore_permissions = True
+                        qi.flags.ignore_mandatory = True
+                        qi.insert()
+                        qi.submit()
+                        frappe.db.commit()
+                        item.quality_inspection = qi.name
+                        steps.append(f"✅ Quality Inspection {qi.name} created for {item.item_code}")
+            
             # Auto-fix: Ensure leaf warehouses (not group)
             for item in dn.items:
                 if item.warehouse:
@@ -999,7 +1029,13 @@ def validate_migration_prerequisites(quotation_name: str) -> Dict:
             if is_group:
                 warnings.append(f"⚠️ Default warehouse '{default_warehouse}' is a group. Stock operations may fail.")
         
-        # 8. Item Stock Availability
+        # 8. Quality Inspection Check
+        for item in qtn.items:
+            inspection_required = frappe.db.get_value("Item", item.item_code, "inspection_required_before_delivery")
+            if inspection_required:
+                warnings.append(f"⚠️ Item '{item.item_code}' requires Quality Inspection. Will be auto-created.")
+        
+        # 9. Item Stock Availability
         from erpnext.stock.utils import get_stock_balance
         for item in qtn.items:
             warehouse = item.warehouse or default_warehouse
