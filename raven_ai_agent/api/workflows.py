@@ -685,11 +685,25 @@ def complete_workflow_to_invoice(quotation_name: str, dry_run: bool = False) -> 
         
         so_name = result["sales_order"]
         
-        # Step 3: Create Work Orders (if items have BOM)
+        # Step 3: Submit Sales Order
+        try:
+            so = frappe.get_doc("Sales Order", so_name)
+            if so.docstatus == 0:
+                so.flags.ignore_permissions = True
+                so.submit()
+                frappe.db.commit()
+                results["steps"].append({"step": "submit_sales_order", "success": True, "sales_order": so_name})
+            else:
+                results["steps"].append({"step": "submit_sales_order", "success": True, "message": "Already submitted"})
+        except Exception as e:
+            results["steps"].append({"step": "submit_sales_order", "success": False, "error": str(e)})
+            return results
+        
+        # Step 4: Create Work Orders (if items have BOM)
         result = executor.create_work_orders_from_sales_order(so_name, confirm=True)
         results["steps"].append({"step": "create_work_orders", **result})
         
-        # Step 4: Create Delivery Note
+        # Step 5: Create Delivery Note
         result = executor.create_delivery_note_from_sales_order(so_name, confirm=True)
         results["steps"].append({"step": "create_delivery_note", **result})
         if not result.get("success") or not result.get("delivery_note"):
