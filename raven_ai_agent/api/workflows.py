@@ -78,19 +78,25 @@ class WorkflowExecutor:
         try:
             from erpnext.selling.doctype.quotation.quotation import make_sales_order
             
-            # Check quotation status first
+            # Migration mode: auto-fix quotation issues
             qtn = frappe.get_doc("Quotation", quotation_name)
-            
-            if qtn.docstatus == 0:
-                return {"success": False, "error": f"Quotation {quotation_name} is Draft. Please submit it first in ERPNext, then retry."}
             
             if qtn.docstatus == 2:
                 return {"success": False, "error": f"Quotation {quotation_name} is Cancelled. Cannot create Sales Order."}
             
             # Auto-extend validity for expired quotations
             if qtn.valid_till and str(qtn.valid_till) < nowdate():
-                frappe.db.set_value("Quotation", quotation_name, "valid_till", add_days(nowdate(), 30))
-                frappe.db.commit()
+                qtn.valid_till = add_days(nowdate(), 30)
+            
+            # Auto-submit draft quotations (migration mode)
+            if qtn.docstatus == 0:
+                try:
+                    qtn.flags.ignore_permissions = True
+                    qtn.save()
+                    qtn.submit()
+                    frappe.db.commit()
+                except Exception as submit_error:
+                    return {"success": False, "error": f"Cannot auto-submit Quotation: {str(submit_error)}"}
             
             so = make_sales_order(quotation_name)
             so.delivery_date = add_days(nowdate(), 30)  # Default 30 days
