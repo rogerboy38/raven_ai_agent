@@ -312,39 +312,32 @@ class RaymondLucyAgent:
         query_lower = query.lower()
         executor = WorkflowExecutor(self.user)
         
-        # Pattern: confirm <action> from <doc>
-        confirm_match = re.search(r'confirm\s+(?:create\s+)?(\w+(?:\s+\w+)?)\s+(?:from|for)\s+([\w-]+)', query_lower)
-        is_confirm = "confirm" in query_lower
+        # Check for confirmation
+        is_confirm = any(word in query_lower for word in ["confirm", "yes", "proceed", "do it", "execute"])
         
-        # Quotation to Sales Order
-        if any(phrase in query_lower for phrase in ["sales order from quotation", "convert quotation", "quotation to sales order"]):
-            doc_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
-            if doc_match:
-                return executor.create_sales_order_from_quotation(doc_match.group(1).upper(), confirm=is_confirm)
+        # Quotation to Sales Order - match any query with SAL-QTN and "sales order"
+        qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+        if qtn_match and "sales order" in query_lower:
+            return executor.create_sales_order_from_quotation(qtn_match.group(1).upper(), confirm=is_confirm)
         
         # Sales Order to Work Order
-        if any(phrase in query_lower for phrase in ["work order from sales", "create work order", "sales order to work order"]):
-            doc_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
-            if doc_match:
-                return executor.create_work_orders_from_sales_order(doc_match.group(1).upper(), confirm=is_confirm)
+        so_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
+        if so_match and "work order" in query_lower:
+            return executor.create_work_orders_from_sales_order(so_match.group(1).upper(), confirm=is_confirm)
         
         # Stock Entry for Work Order
-        if any(phrase in query_lower for phrase in ["stock entry for", "material transfer for"]):
-            doc_match = re.search(r'(MFG-WO-\d+-\d+|WO-\d+)', query, re.IGNORECASE)
-            if doc_match:
-                return executor.create_stock_entry_for_work_order(doc_match.group(1).upper(), confirm=is_confirm)
+        wo_match = re.search(r'(MFG-WO-\d+-\d+|WO-\d+)', query, re.IGNORECASE)
+        if wo_match and any(word in query_lower for word in ["stock entry", "material transfer", "manufacture"]):
+            return executor.create_stock_entry_for_work_order(wo_match.group(1).upper(), confirm=is_confirm)
         
         # Delivery Note from Sales Order
-        if any(phrase in query_lower for phrase in ["delivery note from", "ship sales order", "deliver"]):
-            doc_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
-            if doc_match:
-                return executor.create_delivery_note_from_sales_order(doc_match.group(1).upper(), confirm=is_confirm)
+        if so_match and any(word in query_lower for word in ["delivery", "ship", "deliver"]):
+            return executor.create_delivery_note_from_sales_order(so_match.group(1).upper(), confirm=is_confirm)
         
         # Invoice from Delivery Note
-        if any(phrase in query_lower for phrase in ["invoice from delivery", "create invoice from dn"]):
-            doc_match = re.search(r'(MAT-DN-\d+-\d+|DN-\d+)', query, re.IGNORECASE)
-            if doc_match:
-                return executor.create_invoice_from_delivery_note(doc_match.group(1).upper(), confirm=is_confirm)
+        dn_match = re.search(r'(MAT-DN-\d+-\d+|DN-\d+)', query, re.IGNORECASE)
+        if dn_match and "invoice" in query_lower:
+            return executor.create_invoice_from_delivery_note(dn_match.group(1).upper(), confirm=is_confirm)
         
         # Workflow status
         if "workflow status" in query_lower or "track" in query_lower:
