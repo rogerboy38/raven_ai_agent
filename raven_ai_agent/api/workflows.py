@@ -434,26 +434,37 @@ class WorkflowExecutor:
                     # Reload to get latest version
                     dn.reload()
                     
-                    # Auto-create Quality Inspection if required
+                    # Auto-create/fix Quality Inspection if required
                     for item in dn.items:
                         inspection_required = frappe.db.get_value("Item", item.item_code, "inspection_required_before_delivery")
-                        if inspection_required and not item.quality_inspection:
-                            qi = frappe.get_doc({
-                                "doctype": "Quality Inspection",
-                                "inspection_type": "Incoming",
-                                "reference_type": "Delivery Note",
-                                "reference_name": dn.name,
-                                "item_code": item.item_code,
-                                "sample_size": item.qty,
-                                "inspected_by": frappe.session.user,
-                                "status": "Accepted"
-                            })
-                            qi.flags.ignore_permissions = True
-                            qi.flags.ignore_mandatory = True
-                            qi.insert()
-                            qi.submit()
-                            frappe.db.commit()
-                            item.quality_inspection = qi.name
+                        if inspection_required:
+                            # Check if existing QI needs to be fixed
+                            if item.quality_inspection:
+                                existing_qi = frappe.get_doc("Quality Inspection", item.quality_inspection)
+                                if existing_qi.status == "Rejected" and existing_qi.docstatus == 1:
+                                    # Cancel rejected and create new
+                                    existing_qi.flags.ignore_permissions = True
+                                    existing_qi.cancel()
+                                    frappe.db.commit()
+                                    item.quality_inspection = None
+                            
+                            if not item.quality_inspection:
+                                qi = frappe.get_doc({
+                                    "doctype": "Quality Inspection",
+                                    "inspection_type": "Incoming",
+                                    "reference_type": "Delivery Note",
+                                    "reference_name": dn.name,
+                                    "item_code": item.item_code,
+                                    "sample_size": item.qty,
+                                    "inspected_by": frappe.session.user,
+                                    "status": "Accepted"
+                                })
+                                qi.flags.ignore_permissions = True
+                                qi.flags.ignore_mandatory = True
+                                qi.insert()
+                                qi.submit()
+                                frappe.db.commit()
+                                item.quality_inspection = qi.name
                     
                     dn.flags.ignore_permissions = True
                     dn.save()
