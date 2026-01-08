@@ -77,6 +77,13 @@ class WorkflowExecutor:
         # Execute creation
         try:
             from erpnext.selling.doctype.quotation.quotation import make_sales_order
+            
+            # Auto-extend validity for expired quotations (migration mode)
+            valid_till = frappe.db.get_value("Quotation", quotation_name, "valid_till")
+            if valid_till and str(valid_till) < nowdate():
+                frappe.db.set_value("Quotation", quotation_name, "valid_till", add_days(nowdate(), 30))
+                frappe.db.commit()
+            
             so = make_sales_order(quotation_name)
             so.delivery_date = add_days(nowdate(), 30)  # Default 30 days
             so.insert()
