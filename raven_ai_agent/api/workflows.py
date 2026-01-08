@@ -78,10 +78,17 @@ class WorkflowExecutor:
         try:
             from erpnext.selling.doctype.quotation.quotation import make_sales_order
             
-            # Auto-extend validity for expired quotations (migration mode)
-            valid_till = frappe.db.get_value("Quotation", quotation_name, "valid_till")
-            if valid_till and str(valid_till) < nowdate():
-                frappe.db.set_value("Quotation", quotation_name, "valid_till", add_days(nowdate(), 30))
+            # Migration mode: auto-fix quotation issues
+            qtn = frappe.get_doc("Quotation", quotation_name)
+            
+            # Auto-extend validity for expired quotations
+            if qtn.valid_till and str(qtn.valid_till) < nowdate():
+                qtn.valid_till = add_days(nowdate(), 30)
+            
+            # Auto-submit draft quotations
+            if qtn.docstatus == 0:
+                qtn.save()
+                qtn.submit()
                 frappe.db.commit()
             
             so = make_sales_order(quotation_name)
