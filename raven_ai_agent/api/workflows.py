@@ -549,7 +549,15 @@ class WorkflowExecutor:
             # Step 2: Create Sales Order
             from erpnext.selling.doctype.quotation.quotation import make_sales_order
             so = make_sales_order(quotation_name)
+            so.transaction_date = nowdate()
             so.delivery_date = add_days(nowdate(), 30)
+            
+            # Fix payment terms dates (migration mode)
+            if so.payment_schedule:
+                for row in so.payment_schedule:
+                    if row.due_date and str(row.due_date) < nowdate():
+                        row.due_date = add_days(nowdate(), 30)
+            
             so.insert()
             so.submit()
             frappe.db.commit()
