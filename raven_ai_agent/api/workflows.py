@@ -517,7 +517,35 @@ class WorkflowExecutor:
             frappe.db.commit()
             steps.append(f"✅ Sales Order {so.name} created and submitted")
             
-            # Step 3: Create Delivery Note
+            # Step 3: Create Stock Entry (Material Receipt) if needed
+            default_warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+            if not default_warehouse:
+                default_warehouse = frappe.db.get_value("Warehouse", {"is_group": 0, "company": so.company}, "name")
+            
+            for item in so.items:
+                # Check current stock
+                from erpnext.stock.utils import get_stock_balance
+                current_stock = get_stock_balance(item.item_code, item.warehouse or default_warehouse)
+                
+                if current_stock < item.qty:
+                    # Create Material Receipt
+                    se = frappe.get_doc({
+                        "doctype": "Stock Entry",
+                        "stock_entry_type": "Material Receipt",
+                        "company": so.company,
+                        "items": [{
+                            "item_code": item.item_code,
+                            "qty": item.qty - current_stock,
+                            "t_warehouse": item.warehouse or default_warehouse,
+                            "basic_rate": item.rate
+                        }]
+                    })
+                    se.insert()
+                    se.submit()
+                    frappe.db.commit()
+                    steps.append(f"✅ Stock Entry {se.name} - received {item.qty - current_stock} of {item.item_code}")
+            
+            # Step 4: Create Delivery Note (after stock is available)
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so.name)
             dn.insert()
@@ -525,7 +553,7 @@ class WorkflowExecutor:
             frappe.db.commit()
             steps.append(f"✅ Delivery Note {dn.name} created and submitted")
             
-            # Step 4: Create Sales Invoice
+            # Step 5: Create Sales Invoice
             from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
             si = make_sales_invoice(dn.name)
             si.insert()
