@@ -510,25 +510,38 @@ def handle_raven_message(doc, method):
         
         frappe.logger().info(f"[AI Agent] Result success: {result.get('success')}, response length: {len(result.get('response', ''))}")
         
-        if result["success"]:
-            # Reply in Raven - use same structure as incoming message
-            reply_doc = frappe.get_doc({
-                "doctype": "Raven Message",
-                "channel_id": doc.channel_id,
-                "text": result["response"],
-                "message_type": "Text"
-            })
-            reply_doc.insert(ignore_permissions=True)
-            frappe.db.commit()
-            
-            # Publish to Raven's channel-specific realtime event
-            frappe.publish_realtime(
-                event=f"raven:channel:{doc.channel_id}",
-                message={"message": reply_doc.as_dict()},
-                after_commit=True
-            )
-            
-            frappe.logger().info(f"[AI Agent] Reply saved: {reply_doc.name}")
+        # Always send response (success or error)
+        response_text = result.get("response") or result.get("error") or "No response generated"
+        
+        reply_doc = frappe.get_doc({
+            "doctype": "Raven Message",
+            "channel_id": doc.channel_id,
+            "text": response_text,
+            "message_type": "Text"
+        })
+        reply_doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+        
+        # Publish to Raven's channel-specific realtime event
+        frappe.publish_realtime(
+            event=f"raven:channel:{doc.channel_id}",
+            message={"message": reply_doc.as_dict()},
+            after_commit=True
+        )
+        
+        frappe.logger().info(f"[AI Agent] Reply saved: {reply_doc.name}")
     except Exception as e:
         frappe.logger().error(f"[AI Agent] Error: {str(e)}")
         frappe.log_error(f"AI Agent Error: {str(e)}", "Raven AI Agent")
+        # Send error message to user
+        try:
+            error_doc = frappe.get_doc({
+                "doctype": "Raven Message",
+                "channel_id": doc.channel_id,
+                "text": f"❌ Error: {str(e)}",
+                "message_type": "Text"
+            })
+            error_doc.insert(ignore_permissions=True)
+            frappe.db.commit()
+        except:
+            pass
