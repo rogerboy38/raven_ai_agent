@@ -703,7 +703,62 @@ def complete_workflow_to_invoice(quotation_name: str, dry_run: bool = False) -> 
         result = executor.create_work_orders_from_sales_order(so_name, confirm=True)
         results["steps"].append({"step": "create_work_orders", **result})
         
-        # Step 5: Create Delivery Note
+        # Step 5: Check/Create Stock Entry for items without enough stock
+        try:
+            so = frappe.get_doc("Sales Order", so_name)
+            stock_entries_created = []
+            
+            for item in so.items:
+                # Check available stock
+                from erpnext.stock.utils import get_stock_balance
+                warehouse = item.warehouse or frappe.db.get_single_value("Stock Settings", "default_warehouse")
+                if not warehouse:
+                    # Find a leaf warehouse
+                    warehouse = frappe.db.get_value("Warehouse", 
+                        {"company": so.company, "is_group": 0}, "name")
+                
+                if warehouse:
+                    available = get_stock_balance(item.item_code, warehouse)
+                    if available < item.qty:
+                        # Create Material Receipt Stock Entry
+                        se = frappe.new_doc("Stock Entry")
+                        se.stock_entry_type = "Material Receipt"
+                        se.company = so.company
+                        se.purpose = "Material Receipt"
+                        
+                        se_item = se.append("items", {})
+                        se_item.item_code = item.item_code
+                        se_item.qty = item.qty - available
+                        se_item.t_warehouse = warehouse
+                        se_item.basic_rate = item.rate or 1
+                        
+                        se.flags.ignore_permissions = True
+                        se.insert()
+                        se.submit()
+                        frappe.db.commit()
+                        stock_entries_created.append({
+                            "item": item.item_code,
+                            "qty": item.qty - available,
+                            "stock_entry": se.name
+                        })
+            
+            if stock_entries_created:
+                results["steps"].append({
+                    "step": "create_stock_entries", 
+                    "success": True, 
+                    "entries": stock_entries_created
+                })
+            else:
+                results["steps"].append({
+                    "step": "create_stock_entries",
+                    "success": True,
+                    "message": "Sufficient stock available"
+                })
+        except Exception as e:
+            results["steps"].append({"step": "create_stock_entries", "success": False, "error": str(e)})
+            # Continue anyway - stock entry is optional
+        
+        # Step 6: Create Delivery Note
         result = executor.create_delivery_note_from_sales_order(so_name, confirm=True)
         results["steps"].append({"step": "create_delivery_note", **result})
         if not result.get("success") or not result.get("delivery_note"):
