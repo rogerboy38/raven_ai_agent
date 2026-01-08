@@ -439,6 +439,33 @@ class WorkflowExecutor:
             
             from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
             si = make_sales_invoice(dn_name)
+            
+            # Auto-fix: Set customer address if missing (migration fix)
+            if not si.customer_address:
+                # Try to get default billing address
+                billing_address = frappe.db.get_value("Dynamic Link", {
+                    "link_doctype": "Customer",
+                    "link_name": si.customer,
+                    "parenttype": "Address"
+                }, "parent")
+                if billing_address:
+                    si.customer_address = billing_address
+                    # Also set the address display
+                    from frappe.contacts.doctype.address.address import get_address_display
+                    si.address_display = get_address_display(billing_address)
+            
+            # Auto-fix: Clear invalid link fields
+            link_fields = ['taxes_and_charges', 'tc_name', 'shipping_address_name']
+            for field in link_fields:
+                if si.get(field):
+                    try:
+                        meta = frappe.get_meta("Sales Invoice")
+                        df = meta.get_field(field)
+                        if df and df.options and not frappe.db.exists(df.options, si.get(field)):
+                            si.set(field, None)
+                    except:
+                        pass
+            
             si.insert()
             frappe.db.commit()
             
@@ -544,6 +571,26 @@ class WorkflowExecutor:
         steps = []
         
         try:
+            # Pre-check: Ensure Fiscal Year exists
+            from frappe.utils import getdate
+            today = getdate(nowdate())
+            fiscal_year = frappe.db.get_value("Fiscal Year", {
+                "year_start_date": ("<=", today),
+                "year_end_date": (">=", today)
+            }, "name")
+            if not fiscal_year:
+                # Auto-create fiscal year
+                fy = frappe.get_doc({
+                    "doctype": "Fiscal Year",
+                    "year": str(today.year),
+                    "year_start_date": f"{today.year}-01-01",
+                    "year_end_date": f"{today.year}-12-31"
+                })
+                fy.flags.ignore_permissions = True
+                fy.insert()
+                frappe.db.commit()
+                steps.append(f"✅ Auto-created Fiscal Year {today.year}")
+            
             # Step 1: Submit Quotation if draft
             qtn = frappe.get_doc("Quotation", quotation_name)
             if qtn.docstatus == 0:
@@ -632,6 +679,22 @@ class WorkflowExecutor:
             # Step 4: Create Delivery Note (after stock is available)
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so.name)
+            
+            # Auto-fix: Ensure leaf warehouses (not group)
+            for item in dn.items:
+                if item.warehouse:
+                    is_group = frappe.db.get_value("Warehouse", item.warehouse, "is_group")
+                    if is_group:
+                        # Find a suitable leaf warehouse
+                        leaf_warehouse = frappe.db.get_value("Warehouse", {
+                            "is_group": 0,
+                            "company": so.company,
+                            "disabled": 0
+                        }, "name")
+                        if leaf_warehouse:
+                            item.warehouse = leaf_warehouse
+                            steps.append(f"✅ Fixed warehouse for {item.item_code}: {leaf_warehouse}")
+            
             dn.insert()
             dn.submit()
             frappe.db.commit()
@@ -640,6 +703,31 @@ class WorkflowExecutor:
             # Step 5: Create Sales Invoice
             from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
             si = make_sales_invoice(dn.name)
+            
+            # Auto-fix: Set customer address if missing
+            if not si.customer_address:
+                billing_address = frappe.db.get_value("Dynamic Link", {
+                    "link_doctype": "Customer",
+                    "link_name": si.customer,
+                    "parenttype": "Address"
+                }, "parent")
+                if billing_address:
+                    si.customer_address = billing_address
+                    from frappe.contacts.doctype.address.address import get_address_display
+                    si.address_display = get_address_display(billing_address)
+                    steps.append(f"✅ Auto-set customer address: {billing_address}")
+            
+            # Auto-fix: Clear invalid link fields
+            for field in ['taxes_and_charges', 'tc_name', 'shipping_address_name']:
+                if si.get(field):
+                    try:
+                        meta = frappe.get_meta("Sales Invoice")
+                        df = meta.get_field(field)
+                        if df and df.options and not frappe.db.exists(df.options, si.get(field)):
+                            si.set(field, None)
+                    except:
+                        pass
+            
             si.insert()
             frappe.db.commit()
             steps.append(f"✅ Sales Invoice {si.name} created (Draft)")
@@ -849,6 +937,93 @@ class WorkflowExecutor:
 # ========== MODULE-LEVEL WRAPPER FUNCTIONS ==========
 # These allow direct import: from raven_ai_agent.api.workflows import complete_workflow_to_invoice
 
+def validate_migration_prerequisites(quotation_name: str) -> Dict:
+    """
+    Validate all prerequisites before migration.
+    Lessons learned from sandbox testing - checks for common cross-environment issues.
+    """
+    issues = []
+    warnings = []
+    fixes_applied = []
+    
+    try:
+        qtn = frappe.get_doc("Quotation", quotation_name)
+        company = qtn.company
+        customer = qtn.party_name
+        
+        # 1. Fiscal Year Check
+        from frappe.utils import nowdate, getdate
+        today = getdate(nowdate())
+        fiscal_year = frappe.db.get_value("Fiscal Year", {
+            "year_start_date": ("<=", today),
+            "year_end_date": (">=", today)
+        }, "name")
+        if not fiscal_year:
+            issues.append(f"❌ No active Fiscal Year for {today.year}. Create one first.")
+        
+        # 2. Incoterm Check (if set)
+        if qtn.incoterm and not frappe.db.exists("Incoterm", qtn.incoterm):
+            warnings.append(f"⚠️ Incoterm '{qtn.incoterm}' not found. Will be cleared.")
+        
+        # 3. Taxes and Charges Template Check
+        if qtn.taxes_and_charges and not frappe.db.exists("Sales Taxes and Charges Template", qtn.taxes_and_charges):
+            warnings.append(f"⚠️ Tax Template '{qtn.taxes_and_charges}' not found. Will be cleared.")
+        
+        # 4. Customer Default Tax Template Check
+        customer_doc = frappe.get_doc("Customer", customer)
+        if hasattr(customer_doc, 'default_sales_taxes_and_charges'):
+            default_tax = customer_doc.default_sales_taxes_and_charges
+            if default_tax and not frappe.db.exists("Sales Taxes and Charges Template", default_tax):
+                issues.append(f"❌ Customer default Tax Template '{default_tax}' not found. Fix customer master.")
+        
+        # 5. Customer Address Check
+        billing_address = frappe.db.get_value("Dynamic Link", {
+            "link_doctype": "Customer",
+            "link_name": customer,
+            "parenttype": "Address"
+        }, "parent")
+        if not billing_address:
+            warnings.append(f"⚠️ Customer '{customer}' has no address. Invoice may fail.")
+        
+        # 6. Warehouse Validation (check for leaf warehouses)
+        for item in qtn.items:
+            if item.warehouse:
+                is_group = frappe.db.get_value("Warehouse", item.warehouse, "is_group")
+                if is_group:
+                    issues.append(f"❌ Item '{item.item_code}' uses group warehouse '{item.warehouse}'. Use a leaf warehouse.")
+        
+        # 7. Check Default Warehouse
+        default_warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+        if default_warehouse:
+            is_group = frappe.db.get_value("Warehouse", default_warehouse, "is_group")
+            if is_group:
+                warnings.append(f"⚠️ Default warehouse '{default_warehouse}' is a group. Stock operations may fail.")
+        
+        # 8. Item Stock Availability
+        from erpnext.stock.utils import get_stock_balance
+        for item in qtn.items:
+            warehouse = item.warehouse or default_warehouse
+            if warehouse:
+                is_group = frappe.db.get_value("Warehouse", warehouse, "is_group")
+                if not is_group:
+                    stock = get_stock_balance(item.item_code, warehouse)
+                    if stock < item.qty:
+                        warnings.append(f"⚠️ Low stock: {item.item_code} needs {item.qty}, has {stock}. Stock Entry will be created.")
+        
+        return {
+            "success": len(issues) == 0,
+            "quotation": quotation_name,
+            "customer": customer,
+            "company": company,
+            "issues": issues,
+            "warnings": warnings,
+            "fixes_applied": fixes_applied,
+            "can_proceed": len(issues) == 0
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def complete_workflow_to_invoice(quotation_name: str, dry_run: bool = False) -> Dict:
     """
     Complete workflow: Quotation → Sales Order → Stock Entry → Delivery Note → Invoice
@@ -859,28 +1034,47 @@ def complete_workflow_to_invoice(quotation_name: str, dry_run: bool = False) -> 
     """
     executor = WorkflowExecutor(user=frappe.session.user, dry_run=dry_run)
     if dry_run:
-        # Dry run preview
+        # Comprehensive dry run with validation
         try:
             qtn = frappe.get_doc("Quotation", quotation_name)
+            validation = validate_migration_prerequisites(quotation_name)
+            
+            steps = [
+                f"1. Submit Quotation {quotation_name}" if qtn.docstatus == 0 else f"1. Quotation {quotation_name} already submitted",
+                "2. Create Sales Order (clean invalid links)",
+                "3. Create Stock Entry (if needed)",
+                "4. Create Delivery Note (use leaf warehouse)",
+                "5. Create Sales Invoice"
+            ]
+            
+            message = f"**DRY RUN: Quotation {quotation_name}**\n\n"
+            message += f"Customer: {qtn.party_name}\n"
+            message += f"Total: {qtn.currency} {qtn.grand_total:,.2f}\n"
+            message += f"Items: {len(qtn.items)} line(s)\n\n"
+            
+            if validation.get("issues"):
+                message += "**❌ BLOCKING ISSUES:**\n"
+                for issue in validation["issues"]:
+                    message += f"  {issue}\n"
+                message += "\n"
+            
+            if validation.get("warnings"):
+                message += "**⚠️ WARNINGS (auto-fixed):**\n"
+                for warning in validation["warnings"]:
+                    message += f"  {warning}\n"
+            
             return {
                 "success": True,
                 "dry_run": True,
+                "can_proceed": validation.get("can_proceed", False),
                 "quotation": quotation_name,
                 "customer": qtn.party_name,
                 "total": qtn.grand_total,
                 "currency": qtn.currency,
                 "items": len(qtn.items),
-                "steps": [
-                    f"1. Submit Quotation {quotation_name}" if qtn.docstatus == 0 else f"1. Quotation {quotation_name} already submitted",
-                    "2. Create Sales Order",
-                    "3. Create Stock Entry (if needed)",
-                    "4. Create Delivery Note",
-                    "5. Create Sales Invoice"
-                ],
-                "message": f"**DRY RUN: Would migrate Quotation {quotation_name}**\n\n"
-                          f"Customer: {qtn.party_name}\n"
-                          f"Total: {qtn.currency} {qtn.grand_total:,.2f}\n"
-                          f"Items: {len(qtn.items)} line(s)"
+                "validation": validation,
+                "steps": steps,
+                "message": message
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
