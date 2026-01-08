@@ -574,22 +574,47 @@ class WorkflowExecutor:
                 current_stock = get_stock_balance(item.item_code, item.warehouse or default_warehouse)
                 
                 if current_stock < item.qty:
+                    qty_needed = item.qty - current_stock
+                    target_warehouse = item.warehouse or default_warehouse
+                    
+                    # Check if item requires batch
+                    has_batch_no = frappe.db.get_value("Item", item.item_code, "has_batch_no")
+                    batch_no = None
+                    
+                    if has_batch_no:
+                        # Create batch for migration
+                        batch = frappe.get_doc({
+                            "doctype": "Batch",
+                            "item": item.item_code,
+                            "batch_id": f"MIG-{item.item_code}-{nowdate()}",
+                            "expiry_date": add_days(nowdate(), 365)
+                        })
+                        batch.flags.ignore_permissions = True
+                        batch.insert()
+                        batch_no = batch.name
+                        steps.append(f"✅ Batch {batch_no} created for {item.item_code}")
+                    
                     # Create Material Receipt
+                    se_item = {
+                        "item_code": item.item_code,
+                        "qty": qty_needed,
+                        "t_warehouse": target_warehouse,
+                        "basic_rate": item.rate
+                    }
+                    if batch_no:
+                        se_item["batch_no"] = batch_no
+                    
                     se = frappe.get_doc({
                         "doctype": "Stock Entry",
                         "stock_entry_type": "Material Receipt",
                         "company": so.company,
-                        "items": [{
-                            "item_code": item.item_code,
-                            "qty": item.qty - current_stock,
-                            "t_warehouse": item.warehouse or default_warehouse,
-                            "basic_rate": item.rate
-                        }]
+                        "items": [se_item]
                     })
+                    se.flags.ignore_permissions = True
                     se.insert()
                     se.submit()
                     frappe.db.commit()
-                    steps.append(f"✅ Stock Entry {se.name} - received {item.qty - current_stock} of {item.item_code}")
+                    steps.append(f"✅ Stock Entry {se.name} - received {qty_needed} of {item.item_code}")
             
             # Step 4: Create Delivery Note (after stock is available)
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
@@ -805,3 +830,96 @@ class WorkflowExecutor:
             }
         except Exception as e:
             return {"success": False, "error": str(e), "error_type": "persistence"}
+
+
+
+# ========== MODULE-LEVEL WRAPPER FUNCTIONS ==========
+# These allow direct import: from raven_ai_agent.api.workflows import complete_workflow_to_invoice
+
+def complete_workflow_to_invoice(quotation_name: str, dry_run: bool = False) -> Dict:
+    """
+    Complete workflow: Quotation → Sales Order → Stock Entry → Delivery Note → Invoice
+    
+    Usage:
+        from raven_ai_agent.api.workflows import complete_workflow_to_invoice
+        result = complete_workflow_to_invoice("SAL-QTN-2023-00525", dry_run=True)
+    """
+    executor = WorkflowExecutor(user=frappe.session.user, dry_run=dry_run)
+    if dry_run:
+        # Dry run preview
+        try:
+            qtn = frappe.get_doc("Quotation", quotation_name)
+            return {
+                "success": True,
+                "dry_run": True,
+                "quotation": quotation_name,
+                "customer": qtn.party_name,
+                "total": qtn.grand_total,
+                "currency": qtn.currency,
+                "items": len(qtn.items),
+                "steps": [
+                    f"1. Submit Quotation {quotation_name}" if qtn.docstatus == 0 else f"1. Quotation {quotation_name} already submitted",
+                    "2. Create Sales Order",
+                    "3. Create Stock Entry (if needed)",
+                    "4. Create Delivery Note",
+                    "5. Create Sales Invoice"
+                ],
+                "message": f"**DRY RUN: Would migrate Quotation {quotation_name}**\n\n"
+                          f"Customer: {qtn.party_name}\n"
+                          f"Total: {qtn.currency} {qtn.grand_total:,.2f}\n"
+                          f"Items: {len(qtn.items)} line(s)"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    else:
+        return executor.complete_workflow_to_invoice(quotation_name)
+
+
+def submit_quotation(quotation_name: str) -> Dict:
+    """Submit a quotation (Sudo mode - no confirmation)"""
+    executor = WorkflowExecutor(user=frappe.session.user)
+    return executor.submit_quotation(quotation_name, confirm=True)
+
+
+def create_sales_order(quotation_name: str) -> Dict:
+    """Create Sales Order from Quotation (Sudo mode)"""
+    executor = WorkflowExecutor(user=frappe.session.user)
+    return executor.create_sales_order_from_quotation(quotation_name, confirm=True)
+
+
+def create_delivery_note(so_name: str) -> Dict:
+    """Create Delivery Note from Sales Order (Sudo mode)"""
+    executor = WorkflowExecutor(user=frappe.session.user)
+    return executor.create_delivery_note_from_sales_order(so_name, confirm=True)
+
+
+def create_invoice(dn_name: str) -> Dict:
+    """Create Sales Invoice from Delivery Note (Sudo mode)"""
+    executor = WorkflowExecutor(user=frappe.session.user)
+    return executor.create_invoice_from_delivery_note(dn_name, confirm=True)
+
+
+def batch_migrate(quotation_names: List[str], dry_run: bool = False) -> Dict:
+    """Batch migrate multiple quotations"""
+    executor = WorkflowExecutor(user=frappe.session.user, dry_run=dry_run)
+    return executor.batch_migrate_quotations(quotation_names, dry_run=dry_run)
+
+
+def import_foxpro(payload: Dict, dry_run: bool = False) -> Dict:
+    """Import FoxPro record"""
+    executor = WorkflowExecutor(user=frappe.session.user, dry_run=dry_run)
+    return executor.import_foxpro_record(payload, dry_run=dry_run)
+
+
+# ========== FRAPPE WHITELISTED API ENDPOINTS ==========
+@frappe.whitelist()
+def api_complete_workflow(quotation_name: str, dry_run: bool = False):
+    """API endpoint for complete workflow"""
+    return complete_workflow_to_invoice(quotation_name, dry_run=dry_run)
+
+
+@frappe.whitelist()
+def api_batch_migrate(quotation_names: str, dry_run: bool = False):
+    """API endpoint for batch migration. quotation_names is comma-separated."""
+    names = [n.strip() for n in quotation_names.split(",")]
+    return batch_migrate(names, dry_run=dry_run)
