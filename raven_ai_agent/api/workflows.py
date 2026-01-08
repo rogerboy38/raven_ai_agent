@@ -11,9 +11,47 @@ from frappe.utils import nowdate, add_days
 class WorkflowExecutor:
     """Execute ERPNext workflow operations with confirmation"""
     
-    def __init__(self, user: str):
+    def __init__(self, user: str, dry_run: bool = False):
         self.user = user
         self.site_name = frappe.local.site
+        self.dry_run = dry_run
+    
+    # ========== IDEMPOTENCY HELPERS ==========
+    def get_by_folio(self, doctype: str, folio: str) -> Optional[str]:
+        """Check if document exists by custom_folio (idempotency)"""
+        return frappe.db.get_value(doctype, {"custom_folio": folio}, "name")
+    
+    def get_or_create(self, doctype: str, folio: str, create_fn) -> Dict:
+        """Idempotent get-or-create pattern"""
+        existing = self.get_by_folio(doctype, folio)
+        if existing:
+            return {
+                "status": "fetched",
+                "action": "fetched",
+                "doctype": doctype,
+                "name": existing,
+                "custom_folio": folio,
+                "link": self.make_link(doctype, existing)
+            }
+        
+        if self.dry_run:
+            return {
+                "status": "dry_run",
+                "action": "would_create",
+                "doctype": doctype,
+                "custom_folio": folio,
+                "message": f"Would create {doctype} with folio {folio}"
+            }
+        
+        # Create the document
+        result = create_fn()
+        if result.get("success"):
+            return {
+                "status": "created",
+                "action": "created",
+                **result
+            }
+        return result
     
     def make_link(self, doctype: str, name: str) -> str:
         """Generate clickable link"""
@@ -570,3 +608,192 @@ class WorkflowExecutor:
                 "success": False,
                 "error": "\n".join(steps)
             }
+
+    
+    # ========== BATCH MIGRATION ==========
+    def batch_migrate_quotations(self, quotation_names: List[str], dry_run: bool = False) -> Dict:
+        """Batch migrate multiple quotations through complete workflow"""
+        self.dry_run = dry_run
+        results = []
+        success_count = 0
+        error_count = 0
+        
+        for qtn_name in quotation_names:
+            try:
+                if dry_run:
+                    # Check what would happen
+                    qtn = frappe.get_doc("Quotation", qtn_name)
+                    results.append({
+                        "quotation": qtn_name,
+                        "status": "dry_run",
+                        "customer": qtn.party_name,
+                        "total": qtn.grand_total,
+                        "would_create": ["Sales Order", "Stock Entry", "Delivery Note", "Sales Invoice"]
+                    })
+                    success_count += 1
+                else:
+                    # Execute complete workflow
+                    result = self.complete_workflow_to_invoice(qtn_name)
+                    results.append({
+                        "quotation": qtn_name,
+                        "status": "success" if result.get("success") else "error",
+                        "message": result.get("message") or result.get("error")
+                    })
+                    if result.get("success"):
+                        success_count += 1
+                    else:
+                        error_count += 1
+            except Exception as e:
+                results.append({
+                    "quotation": qtn_name,
+                    "status": "error",
+                    "error": str(e)
+                })
+                error_count += 1
+        
+        summary = f"**Batch Migration {'(DRY RUN)' if dry_run else 'Complete'}**\n\n"
+        summary += f"✅ Success: {success_count} | ❌ Errors: {error_count}\n\n"
+        
+        for r in results:
+            if r["status"] == "dry_run":
+                summary += f"🔍 {r['quotation']}: Would migrate ({r['customer']}, {r['total']:,.2f})\n"
+            elif r["status"] == "success":
+                summary += f"✅ {r['quotation']}: Migrated\n"
+            else:
+                summary += f"❌ {r['quotation']}: {r.get('error', r.get('message', 'Unknown error'))}\n"
+        
+        return {"success": True, "message": summary, "results": results}
+    
+    # ========== FOXPRO IMPORT ==========
+    def import_foxpro_record(self, payload: Dict, dry_run: bool = False) -> Dict:
+        """Import a FoxPro record into ERPNext"""
+        self.dry_run = dry_run
+        
+        doc_type = payload.get("document_type", "quotation").lower()
+        folio = payload.get("folio")
+        company = payload.get("company")
+        customer = payload.get("customer")
+        items = payload.get("items", [])
+        date = payload.get("date", nowdate())
+        
+        if not all([folio, company, customer]):
+            return {"success": False, "error": "Missing required fields: folio, company, customer"}
+        
+        # Validate customer exists
+        if not frappe.db.exists("Customer", customer):
+            return {"success": False, "error": f"Customer '{customer}' not found in ERPNext"}
+        
+        # Validate company exists
+        if not frappe.db.exists("Company", company):
+            return {"success": False, "error": f"Company '{company}' not found in ERPNext"}
+        
+        if doc_type == "quotation":
+            return self._import_quotation(folio, company, customer, items, date)
+        elif doc_type == "sales_order":
+            return self._import_sales_order(folio, company, customer, items, date)
+        else:
+            return {"success": False, "error": f"Unsupported document type: {doc_type}"}
+    
+    def _import_quotation(self, folio: str, company: str, customer: str, items: List, date: str) -> Dict:
+        """Import quotation from FoxPro"""
+        # Idempotency check
+        existing = self.get_by_folio("Quotation", folio)
+        if existing:
+            return {
+                "success": True,
+                "status": "fetched",
+                "action": "fetched",
+                "doctype": "Quotation",
+                "name": existing,
+                "custom_folio": folio,
+                "next_step": "sales_order"
+            }
+        
+        if self.dry_run:
+            return {
+                "success": True,
+                "status": "dry_run",
+                "action": "would_create",
+                "doctype": "Quotation",
+                "custom_folio": folio,
+                "company": company,
+                "customer": customer
+            }
+        
+        try:
+            qtn = frappe.get_doc({
+                "doctype": "Quotation",
+                "quotation_to": "Customer",
+                "party_name": customer,
+                "company": company,
+                "transaction_date": date,
+                "valid_till": add_days(date, 30),
+                "custom_folio": folio,
+                "items": items or [{"item_code": "PLACEHOLDER", "qty": 1}]
+            })
+            qtn.flags.ignore_permissions = True
+            qtn.insert()
+            frappe.db.commit()
+            
+            return {
+                "success": True,
+                "status": "created",
+                "action": "created",
+                "doctype": "Quotation",
+                "name": qtn.name,
+                "custom_folio": folio,
+                "next_step": "sales_order",
+                "link": self.make_link("Quotation", qtn.name)
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e), "error_type": "persistence"}
+    
+    def _import_sales_order(self, folio: str, company: str, customer: str, items: List, date: str) -> Dict:
+        """Import sales order from FoxPro"""
+        existing = self.get_by_folio("Sales Order", folio)
+        if existing:
+            return {
+                "success": True,
+                "status": "fetched",
+                "action": "fetched",
+                "doctype": "Sales Order",
+                "name": existing,
+                "custom_folio": folio,
+                "next_step": "delivery"
+            }
+        
+        if self.dry_run:
+            return {
+                "success": True,
+                "status": "dry_run",
+                "action": "would_create",
+                "doctype": "Sales Order",
+                "custom_folio": folio
+            }
+        
+        try:
+            so = frappe.get_doc({
+                "doctype": "Sales Order",
+                "customer": customer,
+                "company": company,
+                "transaction_date": date,
+                "delivery_date": add_days(date, 30),
+                "custom_folio": folio,
+                "items": items or [{"item_code": "PLACEHOLDER", "qty": 1}]
+            })
+            so.flags.ignore_permissions = True
+            so.insert()
+            frappe.db.commit()
+            
+            return {
+                "success": True,
+                "status": "created",
+                "action": "created",
+                "doctype": "Sales Order",
+                "name": so.name,
+                "custom_folio": folio,
+                "next_step": "delivery",
+                "link": self.make_link("Sales Order", so.name)
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e), "error_type": "persistence"}

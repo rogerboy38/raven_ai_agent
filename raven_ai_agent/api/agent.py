@@ -335,9 +335,19 @@ class RaymondLucyAgent:
         qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
         frappe.logger().info(f"[Workflow] qtn_match: {qtn_match}, 'sales order' in query: {'sales order' in query_lower}")
         
+        # Dry-run mode
+        is_dry_run = "--dry-run" in query_lower or "dry run" in query_lower
+        if is_dry_run:
+            executor.dry_run = True
+        
         # Complete workflow: Quotation → Invoice
         if qtn_match and "complete" in query_lower and ("workflow" in query_lower or "invoice" in query_lower):
             return executor.complete_workflow_to_invoice(qtn_match.group(1).upper())
+        
+        # Batch migration: multiple quotations
+        batch_match = re.findall(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+        if len(batch_match) > 1 and ("batch" in query_lower or "migrate" in query_lower):
+            return executor.batch_migrate_quotations([q.upper() for q in batch_match], dry_run=is_dry_run)
         
         # Submit quotation
         if qtn_match and "submit" in query_lower and "quotation" in query_lower:
