@@ -450,6 +450,19 @@ class WorkflowExecutor:
             
             so = make_sales_order(quotation_name)
             so.delivery_date = add_days(nowdate(), 7)
+            
+            # Fix Payment Terms - Due Date must be >= Posting Date
+            today = nowdate()
+            if hasattr(so, 'payment_schedule') and so.payment_schedule:
+                for ps in so.payment_schedule:
+                    if ps.due_date and str(ps.due_date) < today:
+                        ps.due_date = today
+            
+            # Clear invalid payment terms template if needed
+            if so.payment_terms_template:
+                if not frappe.db.exists("Payment Terms Template", so.payment_terms_template):
+                    so.payment_terms_template = None
+            
             so.flags.ignore_permissions = True
             so.insert()
             frappe.db.commit()
