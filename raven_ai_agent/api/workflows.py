@@ -20,6 +20,38 @@ class WorkflowExecutor:
         slug = doctype.lower().replace(" ", "-")
         return f"https://{self.site_name}/app/{slug}/{name}"
     
+    # ========== SUBMIT QUOTATION ==========
+    def submit_quotation(self, quotation_name: str, confirm: bool = False) -> Dict:
+        """Submit a draft quotation"""
+        try:
+            qtn = frappe.get_doc("Quotation", quotation_name)
+            
+            if qtn.docstatus == 1:
+                return {"success": True, "message": f"✅ Quotation **{quotation_name}** is already submitted."}
+            
+            if qtn.docstatus == 2:
+                return {"success": False, "error": f"Quotation {quotation_name} is Cancelled. Cannot submit."}
+            
+            if not confirm:
+                return {
+                    "success": True,
+                    "requires_confirmation": True,
+                    "preview": f"**Submit Quotation {quotation_name}?**\n\n| Field | Value |\n|-------|-------|\n| Customer | {qtn.party_name} |\n| Total | {qtn.currency} {qtn.grand_total:,.2f} |\n\n⚠️ **Confirm?** Reply: `@ai confirm submit quotation {quotation_name}`"
+                }
+            
+            # Auto-extend validity if expired
+            if qtn.valid_till and str(qtn.valid_till) < nowdate():
+                qtn.valid_till = add_days(nowdate(), 30)
+            
+            qtn.flags.ignore_permissions = True
+            qtn.save()
+            qtn.submit()
+            frappe.db.commit()
+            
+            return {"success": True, "message": f"✅ Quotation **{quotation_name}** submitted successfully!"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     # ========== QUOTATION TO SALES ORDER ==========
     def get_quotation_details(self, quotation_name: str) -> Dict:
         """Get quotation details for conversion"""
