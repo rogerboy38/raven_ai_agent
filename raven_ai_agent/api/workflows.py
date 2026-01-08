@@ -431,6 +431,9 @@ class WorkflowExecutor:
             # Auto-submit draft Delivery Note (migration mode)
             if dn.docstatus == 0:
                 try:
+                    # Reload to get latest version
+                    dn.reload()
+                    
                     # Auto-create Quality Inspection if required
                     for item in dn.items:
                         inspection_required = frappe.db.get_value("Item", item.item_code, "inspection_required_before_delivery")
