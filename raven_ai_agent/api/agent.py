@@ -335,6 +335,10 @@ class RaymondLucyAgent:
         qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
         frappe.logger().info(f"[Workflow] qtn_match: {qtn_match}, 'sales order' in query: {'sales order' in query_lower}")
         
+        # Complete workflow: Quotation → Invoice
+        if qtn_match and "complete" in query_lower and ("workflow" in query_lower or "invoice" in query_lower):
+            return executor.complete_workflow_to_invoice(qtn_match.group(1).upper())
+        
         # Submit quotation
         if qtn_match and "submit" in query_lower and "quotation" in query_lower:
             frappe.logger().info(f"[Workflow] Submitting quotation {qtn_match.group(1)}, confirm={is_confirm}")

@@ -485,3 +485,60 @@ class WorkflowExecutor:
             return result
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    
+    # ========== COMPLETE WORKFLOW ==========
+    def complete_workflow_to_invoice(self, quotation_name: str) -> Dict:
+        """Run complete workflow: Quotation → Sales Order → Delivery Note → Invoice"""
+        steps = []
+        
+        try:
+            # Step 1: Submit Quotation if draft
+            qtn = frappe.get_doc("Quotation", quotation_name)
+            if qtn.docstatus == 0:
+                if qtn.valid_till and str(qtn.valid_till) < nowdate():
+                    qtn.valid_till = add_days(nowdate(), 30)
+                qtn.flags.ignore_permissions = True
+                qtn.save()
+                qtn.submit()
+                frappe.db.commit()
+                steps.append(f"✅ Quotation {quotation_name} submitted")
+            elif qtn.docstatus == 1:
+                steps.append(f"✅ Quotation {quotation_name} already submitted")
+            else:
+                return {"success": False, "error": f"Quotation {quotation_name} is cancelled"}
+            
+            # Step 2: Create Sales Order
+            from erpnext.selling.doctype.quotation.quotation import make_sales_order
+            so = make_sales_order(quotation_name)
+            so.delivery_date = add_days(nowdate(), 30)
+            so.insert()
+            so.submit()
+            frappe.db.commit()
+            steps.append(f"✅ Sales Order {so.name} created and submitted")
+            
+            # Step 3: Create Delivery Note
+            from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
+            dn = make_delivery_note(so.name)
+            dn.insert()
+            dn.submit()
+            frappe.db.commit()
+            steps.append(f"✅ Delivery Note {dn.name} created and submitted")
+            
+            # Step 4: Create Sales Invoice
+            from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
+            si = make_sales_invoice(dn.name)
+            si.insert()
+            frappe.db.commit()
+            steps.append(f"✅ Sales Invoice {si.name} created (Draft)")
+            
+            return {
+                "success": True,
+                "message": "**🎉 Complete Workflow Executed!**\n\n" + "\n".join(steps) + f"\n\n**Final Invoice:** [{si.name}]({self.make_link('Sales Invoice', si.name)})"
+            }
+        except Exception as e:
+            steps.append(f"❌ Error: {str(e)}")
+            return {
+                "success": False,
+                "error": "\n".join(steps)
+            }
