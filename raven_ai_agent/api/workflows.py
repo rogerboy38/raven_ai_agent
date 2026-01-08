@@ -463,11 +463,13 @@ class WorkflowExecutor:
                                 qi.flags.ignore_mandatory = True
                                 qi.insert()
                                 qi.submit()
+                                # Update DN item directly in DB
+                                frappe.db.set_value("Delivery Note Item", item.name, "quality_inspection", qi.name)
                                 frappe.db.commit()
-                                item.quality_inspection = qi.name
                     
+                    # Reload with QI set
+                    dn.reload()
                     dn.flags.ignore_permissions = True
-                    dn.save()
                     dn.submit()
                     frappe.db.commit()
                 except Exception as e:
