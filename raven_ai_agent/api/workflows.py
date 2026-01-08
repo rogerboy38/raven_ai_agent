@@ -170,6 +170,19 @@ class WorkflowExecutor:
             
             so = make_sales_order(quotation_name)
             so.delivery_date = add_days(nowdate(), 30)  # Default 30 days
+            
+            # Clean up invalid link fields (for cross-environment migrations)
+            link_fields_to_check = ['incoterm', 'taxes_and_charges', 'tc_name']
+            for field in link_fields_to_check:
+                if so.get(field):
+                    try:
+                        meta = frappe.get_meta("Sales Order")
+                        df = meta.get_field(field)
+                        if df and df.options and not frappe.db.exists(df.options, so.get(field)):
+                            so.set(field, None)
+                    except:
+                        pass
+            
             so.insert()
             frappe.db.commit()
             
