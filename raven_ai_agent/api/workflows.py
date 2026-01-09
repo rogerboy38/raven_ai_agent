@@ -861,3 +861,326 @@ def api_diagnose_work_order(work_order_name: str) -> str:
     """API endpoint for work order diagnosis"""
     result = diagnose_and_fix_work_order(work_order_name)
     return json.dumps(result)
+
+
+# =============================================================================
+# TDS WORKFLOW INTEGRATION
+# Sales Item → TDS Product Specification → Production Item → BOM → Work Order
+# =============================================================================
+
+def get_tds_for_sales_item(sales_item: str, customer: str = None) -> Optional[Dict]:
+    """
+    Find TDS Product Specification for a sales item.
+    
+    The TDS links:
+    - product_item: Generic/Sales Item (e.g., "0307")
+    - item_code: Production Item (e.g., "0307-500/100 CFU/G ALOINA 0.1 PPM")
+    
+    Args:
+        sales_item: The sales/generic item code
+        customer: Optional customer to filter TDS (for customer-specific specs)
+    
+    Returns:
+        Dict with TDS details or None if not found
+    """
+    try:
+        filters = {"product_item": sales_item, "docstatus": ["!=", 2]}
+        if customer:
+            filters["customer"] = customer
+        
+        tds_list = frappe.get_all(
+            "TDS Product Specification",
+            filters=filters,
+            fields=["name", "product_item", "item_code", "customer", "specification_name"],
+            order_by="creation desc",
+            limit=1
+        )
+        
+        if tds_list:
+            tds = tds_list[0]
+            return {
+                "success": True,
+                "tds_name": tds.name,
+                "sales_item": tds.product_item,
+                "production_item": tds.item_code,
+                "customer": tds.customer,
+                "specification": tds.specification_name
+            }
+        return None
+    except Exception as e:
+        frappe.log_error(f"get_tds_for_sales_item error: {str(e)}")
+        return None
+
+
+def get_production_item_from_tds(sales_item: str, customer: str = None) -> Optional[str]:
+    """
+    Get the production item code from TDS for a given sales item.
+    
+    Args:
+        sales_item: The sales/generic item code
+        customer: Optional customer for customer-specific TDS
+    
+    Returns:
+        Production item code or None
+    """
+    tds = get_tds_for_sales_item(sales_item, customer)
+    if tds:
+        return tds.get("production_item")
+    return None
+
+
+def get_bom_for_production_item(production_item: str) -> Optional[str]:
+    """
+    Get the default/active BOM for a production item.
+    First checks Item's default_bom, then looks for active BOM.
+    
+    Args:
+        production_item: The production item code
+    
+    Returns:
+        BOM name or None
+    """
+    try:
+        # First check if item has default_bom set
+        default_bom = frappe.db.get_value("Item", production_item, "default_bom")
+        if default_bom and frappe.db.exists("BOM", {"name": default_bom, "is_active": 1}):
+            return default_bom
+        
+        # Otherwise find active BOM
+        bom = frappe.get_all(
+            "BOM",
+            filters={"item": production_item, "is_active": 1, "docstatus": 1},
+            fields=["name"],
+            order_by="is_default desc, creation desc",
+            limit=1
+        )
+        return bom[0].name if bom else None
+    except:
+        return None
+
+
+def resolve_tds_bom(sales_item: str, customer: str = None) -> Dict:
+    """
+    Complete TDS → Production Item → BOM resolution.
+    
+    Args:
+        sales_item: The sales/generic item code from Sales Order
+        customer: Optional customer for customer-specific TDS
+    
+    Returns:
+        Dict with resolution chain or error
+    """
+    result = {
+        "sales_item": sales_item,
+        "customer": customer,
+        "tds_name": None,
+        "production_item": None,
+        "bom": None,
+        "success": False
+    }
+    
+    # Step 1: Find TDS
+    tds = get_tds_for_sales_item(sales_item, customer)
+    if not tds:
+        result["error"] = f"No TDS found for sales item '{sales_item}'"
+        return result
+    
+    result["tds_name"] = tds["tds_name"]
+    result["production_item"] = tds["production_item"]
+    
+    # Step 2: Find BOM for production item
+    if not result["production_item"]:
+        result["error"] = f"TDS '{tds['tds_name']}' has no production item (item_code)"
+        return result
+    
+    bom = get_bom_for_production_item(result["production_item"])
+    if not bom:
+        result["error"] = f"No active BOM found for production item '{result['production_item']}'"
+        result["suggestion"] = "Create BOM from BOM Creator or assign default_bom on Item"
+        return result
+    
+    result["bom"] = bom
+    result["success"] = True
+    result["message"] = f"Resolved: {sales_item} → TDS:{tds['tds_name']} → {result['production_item']} → BOM:{bom}"
+    
+    return result
+
+
+def create_work_order_from_tds(sales_item: str, quantity: float, customer: str = None, 
+                                sales_order: str = None) -> Dict:
+    """
+    Create Work Order using TDS-specified production item and BOM.
+    
+    This is the key function for the "Parallel Workflow":
+    - Sales Order uses generic item (e.g., 0307)
+    - Work Order uses specific production item from TDS (e.g., 0307-500/100...)
+    
+    Args:
+        sales_item: The sales/generic item code
+        quantity: Production quantity
+        customer: Customer for customer-specific TDS lookup
+        sales_order: Optional Sales Order to link
+    
+    Returns:
+        Dict with work order details or error
+    """
+    try:
+        # Resolve TDS chain
+        resolution = resolve_tds_bom(sales_item, customer)
+        if not resolution["success"]:
+            return resolution
+        
+        # Create Work Order with production item and BOM
+        result = create_work_order_from_bom(
+            bom_name=resolution["bom"],
+            quantity=quantity,
+            production_item=resolution["production_item"]
+        )
+        
+        if result.get("success") and sales_order:
+            # Link to Sales Order
+            wo = frappe.get_doc("Work Order", result["work_order"])
+            wo.sales_order = sales_order
+            wo.flags.ignore_permissions = True
+            wo.save()
+            frappe.db.commit()
+            result["sales_order"] = sales_order
+        
+        # Add resolution chain to result
+        result["tds_resolution"] = resolution
+        return result
+        
+    except Exception as e:
+        frappe.log_error(f"create_work_order_from_tds error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+def create_work_orders_from_sales_order_with_tds(so_name: str) -> Dict:
+    """
+    Create Work Orders for Sales Order items using TDS lookup.
+    
+    For each item in SO:
+    1. Look up TDS by sales item + customer
+    2. Get production item from TDS
+    3. Get BOM for production item
+    4. Create Work Order
+    
+    Args:
+        so_name: Sales Order name
+    
+    Returns:
+        Dict with created work orders and any errors
+    """
+    try:
+        so = frappe.get_doc("Sales Order", so_name)
+        customer = so.customer
+        
+        results = {
+            "success": True,
+            "sales_order": so_name,
+            "customer": customer,
+            "work_orders": [],
+            "errors": []
+        }
+        
+        for item in so.items:
+            # Try TDS resolution first
+            resolution = resolve_tds_bom(item.item_code, customer)
+            
+            if resolution["success"]:
+                # Create WO with TDS-specified BOM
+                wo_result = create_work_order_from_tds(
+                    sales_item=item.item_code,
+                    quantity=item.qty,
+                    customer=customer,
+                    sales_order=so_name
+                )
+                
+                if wo_result.get("success"):
+                    results["work_orders"].append({
+                        "item": item.item_code,
+                        "production_item": resolution["production_item"],
+                        "work_order": wo_result["work_order"],
+                        "bom": resolution["bom"],
+                        "qty": item.qty,
+                        "method": "tds"
+                    })
+                else:
+                    results["errors"].append({
+                        "item": item.item_code,
+                        "error": wo_result.get("error"),
+                        "method": "tds"
+                    })
+            else:
+                # Fallback: Try direct BOM lookup on sales item
+                direct_bom = get_default_bom_for_item(item.item_code)
+                if direct_bom:
+                    wo_result = create_work_order_from_bom(direct_bom, item.qty, item.item_code)
+                    if wo_result.get("success"):
+                        wo = frappe.get_doc("Work Order", wo_result["work_order"])
+                        wo.sales_order = so_name
+                        wo.flags.ignore_permissions = True
+                        wo.save()
+                        frappe.db.commit()
+                        
+                        results["work_orders"].append({
+                            "item": item.item_code,
+                            "production_item": item.item_code,
+                            "work_order": wo_result["work_order"],
+                            "bom": direct_bom,
+                            "qty": item.qty,
+                            "method": "direct"
+                        })
+                    else:
+                        results["errors"].append({
+                            "item": item.item_code,
+                            "error": wo_result.get("error"),
+                            "method": "direct"
+                        })
+                else:
+                    # No TDS, no direct BOM - skip (might be non-manufactured item)
+                    results["errors"].append({
+                        "item": item.item_code,
+                        "error": resolution.get("error", "No BOM found"),
+                        "suggestion": resolution.get("suggestion"),
+                        "skipped": True
+                    })
+        
+        results["summary"] = {
+            "total_items": len(so.items),
+            "work_orders_created": len(results["work_orders"]),
+            "errors": len([e for e in results["errors"] if not e.get("skipped")]),
+            "skipped": len([e for e in results["errors"] if e.get("skipped")])
+        }
+        
+        return results
+        
+    except Exception as e:
+        frappe.log_error(f"create_work_orders_from_sales_order_with_tds error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+# =============================================================================
+# TDS API ENDPOINTS
+# =============================================================================
+
+@frappe.whitelist()
+def api_resolve_tds_bom(sales_item: str, customer: str = None) -> str:
+    """API: Resolve TDS chain for a sales item"""
+    result = resolve_tds_bom(sales_item, customer)
+    return json.dumps(result)
+
+
+@frappe.whitelist()
+def api_create_work_order_from_tds(sales_item: str, quantity: float, 
+                                    customer: str = None, sales_order: str = None) -> str:
+    """API: Create Work Order using TDS lookup"""
+    result = create_work_order_from_tds(sales_item, float(quantity), customer, sales_order)
+    return json.dumps(result)
+
+
+@frappe.whitelist()
+def api_create_work_orders_from_so_with_tds(so_name: str) -> str:
+    """API: Create Work Orders for Sales Order using TDS lookup"""
+    result = create_work_orders_from_sales_order_with_tds(so_name)
+    return json.dumps(result)
