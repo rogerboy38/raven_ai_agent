@@ -872,39 +872,40 @@ def get_tds_for_sales_item(sales_item: str, customer: str = None) -> Optional[Di
     """
     Find TDS Product Specification for a sales item.
     
-    The TDS links:
-    - product_item: Generic/Sales Item (e.g., "0307")
-    - item_code: Production Item (e.g., "0307-500/100 CFU/G ALOINA 0.1 PPM")
+    TDS naming pattern: {SALES_ITEM}-{CUSTOMER} (e.g., "0307-NATURAL MITCH")
+    The product_item field links to the production item (e.g., "0307-500/100 CFU/G...")
     
     Args:
-        sales_item: The sales/generic item code
-        customer: Optional customer to filter TDS (for customer-specific specs)
+        sales_item: The sales/generic item code (e.g., "0307")
+        customer: Optional customer name to find specific TDS
     
     Returns:
         Dict with TDS details or None if not found
     """
     try:
-        filters = {"product_item": sales_item, "docstatus": ["!=", 2]}
+        # TDS name starts with sales_item code (e.g., "0307-NATURAL MITCH")
+        filters = {"name": ["like", f"{sales_item}-%"], "docstatus": ["!=", 2]}
         if customer:
-            filters["customer"] = customer
+            # TDS name pattern: {SALES_ITEM}-{CUSTOMER}
+            filters["name"] = ["like", f"{sales_item}-{customer}%"]
         
         tds_list = frappe.get_all(
             "TDS Product Specification",
             filters=filters,
-            fields=["name", "product_item", "item_code", "customer", "specification_name"],
+            fields=["name", "product_item", "workflow_state"],
             order_by="creation desc",
             limit=1
         )
         
         if tds_list:
             tds = tds_list[0]
+            # Extract sales_item from TDS name (before first hyphen)
             return {
                 "success": True,
                 "tds_name": tds.name,
-                "sales_item": tds.product_item,
-                "production_item": tds.item_code,
-                "customer": tds.customer,
-                "specification": tds.specification_name
+                "sales_item": sales_item,
+                "production_item": tds.product_item,  # product_item IS the production item
+                "workflow_state": tds.workflow_state
             }
         return None
     except Exception as e:
