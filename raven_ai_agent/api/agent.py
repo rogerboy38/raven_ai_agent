@@ -393,6 +393,28 @@ class RaymondLucyAgent:
                 so_name=so_match.group(1).upper() if so_match else None
             )
         
+        # BOM Creator: submit bom creator BOM-XXXX
+        if "submit" in query_lower and "bom" in query_lower:
+            bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
+            if bom_match:
+                bom_name = bom_match.group(1)
+                # URL decode if needed (e.g., %2F -> /)
+                import urllib.parse
+                bom_name = urllib.parse.unquote(bom_name)
+                
+                from raven_ai_agent.agents.bom_creator_agent import submit_bom_creator
+                result = submit_bom_creator(bom_name)
+                if result.get("success"):
+                    return {
+                        "success": True,
+                        "message": result.get("message", f"✅ BOM Creator '{bom_name}' submitted successfully!")
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": result.get("error", "Failed to submit BOM Creator")
+                    }
+        
         return None
     
     def process_query(self, query: str, conversation_history: List[Dict] = None) -> Dict:
