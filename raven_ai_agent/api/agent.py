@@ -342,7 +342,8 @@ class RaymondLucyAgent:
         
         # Complete workflow: Quotation → Invoice
         if qtn_match and "complete" in query_lower and ("workflow" in query_lower or "invoice" in query_lower):
-            return executor.complete_workflow_to_invoice(qtn_match.group(1).upper())
+            from raven_ai_agent.api.workflows import complete_workflow_to_invoice
+            return complete_workflow_to_invoice(qtn_match.group(1).upper(), dry_run=is_dry_run)
         
         # Batch migration: multiple quotations
         batch_match = re.findall(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
