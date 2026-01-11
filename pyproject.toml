@@ -1,13 +1,16 @@
 [project]
 name = "raven_ai_agent"
-version = "0.0.1"
+version = "0.1.0"
 description = "AI Agent for ERPNext with Raymond-Lucy Protocol"
-requires-python = ">=3.10"
+requires-python = ">=3.10"  # v15: 3.10+, v16: 3.14+
 dependencies = [
     "openai>=1.0.0",
     "tiktoken>=0.5.0",
     "numpy>=1.24.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/rogerboy38/raven_ai_agent"
 
 [project.optional-dependencies]
 dev = [
