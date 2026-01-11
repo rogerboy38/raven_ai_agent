@@ -1,0 +1,20 @@
+[project]
+name = "raven_ai_agent"
+version = "0.0.1"
+description = "AI Agent for ERPNext with Raymond-Lucy Protocol"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0.0",
+    "tiktoken>=0.5.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[build-system]
+requires = ["flit_core>=3.4"]
+build-backend = "flit_core.buildapi"
