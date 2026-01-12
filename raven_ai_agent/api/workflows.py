@@ -872,39 +872,77 @@ def get_tds_for_sales_item(sales_item: str, customer: str = None) -> Optional[Di
     """
     Find TDS Product Specification for a sales item.
     
-    TDS naming pattern: {SALES_ITEM}-{CUSTOMER} (e.g., "0307-NATURAL MITCH")
-    The product_item field links to the production item (e.g., "0307-500/100 CFU/G...")
+    TDS naming patterns supported:
+    - Exact: "0308"
+    - With hyphen: "0308-CUSTOMER" or "0308-0301"
+    - With space: "0308 Customer Name" or "0308 TDS BASE"
     
     Args:
-        sales_item: The sales/generic item code (e.g., "0307")
+        sales_item: The sales/generic item code (e.g., "0308")
         customer: Optional customer name to find specific TDS
     
     Returns:
         Dict with TDS details or None if not found
     """
     try:
-        # TDS name starts with sales_item code (e.g., "0307-NATURAL MITCH")
-        filters = {"name": ["like", f"{sales_item}-%"], "docstatus": ["!=", 2]}
-        if customer:
-            # TDS name pattern: {SALES_ITEM}-{CUSTOMER}
-            filters["name"] = ["like", f"{sales_item}-{customer}%"]
+        tds_list = []
+        base_filters = {"docstatus": ["!=", 2]}
         
-        tds_list = frappe.get_all(
-            "TDS Product Specification",
-            filters=filters,
-            fields=["name", "product_item", "workflow_state"],
-            order_by="creation desc",
-            limit=1
-        )
+        # Priority 1: Customer-specific TDS (if customer provided)
+        if customer:
+            # Try "{item}-{customer}" pattern
+            filters = {**base_filters, "name": ["like", f"{sales_item}-{customer}%"]}
+            tds_list = frappe.get_all(
+                "TDS Product Specification", filters=filters,
+                fields=["name", "product_item", "workflow_state"],
+                order_by="creation desc", limit=1
+            )
+            if not tds_list:
+                # Try "{item} {customer}" pattern
+                filters["name"] = ["like", f"{sales_item} {customer}%"]
+                tds_list = frappe.get_all(
+                    "TDS Product Specification", filters=filters,
+                    fields=["name", "product_item", "workflow_state"],
+                    order_by="creation desc", limit=1
+                )
+        
+        # Priority 2: Exact match (e.g., "0308")
+        if not tds_list:
+            tds_list = frappe.get_all(
+                "TDS Product Specification",
+                filters={**base_filters, "name": sales_item},
+                fields=["name", "product_item", "workflow_state"],
+                limit=1
+            )
+        
+        # Priority 3: Base/Master TDS (e.g., "0308 TDS BASE", "0308 Base")
+        if not tds_list:
+            for pattern in [f"{sales_item} TDS%", f"{sales_item} Base%", f"{sales_item} Master%"]:
+                tds_list = frappe.get_all(
+                    "TDS Product Specification",
+                    filters={**base_filters, "name": ["like", pattern]},
+                    fields=["name", "product_item", "workflow_state"],
+                    order_by="creation desc", limit=1
+                )
+                if tds_list:
+                    break
+        
+        # Priority 4: Any TDS starting with sales_item
+        if not tds_list:
+            tds_list = frappe.get_all(
+                "TDS Product Specification",
+                filters={**base_filters, "name": ["like", f"{sales_item}%"]},
+                fields=["name", "product_item", "workflow_state"],
+                order_by="creation desc", limit=1
+            )
         
         if tds_list:
             tds = tds_list[0]
-            # Extract sales_item from TDS name (before first hyphen)
             return {
                 "success": True,
                 "tds_name": tds.name,
                 "sales_item": sales_item,
-                "production_item": tds.product_item,  # product_item IS the production item
+                "production_item": tds.product_item,
                 "workflow_state": tds.workflow_state
             }
         return None
