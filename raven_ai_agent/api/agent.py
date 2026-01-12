@@ -5,8 +5,10 @@ Anti-Hallucination + Persistent Memory + Autonomy Slider
 import frappe
 import json
 import re
+import requests
 from typing import Optional, Dict, List
 from openai import OpenAI
+from bs4 import BeautifulSoup
 
 # Import vector store for semantic search
 try:
@@ -70,6 +72,22 @@ When showing documents:
 - Include clickable links if provided in context
 - Format as a clean list with key info (name, customer/party, amount, date, status)
 - Use markdown formatting for clarity
+
+## EXTERNAL WEB ACCESS
+- You CAN fetch data from external URLs if the user provides a specific URL in their query
+- Example: "find address from http://www.barentz.com" will fetch that website's content
+- For general web searches without URLs, explain that you need a specific URL
+
+## DYNAMIC DATA ACCESS
+- You have access to any ERPNext doctype the user has permission to view
+- The system auto-detects which doctypes are relevant based on keywords in the query
+- If no data is found, it means either no records exist or user lacks permission
+
+## CRITICAL RULES
+- NEVER say "hold on", "please wait", "let me check" - you cannot perform follow-up queries
+- If data is not in the provided ERPNext Context, say "I don't have that data available"
+- Answer ONLY with the data provided in the context - do not promise to fetch more
+- If asked about something not in context, suggest the user check specific doctypes or provide a URL
 
 [Sources: Document names queried]
 """
@@ -184,12 +202,151 @@ class RaymondLucyAgent:
         frappe.db.commit()
         return doc.name
     
-    def get_erpnext_context(self, query: str) -> str:
-        """Raymond Protocol: Get verified ERPNext data"""
-        context = []
-        
-        # Detect intent and query relevant data
+    # Doctype keyword mappings for dynamic detection
+    DOCTYPE_KEYWORDS = {
+        "Sales Invoice": ["invoice", "factura", "billing", "invoiced"],
+        "Sales Order": ["sales order", "orden de venta", "so-", "pedido"],
+        "Purchase Order": ["purchase order", "orden de compra", "po-"],
+        "Purchase Invoice": ["purchase invoice", "factura de compra"],
+        "Quotation": ["quotation", "quote", "cotización", "cotizacion"],
+        "Customer": ["customer", "client", "cliente"],
+        "Supplier": ["supplier", "vendor", "proveedor"],
+        "Item": ["item", "product", "artículo", "articulo", "producto"],
+        "Stock Entry": ["stock entry", "stock", "inventario", "inventory"],
+        "Delivery Note": ["delivery", "shipping", "entrega", "envío"],
+        "Purchase Receipt": ["purchase receipt", "receipt", "recepción"],
+        "Work Order": ["work order", "manufacturing", "production", "producción"],
+        "BOM": ["bom", "bill of material", "lista de materiales"],
+        "Quality Inspection": ["quality", "inspection", "qc", "calidad", "inspección"],
+        "Material Request": ["material request", "requisición", "requisicion"],
+        "Lead": ["lead", "prospecto"],
+        "Opportunity": ["opportunity", "oportunidad"],
+        "Address": ["address", "dirección", "direccion"],
+        "Contact": ["contact", "contacto"],
+        "Employee": ["employee", "empleado"],
+        "Warehouse": ["warehouse", "almacén", "almacen"],
+        "Batch": ["batch", "lote"],
+        "Serial No": ["serial", "serie"],
+        "Payment Entry": ["payment", "pago"],
+        "Journal Entry": ["journal", "asiento", "diario"],
+    }
+    
+    def detect_doctype_from_query(self, query: str) -> List[str]:
+        """Detect which doctypes the user is asking about"""
         query_lower = query.lower()
+        detected = []
+        for doctype, keywords in self.DOCTYPE_KEYWORDS.items():
+            if any(kw in query_lower for kw in keywords):
+                detected.append(doctype)
+        return detected
+    
+    def query_doctype_with_permissions(self, doctype: str, query: str, limit: int = 10) -> List[Dict]:
+        """Query a doctype if user has permissions"""
+        try:
+            # Check if user has read permission
+            if not frappe.has_permission(doctype, "read"):
+                return []
+            
+            # Get standard fields for the doctype
+            meta = frappe.get_meta(doctype)
+            fields = ["name"]
+            
+            # Add common useful fields if they exist
+            common_fields = ["customer", "supplier", "grand_total", "total", "status", 
+                           "transaction_date", "posting_date", "modified", "creation",
+                           "item_code", "item_name", "customer_name", "party_name",
+                           "territory", "company", "owner"]
+            for field in common_fields:
+                if meta.has_field(field):
+                    fields.append(field)
+            
+            # Build filters based on query context
+            filters = {}
+            
+            # Check for specific document name patterns in query
+            query_upper = query.upper()
+            name_patterns = re.findall(r'[A-Z]{2,4}[-\s]?\d{4,}[-\w]*', query_upper)
+            if name_patterns:
+                filters["name"] = ["like", f"%{name_patterns[0]}%"]
+            
+            # Query the doctype
+            results = frappe.get_list(
+                doctype,
+                filters=filters if filters else {"docstatus": ["<", 2]},
+                fields=list(set(fields)),
+                order_by="modified desc",
+                limit=limit
+            )
+            
+            # Add links to results
+            site_name = frappe.local.site
+            doctype_slug = doctype.lower().replace(" ", "-")
+            for r in results:
+                r["link"] = f"https://{site_name}/app/{doctype_slug}/{r['name']}"
+                r["_doctype"] = doctype
+            
+            return results
+        except Exception as e:
+            frappe.logger().error(f"Error querying {doctype}: {str(e)}")
+            return []
+    
+    def get_available_doctypes(self) -> List[str]:
+        """Get list of doctypes user has permission to access"""
+        available = []
+        for doctype in self.DOCTYPE_KEYWORDS.keys():
+            try:
+                if frappe.has_permission(doctype, "read"):
+                    available.append(doctype)
+            except:
+                pass
+        return available
+    
+    def search_web(self, query: str, url: str = None) -> str:
+        """Search the web or extract info from a specific URL"""
+        try:
+            if url:
+                # Fetch specific URL
+                response = requests.get(url, timeout=10, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; ERPNextBot/1.0)"
+                })
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    # Extract text content
+                    for script in soup(["script", "style"]):
+                        script.decompose()
+                    text = soup.get_text(separator=' ', strip=True)
+                    # Limit to first 2000 chars
+                    return f"Content from {url}:\n{text[:2000]}"
+                else:
+                    return f"Could not fetch {url}: HTTP {response.status_code}"
+            else:
+                # For general web search, we'd need an API key (Google, Bing, etc.)
+                # For now, return a message that external search is not available
+                return "External web search requires API configuration. Please provide a specific URL to fetch."
+        except Exception as e:
+            return f"Web search error: {str(e)}"
+    
+    def get_erpnext_context(self, query: str) -> str:
+        """Raymond Protocol: Get verified ERPNext data based on user permissions"""
+        context = []
+        query_lower = query.lower()
+        
+        # Check for URL in query - fetch external website data
+        url_match = re.search(r'https?://[^\s]+', query)
+        if url_match:
+            url = url_match.group(0)
+            web_content = self.search_web(query, url)
+            if web_content:
+                context.append(f"Web Content: {web_content}")
+        
+        # Dynamic doctype detection - query any relevant doctypes user has permission to
+        detected_doctypes = self.detect_doctype_from_query(query)
+        for doctype in detected_doctypes:
+            results = self.query_doctype_with_permissions(doctype, query)
+            if results:
+                context.append(f"{doctype} Data: {json.dumps(results, default=str)}")
+        
+        # Also run specific keyword-based queries for backward compatibility
         
         if any(word in query_lower for word in ["invoice", "sales", "revenue"]):
             invoices = frappe.get_list(
@@ -286,6 +443,87 @@ class RaymondLucyAgent:
                 for dn in delivery_notes:
                     dn["link"] = f"https://{site_name}/app/delivery-note/{dn['name']}"
                 context.append(f"Delivery Notes: {json.dumps(delivery_notes, default=str)}")
+        
+        # Quality Inspection
+        if any(word in query_lower for word in ["quality", "inspection", "qc", "inspeccion", "inspección", "calidad"]):
+            inspections = frappe.get_list(
+                "Quality Inspection",
+                filters={"docstatus": ["<", 2]},
+                fields=["name", "inspection_type", "reference_type", "reference_name", "status", "modified"],
+                order_by="modified desc",
+                limit=10
+            )
+            if inspections:
+                site_name = frappe.local.site
+                for qi in inspections:
+                    qi["link"] = f"https://{site_name}/app/quality-inspection/{qi['name']}"
+                context.append(f"Quality Inspections: {json.dumps(inspections, default=str)}")
+            else:
+                context.append("Quality Inspections: No records found")
+        
+        # TDS / Tax related to Sales Orders
+        if any(word in query_lower for word in ["tds", "tax", "impuesto"]):
+            # Get recent sales orders that might need TDS resolution
+            sales_orders = frappe.get_list(
+                "Sales Order",
+                filters={"docstatus": ["<", 2]},
+                fields=["name", "customer", "grand_total", "status", "taxes_and_charges"],
+                order_by="creation desc",
+                limit=10
+            )
+            if sales_orders:
+                site_name = frappe.local.site
+                for so in sales_orders:
+                    so["link"] = f"https://{site_name}/app/sales-order/{so['name']}"
+                context.append(f"Sales Orders (for TDS): {json.dumps(sales_orders, default=str)}")
+        
+        # Best selling / most sold items
+        if any(word in query_lower for word in ["best sell", "most sold", "top sell", "vendido", "más vendido", "popular"]):
+            try:
+                top_items = frappe.db.sql("""
+                    SELECT soi.item_code, soi.item_name, SUM(soi.qty) as total_qty, SUM(soi.amount) as total_amount
+                    FROM `tabSales Order Item` soi
+                    JOIN `tabSales Order` so ON soi.parent = so.name
+                    WHERE so.docstatus = 1
+                    GROUP BY soi.item_code, soi.item_name
+                    ORDER BY total_qty DESC
+                    LIMIT 10
+                """, as_dict=True)
+                if top_items:
+                    context.append(f"Best Selling Items: {json.dumps(top_items, default=str)}")
+            except Exception as e:
+                context.append(f"Could not fetch best selling items: {str(e)}")
+        
+        # Customer-specific sales report
+        customer_match = None
+        for word in ["barentz", "legosan", "lorand"]:  # Add common customer names
+            if word in query_lower:
+                customer_match = word
+                break
+        
+        if customer_match or any(word in query_lower for word in ["report", "reporte", "sales for"]):
+            # Try to extract customer name from query
+            if customer_match:
+                customers = frappe.get_list(
+                    "Customer",
+                    filters={"name": ["like", f"%{customer_match}%"]},
+                    fields=["name", "customer_name"],
+                    limit=1
+                )
+                if customers:
+                    customer_name = customers[0]["name"]
+                    sales_data = frappe.get_list(
+                        "Sales Order",
+                        filters={"customer": customer_name, "docstatus": 1},
+                        fields=["name", "grand_total", "transaction_date", "status"],
+                        order_by="transaction_date desc",
+                        limit=20
+                    )
+                    if sales_data:
+                        site_name = frappe.local.site
+                        for s in sales_data:
+                            s["link"] = f"https://{site_name}/app/sales-order/{s['name']}"
+                        context.append(f"Sales for {customer_name}: {json.dumps(sales_data, default=str)}")
         
         return "\n".join(context) if context else "No specific ERPNext data found for this query."
     
