@@ -556,52 +556,88 @@ def process_message(message: str, conversation_history: str = None) -> Dict:
 
 @frappe.whitelist()
 def handle_raven_message(doc, method):
-    """Hook for Raven message integration"""
+    """Hook for Raven message integration - handles @ai and @bot_name mentions in any channel"""
     try:
-        # Check if message is directed at AI
-        if not doc.text or not doc.text.startswith("@ai"):
+        # Skip bot messages to avoid infinite loops
+        if doc.is_bot_message:
             return
         
-        query = doc.text.replace("@ai", "").strip()
-        user = doc.owner
+        if not doc.text:
+            return
         
-        frappe.logger().info(f"[AI Agent] Processing query: {query}")
+        # Check for triggers: @ai or specific bot mentions
+        text = doc.text
+        query = None
+        bot_name = None
+        
+        # Check for @ai trigger
+        if text.lower().startswith("@ai"):
+            query = text[3:].strip()
+            bot_name = "sales_order_bot"  # Default bot
+        
+        # Check for @sales_order_bot mention (in HTML from Raven)
+        elif "sales_order_bot" in text.lower():
+            # Extract query - remove the mention span
+            import re
+            # Raven formats mentions as: <span data-type="userMention" ...>@name</span>
+            query = re.sub(r'<span[^>]*data-type="userMention"[^>]*>@[^<]*</span>', '', text)
+            query = re.sub(r'<[^>]+>', '', query).strip()  # Remove remaining HTML
+            if not query:
+                query = "help"  # Default if only mention
+            bot_name = "sales_order_bot"
+        
+        if not query:
+            return
+        
+        user = doc.owner
+        frappe.logger().info(f"[AI Agent] Processing query from {user}: {query}")
         
         agent = RaymondLucyAgent(user)
         result = agent.process_query(query)
         
-        frappe.logger().info(f"[AI Agent] Result success: {result.get('success')}, response length: {len(result.get('response', ''))}")
+        frappe.logger().info(f"[AI Agent] Result: success={result.get('success')}")
         
-        # Always send response (success or error)
+        # Get bot for proper message sending
+        bot = None
+        if bot_name:
+            try:
+                bot = frappe.get_doc("Raven Bot", bot_name)
+            except frappe.DoesNotExistError:
+                frappe.logger().warning(f"[AI Agent] Bot {bot_name} not found")
+        
         response_text = result.get("response") or result.get("error") or "No response generated"
         
-        reply_doc = frappe.get_doc({
-            "doctype": "Raven Message",
-            "channel_id": doc.channel_id,
-            "text": response_text,
-            "message_type": "Text"
-        })
-        reply_doc.insert(ignore_permissions=True)
-        frappe.db.commit()
+        if bot:
+            # Use bot's send_message for proper integration
+            bot.send_message(
+                channel_id=doc.channel_id,
+                text=response_text,
+                markdown=False
+            )
+        else:
+            # Fallback: create message directly
+            reply_doc = frappe.get_doc({
+                "doctype": "Raven Message",
+                "channel_id": doc.channel_id,
+                "text": response_text,
+                "message_type": "Text",
+                "is_bot_message": 1
+            })
+            reply_doc.insert(ignore_permissions=True)
+            frappe.db.commit()
         
-        # Publish to Raven's channel-specific realtime event
-        frappe.publish_realtime(
-            event=f"raven:channel:{doc.channel_id}",
-            message={"message": reply_doc.as_dict()},
-            after_commit=True
-        )
+        frappe.logger().info(f"[AI Agent] Reply sent to channel {doc.channel_id}")
         
-        frappe.logger().info(f"[AI Agent] Reply saved: {reply_doc.name}")
     except Exception as e:
         frappe.logger().error(f"[AI Agent] Error: {str(e)}")
         frappe.log_error(f"AI Agent Error: {str(e)}", "Raven AI Agent")
-        # Send error message to user
         try:
             error_doc = frappe.get_doc({
                 "doctype": "Raven Message",
                 "channel_id": doc.channel_id,
                 "text": f"❌ Error: {str(e)}",
-                "message_type": "Text"
+                "message_type": "Text",
+                "is_bot_message": 1
             })
             error_doc.insert(ignore_permissions=True)
             frappe.db.commit()
