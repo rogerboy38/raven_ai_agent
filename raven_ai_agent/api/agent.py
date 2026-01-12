@@ -557,6 +557,8 @@ def process_message(message: str, conversation_history: str = None) -> Dict:
 @frappe.whitelist()
 def handle_raven_message(doc, method):
     """Hook for Raven message integration - handles @ai and @bot_name mentions in any channel"""
+    from bs4 import BeautifulSoup
+    
     try:
         # Skip bot messages to avoid infinite loops
         if doc.is_bot_message:
@@ -565,23 +567,23 @@ def handle_raven_message(doc, method):
         if not doc.text:
             return
         
-        # Check for triggers: @ai or specific bot mentions
-        text = doc.text
+        # Strip HTML to get plain text (Raven wraps messages in <p> tags)
+        plain_text = BeautifulSoup(doc.text, "html.parser").get_text().strip()
+        
+        frappe.logger().info(f"[AI Agent] Raw text: {doc.text[:100]}")
+        frappe.logger().info(f"[AI Agent] Plain text: {plain_text[:100]}")
+        
         query = None
         bot_name = None
         
-        # Check for @ai trigger
-        if text.lower().startswith("@ai"):
-            query = text[3:].strip()
+        # Check for @ai trigger (now on plain text)
+        if plain_text.lower().startswith("@ai"):
+            query = plain_text[3:].strip()
             bot_name = "sales_order_bot"  # Default bot
         
-        # Check for @sales_order_bot mention (in HTML from Raven)
-        elif "sales_order_bot" in text.lower():
-            # Extract query - remove the mention span
-            import re
-            # Raven formats mentions as: <span data-type="userMention" ...>@name</span>
-            query = re.sub(r'<span[^>]*data-type="userMention"[^>]*>@[^<]*</span>', '', text)
-            query = re.sub(r'<[^>]+>', '', query).strip()  # Remove remaining HTML
+        # Check for @sales_order_bot mention
+        elif "sales_order_bot" in plain_text.lower():
+            query = plain_text.replace("@sales_order_bot", "").strip()
             if not query:
                 query = "help"  # Default if only mention
             bot_name = "sales_order_bot"
