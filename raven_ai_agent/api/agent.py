@@ -75,8 +75,10 @@ When showing documents:
 
 ## EXTERNAL WEB ACCESS
 - You CAN fetch data from external URLs if the user provides a specific URL in their query
-- Example: "find address from http://www.barentz.com" will fetch that website's content
-- For general web searches without URLs, explain that you need a specific URL
+- Example: "find address from http://www.barentz.com/contact" will fetch that website's content
+- You CAN also do web searches without URLs using keywords like "search", "find", "look up"
+- Example: "search for barentz italia address" will search the web and return results
+- When web search results are provided, summarize the relevant information for the user
 
 ## DYNAMIC DATA ACCESS
 - You have access to any ERPNext doctype the user has permission to view
@@ -301,6 +303,41 @@ class RaymondLucyAgent:
                 pass
         return available
     
+    def duckduckgo_search(self, query: str, max_results: int = 5) -> str:
+        """Search the web using DuckDuckGo (no API key required)"""
+        try:
+            # Use DuckDuckGo HTML search
+            search_url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}"
+            response = requests.get(search_url, timeout=10, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            })
+            
+            if response.status_code != 200:
+                return f"Search failed: HTTP {response.status_code}"
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            results = []
+            
+            # Parse DuckDuckGo HTML results
+            for result in soup.find_all('div', class_='result')[:max_results]:
+                title_tag = result.find('a', class_='result__a')
+                snippet_tag = result.find('a', class_='result__snippet')
+                
+                if title_tag:
+                    title = title_tag.get_text(strip=True)
+                    link = title_tag.get('href', '')
+                    snippet = snippet_tag.get_text(strip=True) if snippet_tag else ''
+                    results.append(f"**{title}**\n{link}\n{snippet}")
+            
+            if results:
+                return "Web Search Results:\n\n" + "\n\n".join(results)
+            else:
+                return f"No search results found for: {query}"
+                
+        except Exception as e:
+            frappe.logger().error(f"[AI Agent] DuckDuckGo search error: {str(e)}")
+            return f"Search error: {str(e)}"
+    
     def search_web(self, query: str, url: str = None) -> str:
         """Search the web or extract info from a specific URL"""
         try:
@@ -338,7 +375,8 @@ class RaymondLucyAgent:
                 else:
                     return f"Could not fetch {url}: HTTP {response.status_code}"
             else:
-                return "To fetch external web data, please include a URL (e.g., http://example.com) in your query."
+                # Perform DuckDuckGo search for general queries
+                return self.duckduckgo_search(query)
         except requests.exceptions.Timeout:
             return f"Web request timed out for {url}"
         except requests.exceptions.RequestException as e:
@@ -361,6 +399,28 @@ class RaymondLucyAgent:
             if web_content and not web_content.startswith("Web search error"):
                 context.insert(0, f"⭐ EXTERNAL WEB DATA (from {url}):\n{web_content}")
                 frappe.logger().info(f"[AI Agent] Web content fetched: {len(web_content)} chars")
+        
+        # Check for web search intent (no URL but wants external info)
+        search_keywords = ["search", "buscar", "find on web", "google", "look up", "search for", "search web"]
+        external_entities = ["barentz", "legosan", "website", "company info", "address of", "contact of"]
+        
+        needs_web_search = (
+            any(kw in query_lower for kw in search_keywords) or
+            (any(ent in query_lower for ent in external_entities) and not url_match)
+        )
+        
+        if needs_web_search and not url_match:
+            # Extract search terms - remove common words
+            search_terms = query_lower
+            for word in ["@ai", "search", "find", "buscar", "look up", "web", "on", "for", "the", "a", "an"]:
+                search_terms = search_terms.replace(word, " ")
+            search_terms = " ".join(search_terms.split())  # Clean whitespace
+            
+            if len(search_terms) > 3:
+                frappe.logger().info(f"[AI Agent] Web search for: {search_terms}")
+                search_results = self.duckduckgo_search(search_terms)
+                if search_results and "No search results" not in search_results:
+                    context.insert(0, f"⭐ WEB SEARCH RESULTS:\n{search_results}")
         
         # Dynamic doctype detection - query any relevant doctypes user has permission to
         detected_doctypes = self.detect_doctype_from_query(query)
