@@ -407,9 +407,22 @@ class RaymondLucyAgent:
         search_keywords = ["search", "buscar", "find on web", "google", "look up", "search for", "search web", "find"]
         external_entities = ["barentz", "legosan", "website", "company info", "address", "contact", "ubicacion", "direccion", "indirizzo"]
         
+        # Market research / external knowledge patterns
+        market_keywords = ["market", "mercado", "players", "competitors", "suppliers", "manufacturers", 
+                          "companies", "industry", "trend", "price", "pricing", "region", "country"]
+        question_patterns = ["who are", "what are", "which", "list of", "tell me about", "information about",
+                            "quienes son", "cuales son", "dime sobre"]
+        
+        # Check if query asks about external market/industry data
+        is_market_question = (
+            any(mk in query_lower for mk in market_keywords) and
+            any(qp in query_lower for qp in question_patterns)
+        )
+        
         needs_web_search = (
             any(kw in query_lower for kw in search_keywords) or
-            (any(ent in query_lower for ent in external_entities) and not url_match)
+            (any(ent in query_lower for ent in external_entities) and not url_match) or
+            is_market_question
         )
         
         if needs_web_search and not url_match:
