@@ -361,20 +361,41 @@ class RaymondLucyAgent:
                     for script in soup(["script", "style", "nav", "footer", "header"]):
                         script.decompose()
                     
-                    # Try to find address-related content first
-                    address_content = []
+                    extracted_data = []
+                    
+                    # Extract tables (for supplier lists, data tables)
+                    tables = soup.find_all('table')
+                    for table in tables[:3]:  # Max 3 tables
+                        rows = table.find_all('tr')
+                        table_text = []
+                        for row in rows[:20]:  # Max 20 rows per table
+                            cells = row.find_all(['td', 'th'])
+                            row_text = ' | '.join(cell.get_text(strip=True) for cell in cells)
+                            if row_text.strip():
+                                table_text.append(row_text)
+                        if table_text:
+                            extracted_data.append("TABLE:\n" + "\n".join(table_text))
+                    
+                    # Extract lists (ul/ol) with company/supplier info
+                    for lst in soup.find_all(['ul', 'ol'])[:5]:
+                        items = lst.find_all('li')[:15]
+                        list_items = [li.get_text(strip=True) for li in items if li.get_text(strip=True)]
+                        if list_items and any(len(item) > 10 for item in list_items):
+                            extracted_data.append("LIST:\n" + "\n".join(list_items))
+                    
+                    # Look for address/contact content
                     for tag in soup.find_all(['address', 'div', 'p', 'span']):
                         text = tag.get_text(strip=True)
-                        if any(kw in text.lower() for kw in ['address', 'street', 'via', 'piazza', 'italy', 'italia', 'contact', 'location']):
-                            address_content.append(text)
+                        if any(kw in text.lower() for kw in ['address', 'street', 'via', 'piazza', 'italy', 'italia', 'contact', 'location', 'supplier', 'manufacturer', 'company']):
+                            if text not in extracted_data and len(text) > 20:
+                                extracted_data.append(text)
                     
-                    if address_content:
-                        return f"Address-related content from {url}:\n" + "\n".join(address_content[:10])
+                    if extracted_data:
+                        return f"Extracted from {url}:\n" + "\n\n".join(extracted_data[:15])
                     
                     # Fallback to general text
                     text = soup.get_text(separator=' ', strip=True)
-                    # Limit to first 3000 chars
-                    return f"Content from {url}:\n{text[:3000]}"
+                    return f"Content from {url}:\n{text[:4000]}"
                 else:
                     return f"Could not fetch {url}: HTTP {response.status_code}"
             else:
