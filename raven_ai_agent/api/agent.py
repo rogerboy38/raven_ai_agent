@@ -837,7 +837,7 @@ class RaymondLucyAgent:
                     
                     if search_with_address:
                         frappe.logger().info(f"[AI Agent] Searching address for: {supplier_name}")
-                        search_result = self.duckduckgo_search(f"{supplier_name} address contact location")
+                        search_result = self.duckduckgo_search(f"{supplier_name} address contact location direccion")
                         
                         # Try to parse address components from search results
                         if search_result and "No search results" not in search_result:
@@ -850,6 +850,34 @@ class RaymondLucyAgent:
                             email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', search_result)
                             if email_match:
                                 address_info['email'] = email_match.group(0)
+                            
+                            # Extract postal code (Mexican 5 digits, or other formats)
+                            postal_match = re.search(r'\b(\d{5})\b', search_result)
+                            if postal_match:
+                                address_info['pincode'] = postal_match.group(1)
+                            
+                            # Try to extract street address (common patterns)
+                            street_patterns = [
+                                r'((?:Calle|Av\.|Ave\.|Avenida|Carretera|Carr\.|Blvd\.|Boulevard|Via|C/)[^\n,]{5,50})',
+                                r'((?:No\.|Num\.|#)\s*\d+[^\n,]{0,30})',
+                                r'(\d+\s+[A-Z][a-z]+\s+(?:Street|St\.|Avenue|Ave\.|Road|Rd\.))',
+                            ]
+                            for pattern in street_patterns:
+                                street_match = re.search(pattern, search_result, re.IGNORECASE)
+                                if street_match:
+                                    address_info['address_line1'] = street_match.group(1).strip()[:100]
+                                    break
+                            
+                            # Try to extract city (common Mexican cities or patterns)
+                            city_patterns = [
+                                r'\b(San Luis Potos[ií]|Monterrey|Guadalajara|Ciudad de M[eé]xico|CDMX|Tijuana|Puebla|Le[oó]n|Zapopan|Quer[eé]taro|M[eé]rida|Toluca|Aguascalientes|Chihuahua|Hermosillo|Saltillo|Morelia|Culiac[aá]n)\b',
+                                r',\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?),\s*(?:Mexico|MX)',
+                            ]
+                            for pattern in city_patterns:
+                                city_match = re.search(pattern, search_result, re.IGNORECASE)
+                                if city_match:
+                                    address_info['city'] = city_match.group(1).strip()
+                                    break
                             
                             # Store raw search for address creation
                             address_info['raw_search'] = search_result[:1500]
@@ -892,32 +920,45 @@ class RaymondLucyAgent:
                                 {"link_doctype": "Supplier", "link_name": supplier.name, "parenttype": "Address"}, 
                                 "parent")
                             
+                            # Prepare address data from extracted info
+                            addr_line1 = address_info.get('address_line1', 'To be updated')
+                            addr_city = address_info.get('city', 'To be updated')
+                            addr_pincode = address_info.get('pincode', '00000')
+                            addr_phone = address_info.get('phone', '')
+                            addr_email = address_info.get('email', 'update@needed.com')
+                            
                             if existing_addr:
                                 address_doc = frappe.get_doc("Address", existing_addr)
-                                if address_info.get('phone'):
-                                    address_doc.phone = address_info['phone']
-                                if address_info.get('email'):
-                                    address_doc.email_id = address_info['email']
+                                if addr_line1 != 'To be updated':
+                                    address_doc.address_line1 = addr_line1
+                                if addr_city != 'To be updated':
+                                    address_doc.city = addr_city
+                                if addr_pincode != '00000':
+                                    address_doc.pincode = addr_pincode
+                                if addr_phone:
+                                    address_doc.phone = addr_phone
+                                if addr_email and addr_email != 'update@needed.com':
+                                    address_doc.email_id = addr_email
                                 address_doc.save(ignore_permissions=False)
-                                result_msg += f"📧 Address updated with phone: {address_info.get('phone', 'N/A')}\n"
+                                result_msg += f"📧 Address updated:\n  📍 {addr_line1}\n  🏙️ {addr_city}, {addr_pincode}\n  📞 {addr_phone}\n"
                             else:
                                 address_doc = frappe.get_doc({
                                     "doctype": "Address",
                                     "address_title": supplier_name,
                                     "address_type": "Billing",
-                                    "address_line1": "To be updated from web search",
-                                    "city": "To be updated",
-                                    "pincode": "00000",
+                                    "address_line1": addr_line1,
+                                    "city": addr_city,
+                                    "pincode": addr_pincode,
                                     "country": country,
-                                    "phone": address_info.get('phone', '') or '',
-                                    "email_id": address_info.get('email', '') or 'update@needed.com',
+                                    "phone": addr_phone or '',
+                                    "email_id": addr_email or 'update@needed.com',
                                     "links": [{
                                         "link_doctype": "Supplier",
                                         "link_name": supplier.name
                                     }]
                                 })
                                 address_doc.insert(ignore_permissions=False)
-                                result_msg += f"📧 Address created with phone: {address_info.get('phone', 'N/A')}\n"
+                                result_msg += f"📧 Address created:\n  📍 {addr_line1}\n  🏙️ {addr_city}, {addr_pincode}\n  📞 {addr_phone}\n"
                             
                             result_msg += f"\n**Web Search Results (update address manually):**\n{address_info['raw_search'][:500]}..."
                         except Exception as addr_err:
