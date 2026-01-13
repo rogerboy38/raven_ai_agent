@@ -972,19 +972,7 @@ class RaymondLucyAgent:
         
         # Troubleshooting Guide
         if "troubleshoot" in query_lower or "problem" in query_lower or "issue" in query_lower:
-            troubleshoot_guide = """🔧 MANUFACTURING TROUBLESHOOTING GUIDE
-
-📦 INSUFFICIENT STOCK
-→ @ai material status for [WO] → Create Material Request → Generate Purchase Order from MR
-
-🔍 QUALITY FAILURE
-→ Create Quality Inspection (Rejected) → Stock Entry > Material Transfer to Quarantine → Document issue in QI notes
-
-💰 COST VARIANCE >5%
-→ @ai show BOM cost report → Compare with actual production costs → Check Stock Ledger for discrepancies
-
-⚠️ WORK ORDER STUCK
-→ Check all materials issued → Verify no pending Quality Inspections → @ai workflow status for [WO]"""
+            troubleshoot_guide = "🔧 MANUFACTURING TROUBLESHOOTING GUIDE<br><br>📦 INSUFFICIENT STOCK<br>→ @ai material status for [WO] → Create Material Request → Generate Purchase Order from MR<br><br>🔍 QUALITY FAILURE<br>→ Create Quality Inspection (Rejected) → Stock Entry > Material Transfer to Quarantine → Document issue in QI notes<br><br>💰 COST VARIANCE >5%<br>→ @ai show BOM cost report → Compare with actual production costs → Check Stock Ledger for discrepancies<br><br>⚠️ WORK ORDER STUCK<br>→ Check all materials issued → Verify no pending Quality Inspections → @ai workflow status for [WO]"
             return {"success": True, "message": troubleshoot_guide}
         
         # ==================== END MANUFACTURING SOP ====================
