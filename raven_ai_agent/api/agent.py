@@ -305,25 +305,46 @@ class RaymondLucyAgent:
         """Search the web or extract info from a specific URL"""
         try:
             if url:
-                # Fetch specific URL
-                response = requests.get(url, timeout=10, headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; ERPNextBot/1.0)"
-                })
+                # Fetch specific URL with redirects
+                response = requests.get(url, timeout=15, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5"
+                }, allow_redirects=True)
+                
+                frappe.logger().info(f"[AI Agent] Web request to {url}: status={response.status_code}")
+                
                 if response.status_code == 200:
                     soup = BeautifulSoup(response.text, 'html.parser')
+                    
                     # Extract text content
-                    for script in soup(["script", "style"]):
+                    for script in soup(["script", "style", "nav", "footer", "header"]):
                         script.decompose()
+                    
+                    # Try to find address-related content first
+                    address_content = []
+                    for tag in soup.find_all(['address', 'div', 'p', 'span']):
+                        text = tag.get_text(strip=True)
+                        if any(kw in text.lower() for kw in ['address', 'street', 'via', 'piazza', 'italy', 'italia', 'contact', 'location']):
+                            address_content.append(text)
+                    
+                    if address_content:
+                        return f"Address-related content from {url}:\n" + "\n".join(address_content[:10])
+                    
+                    # Fallback to general text
                     text = soup.get_text(separator=' ', strip=True)
-                    # Limit to first 2000 chars
-                    return f"Content from {url}:\n{text[:2000]}"
+                    # Limit to first 3000 chars
+                    return f"Content from {url}:\n{text[:3000]}"
                 else:
                     return f"Could not fetch {url}: HTTP {response.status_code}"
             else:
-                # For general web search, we'd need an API key (Google, Bing, etc.)
-                # For now, return a message that external search is not available
-                return "External web search requires API configuration. Please provide a specific URL to fetch."
+                return "To fetch external web data, please include a URL (e.g., http://example.com) in your query."
+        except requests.exceptions.Timeout:
+            return f"Web request timed out for {url}"
+        except requests.exceptions.RequestException as e:
+            return f"Web request failed for {url}: {str(e)}"
         except Exception as e:
+            frappe.logger().error(f"[AI Agent] Web search error: {str(e)}")
             return f"Web search error: {str(e)}"
     
     def get_erpnext_context(self, query: str) -> str:
@@ -332,12 +353,14 @@ class RaymondLucyAgent:
         query_lower = query.lower()
         
         # Check for URL in query - fetch external website data
-        url_match = re.search(r'https?://[^\s]+', query)
+        url_match = re.search(r'https?://[^\s<>"\']+', query)
         if url_match:
-            url = url_match.group(0)
+            url = url_match.group(0).rstrip('.,;:')  # Clean trailing punctuation
+            frappe.logger().info(f"[AI Agent] Fetching URL: {url}")
             web_content = self.search_web(query, url)
-            if web_content:
-                context.append(f"Web Content: {web_content}")
+            if web_content and not web_content.startswith("Web search error"):
+                context.insert(0, f"⭐ EXTERNAL WEB DATA (from {url}):\n{web_content}")
+                frappe.logger().info(f"[AI Agent] Web content fetched: {len(web_content)} chars")
         
         # Dynamic doctype detection - query any relevant doctypes user has permission to
         detected_doctypes = self.detect_doctype_from_query(query)
