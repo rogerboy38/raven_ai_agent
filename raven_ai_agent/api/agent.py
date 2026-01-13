@@ -87,11 +87,12 @@ When showing documents:
 
 ## CRITICAL RULES - MUST FOLLOW
 - NEVER say "hold on", "please wait", "let me check", "searching now", "I will perform" - you CANNOT do follow-up queries
-- NEVER promise to search or fetch data - the search has ALREADY been done
-- If you see "⭐ WEB SEARCH RESULTS" in context, that IS the search result - USE IT IMMEDIATELY
+- NEVER promise to search or fetch data - the search has ALREADY been done BEFORE your response
+- If you see "⭐ WEB SEARCH RESULTS" or "⭐ EXTERNAL WEB DATA" in context, IMMEDIATELY extract and present the information
+- ALWAYS assume LEVEL 1 for read-only queries about addresses, contacts, websites, or any information lookup
+- Do NOT ask "Would you like to proceed with a web search?" - the search is ALREADY DONE
 - Extract and present the relevant information from the provided context
 - If data is not in the provided context, say "I don't have that data available"
-- Do NOT ask for confirmation to proceed - just answer with the data you have
 
 [Sources: Document names queried]
 """
@@ -403,8 +404,8 @@ class RaymondLucyAgent:
                 frappe.logger().info(f"[AI Agent] Web content fetched: {len(web_content)} chars")
         
         # Check for web search intent (no URL but wants external info)
-        search_keywords = ["search", "buscar", "find on web", "google", "look up", "search for", "search web"]
-        external_entities = ["barentz", "legosan", "website", "company info", "address of", "contact of"]
+        search_keywords = ["search", "buscar", "find on web", "google", "look up", "search for", "search web", "find"]
+        external_entities = ["barentz", "legosan", "website", "company info", "address", "contact", "ubicacion", "direccion", "indirizzo"]
         
         needs_web_search = (
             any(kw in query_lower for kw in search_keywords) or
