@@ -415,7 +415,7 @@ class RaymondLucyAgent:
             # Extract search terms - remove common words
             search_terms = query_lower
             for word in ["@ai", "search", "find", "buscar", "look up", "web", "on", "for", "the", "a", "an"]:
-                search_terms = search_terms.replace(word, " ")
+                search_terms = re.sub(r'\b' + re.escape(word) + r'\b', ' ', search_terms)
             search_terms = " ".join(search_terms.split())  # Clean whitespace
             
             if len(search_terms) > 3:
