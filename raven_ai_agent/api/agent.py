@@ -879,11 +879,12 @@ class RaymondLucyAgent:
                                 "doctype": "Address",
                                 "address_title": supplier_name,
                                 "address_type": "Billing",
-                                "address_line1": "See notes for web search results",
+                                "address_line1": "To be updated from web search",
                                 "city": "To be updated",
+                                "pincode": "00000",
                                 "country": country,
-                                "phone": address_info.get('phone', ''),
-                                "email_id": address_info.get('email', ''),
+                                "phone": address_info.get('phone', '') or '',
+                                "email_id": address_info.get('email', '') or 'update@needed.com',
                                 "links": [{
                                     "link_doctype": "Supplier",
                                     "link_name": supplier.name
