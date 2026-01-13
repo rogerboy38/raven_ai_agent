@@ -113,7 +113,8 @@ CAPABILITIES_LIST = """
 - `@ai who are the players in [market]` - Market research
 
 ### 📝 Create ERPNext Records
-- `@ai create supplier [name] from web` - Create supplier from research
+- `@ai create supplier [name]` - Create basic supplier
+- `@ai create supplier [name] with address` - Search web & create with address
 - `@ai save this research` - Cache research to AI Memory
 
 ### 🔧 Workflows (Level 2-3)
@@ -807,10 +808,15 @@ class RaymondLucyAgent:
         
         # Create Supplier from research: @ai create supplier [name]
         if "create supplier" in query_lower or "crear proveedor" in query_lower:
-            # Extract supplier name from query
-            name_match = re.search(r'(?:create supplier|crear proveedor)\s+["\']?([^"\']+)["\']?', query, re.IGNORECASE)
+            # Extract supplier name from query (remove "with address" suffix if present)
+            name_match = re.search(r'(?:create supplier|crear proveedor)\s+["\']?([^"\']+?)["\']?(?:\s+with\s+address|\s+con\s+direccion)?$', query, re.IGNORECASE)
             if name_match:
                 supplier_name = name_match.group(1).strip()
+                # Clean up trailing keywords
+                for suffix in [" with address", " con direccion", " with", " con"]:
+                    if supplier_name.lower().endswith(suffix):
+                        supplier_name = supplier_name[:-len(suffix)].strip()
+                
                 try:
                     # Check if supplier already exists
                     if frappe.db.exists("Supplier", {"supplier_name": supplier_name}):
@@ -819,18 +825,81 @@ class RaymondLucyAgent:
                             "error": f"Supplier '{supplier_name}' already exists"
                         }
                     
+                    # Search for company address info
+                    address_info = {}
+                    search_with_address = "with address" in query_lower or "con direccion" in query_lower
+                    
+                    if search_with_address:
+                        frappe.logger().info(f"[AI Agent] Searching address for: {supplier_name}")
+                        search_result = self.duckduckgo_search(f"{supplier_name} address contact location")
+                        
+                        # Try to parse address components from search results
+                        if search_result and "No search results" not in search_result:
+                            # Extract phone numbers
+                            phone_match = re.search(r'[\+]?[\d\s\-\(\)]{10,}', search_result)
+                            if phone_match:
+                                address_info['phone'] = phone_match.group(0).strip()
+                            
+                            # Extract email
+                            email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', search_result)
+                            if email_match:
+                                address_info['email'] = email_match.group(0)
+                            
+                            # Store raw search for address creation
+                            address_info['raw_search'] = search_result[:1500]
+                    
+                    # Detect country from name or search
+                    country = "Mexico"  # Default
+                    if any(c in supplier_name.lower() for c in ["italia", "italy"]):
+                        country = "Italy"
+                    elif any(c in supplier_name.lower() for c in ["china", "chinese"]):
+                        country = "China"
+                    elif any(c in supplier_name.lower() for c in ["india", "indian"]):
+                        country = "India"
+                    elif any(c in supplier_name.lower() for c in ["usa", "america", "united states"]):
+                        country = "United States"
+                    
                     # Create new supplier
                     supplier = frappe.get_doc({
                         "doctype": "Supplier",
                         "supplier_name": supplier_name,
                         "supplier_group": "All Supplier Groups",
-                        "supplier_type": "Company"
+                        "supplier_type": "Company",
+                        "country": country
                     })
                     supplier.insert(ignore_permissions=False)
                     
+                    result_msg = f"✅ Created Supplier: **{supplier_name}** (ID: {supplier.name})\n"
+                    result_msg += f"📍 Country: {country}\n"
+                    
+                    # Create address if we found info
+                    if address_info.get('raw_search'):
+                        try:
+                            address_doc = frappe.get_doc({
+                                "doctype": "Address",
+                                "address_title": supplier_name,
+                                "address_type": "Billing",
+                                "address_line1": "See notes for web search results",
+                                "city": "To be updated",
+                                "country": country,
+                                "phone": address_info.get('phone', ''),
+                                "email_id": address_info.get('email', ''),
+                                "links": [{
+                                    "link_doctype": "Supplier",
+                                    "link_name": supplier.name
+                                }]
+                            })
+                            address_doc.insert(ignore_permissions=False)
+                            result_msg += f"📧 Address created with phone: {address_info.get('phone', 'N/A')}\n"
+                            result_msg += f"\n**Web Search Results (update address manually):**\n{address_info['raw_search'][:500]}..."
+                        except Exception as addr_err:
+                            result_msg += f"\n⚠️ Could not auto-create address: {str(addr_err)}"
+                    
+                    result_msg += "\n\nYou can now add more details in ERPNext."
+                    
                     return {
                         "success": True,
-                        "message": f"✅ Created Supplier: **{supplier_name}** (ID: {supplier.name})\n\nYou can now add more details in ERPNext."
+                        "message": result_msg
                     }
                 except Exception as e:
                     return {
