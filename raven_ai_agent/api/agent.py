@@ -97,6 +97,37 @@ When showing documents:
 [Sources: Document names queried]
 """
 
+CAPABILITIES_LIST = """
+## 🤖 AI Agent Capabilities
+
+### 📊 ERPNext Data Access
+- `@ai show my quotations` - View your quotations, sales orders, work orders
+- `@ai show pending deliveries` - Delivery notes, stock levels, inventory
+- `@ai best selling items` - Sales analytics and reports
+- `@ai TDS resolution for [item]` - Tax and compliance info
+
+### 🌐 Web Research
+- `@ai search [topic]` - Web search for any topic
+- `@ai find suppliers for [product]` - Find manufacturers/suppliers
+- `@ai extract from [URL]` - Extract data from any website
+- `@ai who are the players in [market]` - Market research
+
+### 📝 Create ERPNext Records
+- `@ai create supplier [name] from web` - Create supplier from research
+- `@ai save this research` - Cache research to AI Memory
+
+### 🔧 Workflows (Level 2-3)
+- `@ai convert quotation [name] to sales order` - Document conversion
+- `@ai create work order for [item]` - Manufacturing workflows
+- `!command` - Force execute without confirmation
+
+### ℹ️ Help
+- `@ai help` or `@ai capabilities` - Show this list
+- `@ai what can you do` - Show capabilities
+
+Type your question and I'll help!
+"""
+
 
 class RaymondLucyAgent:
     """Main AI Agent class implementing the protocol"""
@@ -774,10 +805,54 @@ class RaymondLucyAgent:
                         "error": result.get("error", "Failed to submit BOM Creator")
                     }
         
+        # Create Supplier from research: @ai create supplier [name]
+        if "create supplier" in query_lower or "crear proveedor" in query_lower:
+            # Extract supplier name from query
+            name_match = re.search(r'(?:create supplier|crear proveedor)\s+["\']?([^"\']+)["\']?', query, re.IGNORECASE)
+            if name_match:
+                supplier_name = name_match.group(1).strip()
+                try:
+                    # Check if supplier already exists
+                    if frappe.db.exists("Supplier", {"supplier_name": supplier_name}):
+                        return {
+                            "success": False,
+                            "error": f"Supplier '{supplier_name}' already exists"
+                        }
+                    
+                    # Create new supplier
+                    supplier = frappe.get_doc({
+                        "doctype": "Supplier",
+                        "supplier_name": supplier_name,
+                        "supplier_group": "All Supplier Groups",
+                        "supplier_type": "Company"
+                    })
+                    supplier.insert(ignore_permissions=False)
+                    
+                    return {
+                        "success": True,
+                        "message": f"✅ Created Supplier: **{supplier_name}** (ID: {supplier.name})\n\nYou can now add more details in ERPNext."
+                    }
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "error": f"Failed to create supplier: {str(e)}"
+                    }
+        
         return None
     
     def process_query(self, query: str, conversation_history: List[Dict] = None) -> Dict:
         """Main processing function"""
+        
+        query_lower = query.lower()
+        
+        # Handle help/capabilities command
+        if any(h in query_lower for h in ["help", "capabilities", "what can you do", "que puedes hacer", "ayuda"]):
+            return {
+                "success": True,
+                "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 1]\n{CAPABILITIES_LIST}",
+                "autonomy_level": 1,
+                "context_used": {"help": True}
+            }
         
         # Determine autonomy level
         suggested_autonomy = self.determine_autonomy(query)
