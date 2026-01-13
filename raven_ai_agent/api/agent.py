@@ -808,21 +808,27 @@ class RaymondLucyAgent:
         
         # Create Supplier from research: @ai create supplier [name]
         if "create supplier" in query_lower or "crear proveedor" in query_lower:
-            # Extract supplier name from query (remove "with address" suffix if present)
-            name_match = re.search(r'(?:create supplier|crear proveedor)\s+["\']?([^"\']+?)["\']?(?:\s+with\s+address|\s+con\s+direccion)?$', query, re.IGNORECASE)
+            # Extract supplier name from query (remove suffixes)
+            name_match = re.search(r'(?:create supplier|crear proveedor)\s+["\']?(.+?)["\']?\s*$', query, re.IGNORECASE)
             if name_match:
                 supplier_name = name_match.group(1).strip()
                 # Clean up trailing keywords
-                for suffix in [" with address", " con direccion", " with", " con"]:
+                for suffix in [" if exist update", " if exists update", " si existe actualizar", 
+                              " with address", " con direccion", " with", " con", " update"]:
                     if supplier_name.lower().endswith(suffix):
                         supplier_name = supplier_name[:-len(suffix)].strip()
                 
+                # Check for update mode
+                update_if_exists = any(kw in query_lower for kw in ["if exist", "if exists", "update", "actualizar"])
+                
                 try:
                     # Check if supplier already exists
-                    if frappe.db.exists("Supplier", {"supplier_name": supplier_name}):
+                    existing_supplier = frappe.db.get_value("Supplier", {"supplier_name": supplier_name}, "name")
+                    
+                    if existing_supplier and not update_if_exists:
                         return {
                             "success": False,
-                            "error": f"Supplier '{supplier_name}' already exists"
+                            "error": f"Supplier '{supplier_name}' already exists. Add 'if exist update' to update it."
                         }
                     
                     # Search for company address info
@@ -859,39 +865,60 @@ class RaymondLucyAgent:
                     elif any(c in supplier_name.lower() for c in ["usa", "america", "united states"]):
                         country = "United States"
                     
-                    # Create new supplier
-                    supplier = frappe.get_doc({
-                        "doctype": "Supplier",
-                        "supplier_name": supplier_name,
-                        "supplier_group": "All Supplier Groups",
-                        "supplier_type": "Company",
-                        "country": country
-                    })
-                    supplier.insert(ignore_permissions=False)
+                    # Create or update supplier
+                    if existing_supplier:
+                        supplier = frappe.get_doc("Supplier", existing_supplier)
+                        supplier.country = country
+                        supplier.save(ignore_permissions=False)
+                        result_msg = f"✅ Updated Supplier: **{supplier_name}** (ID: {supplier.name})\n"
+                    else:
+                        supplier = frappe.get_doc({
+                            "doctype": "Supplier",
+                            "supplier_name": supplier_name,
+                            "supplier_group": "All Supplier Groups",
+                            "supplier_type": "Company",
+                            "country": country
+                        })
+                        supplier.insert(ignore_permissions=False)
+                        result_msg = f"✅ Created Supplier: **{supplier_name}** (ID: {supplier.name})\n"
                     
-                    result_msg = f"✅ Created Supplier: **{supplier_name}** (ID: {supplier.name})\n"
                     result_msg += f"📍 Country: {country}\n"
                     
-                    # Create address if we found info
+                    # Create or update address if we found info
                     if address_info.get('raw_search'):
                         try:
-                            address_doc = frappe.get_doc({
-                                "doctype": "Address",
-                                "address_title": supplier_name,
-                                "address_type": "Billing",
-                                "address_line1": "To be updated from web search",
-                                "city": "To be updated",
-                                "pincode": "00000",
-                                "country": country,
-                                "phone": address_info.get('phone', '') or '',
-                                "email_id": address_info.get('email', '') or 'update@needed.com',
-                                "links": [{
-                                    "link_doctype": "Supplier",
-                                    "link_name": supplier.name
-                                }]
-                            })
-                            address_doc.insert(ignore_permissions=False)
-                            result_msg += f"📧 Address created with phone: {address_info.get('phone', 'N/A')}\n"
+                            # Check for existing address
+                            existing_addr = frappe.db.get_value("Dynamic Link", 
+                                {"link_doctype": "Supplier", "link_name": supplier.name, "parenttype": "Address"}, 
+                                "parent")
+                            
+                            if existing_addr:
+                                address_doc = frappe.get_doc("Address", existing_addr)
+                                if address_info.get('phone'):
+                                    address_doc.phone = address_info['phone']
+                                if address_info.get('email'):
+                                    address_doc.email_id = address_info['email']
+                                address_doc.save(ignore_permissions=False)
+                                result_msg += f"📧 Address updated with phone: {address_info.get('phone', 'N/A')}\n"
+                            else:
+                                address_doc = frappe.get_doc({
+                                    "doctype": "Address",
+                                    "address_title": supplier_name,
+                                    "address_type": "Billing",
+                                    "address_line1": "To be updated from web search",
+                                    "city": "To be updated",
+                                    "pincode": "00000",
+                                    "country": country,
+                                    "phone": address_info.get('phone', '') or '',
+                                    "email_id": address_info.get('email', '') or 'update@needed.com',
+                                    "links": [{
+                                        "link_doctype": "Supplier",
+                                        "link_name": supplier.name
+                                    }]
+                                })
+                                address_doc.insert(ignore_permissions=False)
+                                result_msg += f"📧 Address created with phone: {address_info.get('phone', 'N/A')}\n"
+                            
                             result_msg += f"\n**Web Search Results (update address manually):**\n{address_info['raw_search'][:500]}..."
                         except Exception as addr_err:
                             result_msg += f"\n⚠️ Could not auto-create address: {str(addr_err)}"
