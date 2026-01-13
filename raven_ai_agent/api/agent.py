@@ -771,7 +771,7 @@ class RaymondLucyAgent:
             return executor.create_work_orders_from_sales_order(so_match.group(1).upper(), confirm=is_confirm)
         
         # Stock Entry for Work Order
-        wo_match = re.search(r'(MFG-WO-\d+-\d+|WO-\d+)', query, re.IGNORECASE)
+        wo_match = re.search(r'(MFG-WO-\d+|LOTE-\d+|P-VTA-\d+|WO-[^\s]+)', query, re.IGNORECASE)
         if wo_match and any(word in query_lower for word in ["stock entry", "material transfer", "manufacture"]):
             return executor.create_stock_entry_for_work_order(wo_match.group(1).upper(), confirm=is_confirm)
         
@@ -840,7 +840,8 @@ class RaymondLucyAgent:
                 return {"success": False, "error": str(e)}
         
         # Material Status for Work Order
-        wo_match = re.search(r'(MFG-WO-\d+-\d+|WO-[^\s]+)', query, re.IGNORECASE)
+        # Match various WO formats: MFG-WO-02725, LOTE-00225, P-VTA-00425, WO-XXX
+        wo_match = re.search(r'(MFG-WO-\d+|LOTE-\d+|P-VTA-\d+|WO-[^\s]+)', query, re.IGNORECASE)
         if wo_match and ("material status" in query_lower or "component" in query_lower or "disponibilidad" in query_lower):
             try:
                 wo_name = wo_match.group(1)
