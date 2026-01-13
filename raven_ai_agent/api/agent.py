@@ -122,6 +122,15 @@ CAPABILITIES_LIST = """
 - `@ai create work order for [item]` - Manufacturing workflows
 - `!command` - Force execute without confirmation
 
+### 🏭 Manufacturing SOP (Aloe Vera Production)
+- `@ai show work orders` - List active work orders
+- `@ai material status for [WO]` - Check component availability
+- `@ai issue materials for [WO]` - Create Stock Entry (Material Issue)
+- `@ai complete production for [WO]` - Create Stock Entry (Manufacture)
+- `@ai quality check for [item]` - Show/create Quality Inspection
+- `@ai show BOM cost report` - Compare estimated vs actual costs
+- `@ai troubleshoot [issue]` - Guide through SOP troubleshooting
+
 ### ℹ️ Help
 - `@ai help` or `@ai capabilities` - Show this list
 - `@ai what can you do` - Show capabilities
@@ -805,6 +814,190 @@ class RaymondLucyAgent:
                         "success": False,
                         "error": result.get("error", "Failed to submit BOM Creator")
                     }
+        
+        # ==================== MANUFACTURING SOP COMMANDS ====================
+        
+        # Show Work Orders
+        if "show work order" in query_lower or "list work order" in query_lower or "mis ordenes" in query_lower:
+            try:
+                work_orders = frappe.get_list("Work Order",
+                    filters={"docstatus": ["<", 2]},
+                    fields=["name", "production_item", "qty", "produced_qty", "status", "planned_start_date"],
+                    order_by="modified desc",
+                    limit=20
+                )
+                if work_orders:
+                    wo_list = []
+                    for wo in work_orders:
+                        progress = f"{wo.produced_qty or 0}/{wo.qty}"
+                        wo_list.append(f"• **{wo.name}** - {wo.production_item} | {progress} | {wo.status}")
+                    return {
+                        "success": True,
+                        "message": f"📋 **Active Work Orders:**\n\n" + "\n".join(wo_list)
+                    }
+                return {"success": True, "message": "No active work orders found."}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Material Status for Work Order
+        wo_match = re.search(r'(MFG-WO-\d+-\d+|WO-[^\s]+)', query, re.IGNORECASE)
+        if wo_match and ("material status" in query_lower or "component" in query_lower or "disponibilidad" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                wo = frappe.get_doc("Work Order", wo_name)
+                items_status = []
+                for item in wo.required_items:
+                    available = frappe.db.get_value("Bin", 
+                        {"item_code": item.item_code, "warehouse": item.source_warehouse},
+                        "actual_qty") or 0
+                    status = "✅" if available >= item.required_qty else "❌"
+                    items_status.append(f"• {status} {item.item_code}: Need {item.required_qty}, Available {available}")
+                
+                return {
+                    "success": True,
+                    "message": f"📦 **Material Status for {wo_name}:**\n\n" + "\n".join(items_status)
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Issue Materials for Work Order
+        if wo_match and ("issue material" in query_lower or "emitir material" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                wo = frappe.get_doc("Work Order", wo_name)
+                
+                if not is_confirm:
+                    items_preview = [f"• {i.item_code}: {i.required_qty} {i.stock_uom}" for i in wo.required_items[:5]]
+                    return {
+                        "requires_confirmation": True,
+                        "preview": f"📤 **Issue Materials for {wo_name}?**\n\nItems:\n" + "\n".join(items_preview) + "\n\nSay 'confirm' or use '!' prefix to proceed."
+                    }
+                
+                # Create Stock Entry
+                se = frappe.get_doc({
+                    "doctype": "Stock Entry",
+                    "stock_entry_type": "Material Transfer for Manufacture",
+                    "work_order": wo_name,
+                    "from_bom": 1,
+                    "bom_no": wo.bom_no,
+                    "fg_completed_qty": wo.qty
+                })
+                se.get_items()
+                se.insert()
+                se.submit()
+                
+                return {
+                    "success": True,
+                    "message": f"✅ Material Issue created: **{se.name}**\n\nItems transferred to WIP warehouse."
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Complete Production (Manufacture Entry)
+        if wo_match and ("complete production" in query_lower or "manufacture" in query_lower or "completar" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                wo = frappe.get_doc("Work Order", wo_name)
+                
+                remaining = wo.qty - (wo.produced_qty or 0)
+                if remaining <= 0:
+                    return {"success": True, "message": f"✅ Work Order {wo_name} already completed!"}
+                
+                if not is_confirm:
+                    return {
+                        "requires_confirmation": True,
+                        "preview": f"🏭 **Complete Production for {wo_name}?**\n\n• Item: {wo.production_item}\n• Quantity: {remaining}\n• Target: {wo.fg_warehouse}\n\nSay 'confirm' to create Manufacture entry."
+                    }
+                
+                # Create Manufacture Stock Entry
+                se = frappe.get_doc({
+                    "doctype": "Stock Entry",
+                    "stock_entry_type": "Manufacture",
+                    "work_order": wo_name,
+                    "from_bom": 1,
+                    "bom_no": wo.bom_no,
+                    "fg_completed_qty": remaining
+                })
+                se.get_items()
+                se.insert()
+                se.submit()
+                
+                return {
+                    "success": True,
+                    "message": f"✅ Production completed: **{se.name}**\n\n• {wo.production_item}: {remaining} units to {wo.fg_warehouse}"
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Quality Check
+        if "quality" in query_lower and ("check" in query_lower or "inspection" in query_lower or "calidad" in query_lower):
+            try:
+                # Get recent quality inspections
+                qis = frappe.get_list("Quality Inspection",
+                    filters={"docstatus": ["<", 2]},
+                    fields=["name", "item_code", "status", "inspected_by", "modified"],
+                    order_by="modified desc",
+                    limit=10
+                )
+                if qis:
+                    qi_list = [f"• **{qi.name}** - {qi.item_code} | {qi.status}" for qi in qis]
+                    return {
+                        "success": True,
+                        "message": f"🔍 **Recent Quality Inspections:**\n\n" + "\n".join(qi_list)
+                    }
+                return {"success": True, "message": "No quality inspections found. Create one in Quality > Quality Inspection."}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # BOM Cost Report
+        if "bom cost" in query_lower or "cost report" in query_lower or "costo bom" in query_lower:
+            try:
+                boms = frappe.get_list("BOM",
+                    filters={"is_active": 1, "is_default": 1},
+                    fields=["name", "item", "total_cost", "operating_cost", "raw_material_cost"],
+                    limit=10
+                )
+                if boms:
+                    bom_list = []
+                    for bom in boms:
+                        bom_list.append(f"• **{bom.name}** ({bom.item})\n  Materials: ${bom.raw_material_cost:,.2f} | Operations: ${bom.operating_cost:,.2f} | Total: ${bom.total_cost:,.2f}")
+                    return {
+                        "success": True,
+                        "message": f"💰 **BOM Cost Report:**\n\n" + "\n\n".join(bom_list)
+                    }
+                return {"success": True, "message": "No active BOMs found."}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Troubleshooting Guide
+        if "troubleshoot" in query_lower or "problem" in query_lower or "issue" in query_lower:
+            troubleshoot_guide = """
+🔧 **Manufacturing Troubleshooting Guide:**
+
+**❌ Insufficient Stock:**
+1. Check material status: `@ai material status for [WO]`
+2. Create Material Request: Manufacturing > Material Request
+3. Generate Purchase Order from MR
+
+**❌ Quality Failure:**
+1. Create Quality Inspection with "Rejected" status
+2. Create Stock Entry > "Material Transfer" to Quarantine warehouse
+3. Document issue in Quality Inspection notes
+
+**❌ Cost Variance >5%:**
+1. Run: `@ai show BOM cost report`
+2. Compare with actual production costs
+3. Check Stock > Stock Ledger for discrepancies
+4. Adjust BOM if needed
+
+**❌ Work Order Stuck:**
+1. Check all materials issued
+2. Verify no pending Quality Inspections
+3. Check workflow status: `@ai workflow status for [WO]`
+"""
+            return {"success": True, "message": troubleshoot_guide}
+        
+        # ==================== END MANUFACTURING SOP ====================
         
         # Create Supplier from research: @ai create supplier [name]
         if "create supplier" in query_lower or "crear proveedor" in query_lower:
