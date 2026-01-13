@@ -833,7 +833,7 @@ class RaymondLucyAgent:
                         wo_list.append(f"  - {wo.name} | {wo.production_item} | {progress} | {wo.status}")
                     return {
                         "success": True,
-                        "message": f"ACTIVE WORK ORDERS:\n" + "\n".join(wo_list)
+                        "message": f"📋 ACTIVE WORK ORDERS:\n" + "\n".join(wo_list)
                     }
                 return {"success": True, "message": "No active work orders found."}
             except Exception as e:
@@ -851,12 +851,12 @@ class RaymondLucyAgent:
                     available = frappe.db.get_value("Bin", 
                         {"item_code": item.item_code, "warehouse": item.source_warehouse},
                         "actual_qty") or 0
-                    status = "[OK]" if available >= item.required_qty else "[X]"
+                    status = "✅" if available >= item.required_qty else "❌"
                     items_status.append(f"  {status} {item.item_code}: Need {item.required_qty}, Available {available}")
                 
                 return {
                     "success": True,
-                    "message": f"MATERIAL STATUS FOR {wo_name}:\n" + "\n".join(items_status)
+                    "message": f"📦 MATERIAL STATUS FOR {wo_name}:\n" + "\n".join(items_status)
                 }
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -871,7 +871,7 @@ class RaymondLucyAgent:
                     items_preview = [f"  - {i.item_code}: {i.required_qty} {i.stock_uom}" for i in wo.required_items[:5]]
                     return {
                         "requires_confirmation": True,
-                        "preview": f"ISSUE MATERIALS FOR {wo_name}?\n\nItems:\n" + "\n".join(items_preview) + "\n\nSay 'confirm' or use '!' prefix to proceed."
+                        "preview": f"📤 ISSUE MATERIALS FOR {wo_name}?\n\nItems:\n" + "\n".join(items_preview) + "\n\nSay 'confirm' or use '!' prefix to proceed."
                     }
                 
                 # Create Stock Entry
@@ -889,7 +889,7 @@ class RaymondLucyAgent:
                 
                 return {
                     "success": True,
-                    "message": f"[OK] Material Issue created: {se.name}\n\nItems transferred to WIP warehouse."
+                    "message": f"✅ Material Issue created: {se.name}\n\nItems transferred to WIP warehouse."
                 }
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -902,12 +902,12 @@ class RaymondLucyAgent:
                 
                 remaining = wo.qty - (wo.produced_qty or 0)
                 if remaining <= 0:
-                    return {"success": True, "message": f"[OK] Work Order {wo_name} already completed!"}
+                    return {"success": True, "message": f"✅ Work Order {wo_name} already completed!"}
                 
                 if not is_confirm:
                     return {
                         "requires_confirmation": True,
-                        "preview": f"COMPLETE PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Quantity: {remaining}\n  Target: {wo.fg_warehouse}\n\nSay 'confirm' to create Manufacture entry."
+                        "preview": f"🏭 COMPLETE PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Quantity: {remaining}\n  Target: {wo.fg_warehouse}\n\nSay 'confirm' to create Manufacture entry."
                     }
                 
                 # Create Manufacture Stock Entry
@@ -925,7 +925,7 @@ class RaymondLucyAgent:
                 
                 return {
                     "success": True,
-                    "message": f"[OK] Production completed: {se.name}\n\n  {wo.production_item}: {remaining} units to {wo.fg_warehouse}"
+                    "message": f"✅ Production completed: {se.name}\n\n  {wo.production_item}: {remaining} units to {wo.fg_warehouse}"
                 }
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -944,7 +944,7 @@ class RaymondLucyAgent:
                     qi_list = [f"  - {qi.name} | {qi.item_code} | {qi.status}" for qi in qis]
                     return {
                         "success": True,
-                        "message": f"RECENT QUALITY INSPECTIONS:\n" + "\n".join(qi_list)
+                        "message": f"🔍 RECENT QUALITY INSPECTIONS:\n" + "\n".join(qi_list)
                     }
                 return {"success": True, "message": "No quality inspections found. Create one in Quality > Quality Inspection."}
             except Exception as e:
@@ -964,7 +964,7 @@ class RaymondLucyAgent:
                         bom_list.append(f"  - {bom.name} ({bom.item})\n    Materials: ${bom.raw_material_cost:,.2f} | Operations: ${bom.operating_cost:,.2f} | Total: ${bom.total_cost:,.2f}")
                     return {
                         "success": True,
-                        "message": f"BOM COST REPORT:\n" + "\n\n".join(bom_list)
+                        "message": f"💰 BOM COST REPORT:\n" + "\n\n".join(bom_list)
                     }
                 return {"success": True, "message": "No active BOMs found."}
             except Exception as e:
@@ -973,29 +973,27 @@ class RaymondLucyAgent:
         # Troubleshooting Guide
         if "troubleshoot" in query_lower or "problem" in query_lower or "issue" in query_lower:
             troubleshoot_guide = """
-MANUFACTURING TROUBLESHOOTING GUIDE
-====================================
+🔧 MANUFACTURING TROUBLESHOOTING GUIDE
 
-[X] INSUFFICIENT STOCK:
-  1. Check material status: @ai material status for [WO]
-  2. Create Material Request: Manufacturing > Material Request
-  3. Generate Purchase Order from MR
+📦 INSUFFICIENT STOCK
+   → @ai material status for [WO]
+   → Create Material Request
+   → Generate Purchase Order from MR
 
-[X] QUALITY FAILURE:
-  1. Create Quality Inspection with "Rejected" status
-  2. Create Stock Entry > "Material Transfer" to Quarantine warehouse
-  3. Document issue in Quality Inspection notes
+🔍 QUALITY FAILURE
+   → Create Quality Inspection (Rejected)
+   → Stock Entry > Material Transfer to Quarantine
+   → Document issue in QI notes
 
-[X] COST VARIANCE >5%:
-  1. Run: @ai show BOM cost report
-  2. Compare with actual production costs
-  3. Check Stock > Stock Ledger for discrepancies
-  4. Adjust BOM if needed
+💰 COST VARIANCE >5%
+   → @ai show BOM cost report
+   → Compare with actual production costs
+   → Check Stock Ledger for discrepancies
 
-[X] WORK ORDER STUCK:
-  1. Check all materials issued
-  2. Verify no pending Quality Inspections
-  3. Check workflow status: @ai workflow status for [WO]
+⚠️ WORK ORDER STUCK
+   → Check all materials issued
+   → Verify no pending Quality Inspections
+   → @ai workflow status for [WO]
 """
             return {"success": True, "message": troubleshoot_guide}
         
