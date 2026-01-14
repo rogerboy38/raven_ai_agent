@@ -134,6 +134,13 @@ CAPABILITIES_LIST = """
 - `@ai finish work order [WO]` - Complete production & receive goods
 - `@ai quality check` - Show recent Quality Inspections
 - `@ai show BOM cost report` - Compare estimated vs actual costs
+
+**Stock Entry Management:**
+- `@ai material receipt [ITEM] qty [n]` - Create Material Receipt entry
+- `@ai convert [STE] to material receipt` - Convert draft to Material Receipt
+- `@ai verify stock entries` - Check submitted vs draft entries
+- `@ai check stock ledger` - Show recent stock ledger entries
+- `@ai list batches` - Show recently created batches
 - `@ai troubleshoot` - Manufacturing troubleshooting guide
 
 ### 🔄 Sales-to-Purchase Cycle SOP
@@ -1173,6 +1180,178 @@ class RaymondLucyAgent:
 ⚠️ **WORK ORDER STUCK**
 → Check materials issued → Verify no pending QI → `@ai workflow status for [WO]`"""
             return {"success": True, "message": troubleshoot_guide}
+        
+        # ==================== STOCK ENTRY MANAGEMENT ====================
+        
+        # Material Receipt - Create stock entry to add inventory
+        se_match = re.search(r'(MAT-STE-\d{4}-\d+|STE-\d+)', query, re.IGNORECASE)
+        item_match = re.search(r'(ITEM[_-]?\d+)', query, re.IGNORECASE)
+        
+        if ("material receipt" in query_lower or "receive material" in query_lower or "add stock" in query_lower) and item_match:
+            try:
+                item_code = item_match.group(1).upper().replace("-", "_")
+                warehouse_match = re.search(r'warehouse[:\s]+([^\n,]+)', query, re.IGNORECASE)
+                qty_match = re.search(r'qty[:\s]*(\d+\.?\d*)|quantity[:\s]*(\d+\.?\d*)|(\d+\.?\d*)\s*(?:units?|pcs?|qty)', query, re.IGNORECASE)
+                
+                target_warehouse = warehouse_match.group(1).strip() if warehouse_match else "FG to Sell Warehouse - AMB-W"
+                qty = float(qty_match.group(1) or qty_match.group(2) or qty_match.group(3)) if qty_match else 1
+                
+                # Check if item exists
+                if not frappe.db.exists("Item", item_code):
+                    return {"success": False, "error": f"Item {item_code} not found"}
+                
+                if not is_confirm:
+                    return {
+                        "requires_confirmation": True,
+                        "preview": f"📥 MATERIAL RECEIPT?\n\n  Item: {item_code}\n  Qty: {qty}\n  Warehouse: {target_warehouse}\n\nSay 'confirm' or use '!' prefix to proceed. (Tip: Use `@ai !command` to skip confirmation)"
+                    }
+                
+                # Create batch from item code
+                batch_id = item_code[5:] if item_code.startswith("ITEM_") else item_code
+                if not frappe.db.exists("Batch", batch_id):
+                    batch = frappe.get_doc({
+                        "doctype": "Batch",
+                        "batch_id": batch_id,
+                        "item": item_code
+                    })
+                    batch.insert(ignore_permissions=True)
+                
+                # Create Material Receipt
+                se = frappe.get_doc({
+                    "doctype": "Stock Entry",
+                    "stock_entry_type": "Material Receipt",
+                    "purpose": "Material Receipt",
+                    "items": [{
+                        "item_code": item_code,
+                        "qty": qty,
+                        "t_warehouse": target_warehouse,
+                        "batch_no": batch_id
+                    }]
+                })
+                se.insert(ignore_permissions=True)
+                se.submit()
+                
+                return {
+                    "success": True,
+                    "message": f"✅ Material Receipt created: **{se.name}**\n\n  Item: {item_code}\n  Qty: {qty}\n  Batch: {batch_id}\n  Warehouse: {target_warehouse}"
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Convert Stock Entry to Material Receipt
+        if se_match and ("convert" in query_lower and "material receipt" in query_lower):
+            try:
+                se_name = se_match.group(1)
+                se = frappe.get_doc("Stock Entry", se_name)
+                
+                if se.docstatus != 0:
+                    return {"success": False, "error": f"Stock Entry {se_name} is not a Draft (docstatus: {se.docstatus})"}
+                
+                if not is_confirm:
+                    return {
+                        "requires_confirmation": True,
+                        "preview": f"🔄 CONVERT TO MATERIAL RECEIPT?\n\n  Entry: {se_name}\n  Current Type: {se.stock_entry_type}\n  Items: {len(se.items)}\n\nSay 'confirm' or use '!' prefix to proceed. (Tip: Use `@ai !command` to skip confirmation)"
+                    }
+                
+                # Convert to Material Receipt
+                se.stock_entry_type = "Material Receipt"
+                se.purpose = "Material Receipt"
+                
+                for item in se.items:
+                    item.s_warehouse = None  # Clear source warehouse
+                    if not item.t_warehouse:
+                        item.t_warehouse = "FG to Sell Warehouse - AMB-W"
+                    # Create batch if needed
+                    if item.item_code and not item.batch_no:
+                        batch_id = item.item_code[5:] if item.item_code.startswith("ITEM_") else item.item_code
+                        if not frappe.db.exists("Batch", batch_id):
+                            batch = frappe.get_doc({
+                                "doctype": "Batch",
+                                "batch_id": batch_id,
+                                "item": item.item_code
+                            })
+                            batch.insert(ignore_permissions=True)
+                        item.batch_no = batch_id
+                
+                se.save()
+                se.submit()
+                
+                return {
+                    "success": True,
+                    "message": f"✅ Converted to Material Receipt: **{se_name}**\n\n  Type: Material Receipt\n  Items: {len(se.items)}\n  Status: Submitted"
+                }
+            except Exception as e:
+                frappe.db.rollback()
+                return {"success": False, "error": str(e)}
+        
+        # Verify Stock Entries
+        if "verify stock entr" in query_lower or "check stock entr" in query_lower:
+            try:
+                entries = frappe.get_list("Stock Entry",
+                    filters={"purpose": "Material Receipt"},
+                    fields=["name", "posting_date", "docstatus", "total_qty", "stock_entry_type"],
+                    order_by="modified desc",
+                    limit=20
+                )
+                
+                submitted = [e for e in entries if e.docstatus == 1]
+                draft = [e for e in entries if e.docstatus == 0]
+                
+                msg = f"📊 **STOCK ENTRY VERIFICATION**\n\n  ✅ Submitted: {len(submitted)}\n  📝 Draft: {len(draft)}\n  📦 Total: {len(entries)}"
+                
+                if draft:
+                    draft_list = [f"  - {e.name}" for e in draft[:5]]
+                    msg += f"\n\n**Draft Entries:**\n" + "\n".join(draft_list)
+                
+                return {"success": True, "message": msg}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Check Stock Ledger Impact
+        if ("stock ledger" in query_lower or "stock balance" in query_lower) and ("check" in query_lower or "impact" in query_lower or "show" in query_lower):
+            try:
+                warehouse = "FG to Sell Warehouse - AMB-W"
+                warehouse_match = re.search(r'warehouse[:\s]+([^\n,]+)', query, re.IGNORECASE)
+                if warehouse_match:
+                    warehouse = warehouse_match.group(1).strip()
+                
+                ledger = frappe.get_list("Stock Ledger Entry",
+                    filters={"warehouse": warehouse},
+                    fields=["item_code", "actual_qty", "qty_after_transaction", "posting_date", "voucher_no"],
+                    order_by="posting_date desc",
+                    limit=15
+                )
+                
+                if ledger:
+                    ledger_list = [f"• **{l.item_code}**\n   Qty: {l.actual_qty:+.0f} → Balance: {l.qty_after_transaction:.0f}\n   {l.voucher_no}" for l in ledger]
+                    return {
+                        "success": True,
+                        "message": f"📈 **STOCK LEDGER - {warehouse}**\n\n" + "\n\n".join(ledger_list)
+                    }
+                return {"success": True, "message": f"No stock ledger entries found for {warehouse}"}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # List Batches
+        if "list batch" in query_lower or "show batch" in query_lower:
+            try:
+                batches = frappe.get_list("Batch",
+                    fields=["name", "item", "batch_qty", "expiry_date", "creation"],
+                    order_by="creation desc",
+                    limit=20
+                )
+                
+                if batches:
+                    batch_list = [f"• **{b.name}**\n   Item: {b.item} · Qty: {b.batch_qty or 0}" for b in batches]
+                    return {
+                        "success": True,
+                        "message": f"📦 **RECENT BATCHES**\n\n" + "\n\n".join(batch_list)
+                    }
+                return {"success": True, "message": "No batches found."}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # ==================== END STOCK ENTRY MANAGEMENT ====================
         
         # ==================== END MANUFACTURING SOP ====================
         
