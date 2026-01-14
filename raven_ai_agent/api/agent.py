@@ -1880,7 +1880,7 @@ class RaymondLucyAgent:
         # Add current query with autonomy context
         autonomy_warning = ""
         if suggested_autonomy >= 2:
-            autonomy_warning = f"\n\n⚠️ This query suggests LEVEL {suggested_autonomy} autonomy. Please confirm before executing any changes."
+            autonomy_warning = f"\n\n⚠️ This query suggests LEVEL {suggested_autonomy} autonomy. Please confirm before executing any changes. (Tip: Use `@ai !command` to skip confirmation)"
         
         messages.append({"role": "user", "content": query + autonomy_warning})
         
