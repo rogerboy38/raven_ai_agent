@@ -845,10 +845,10 @@ class RaymondLucyAgent:
                     wo_list = []
                     for wo in work_orders:
                         progress = f"{wo.produced_qty or 0}/{wo.qty}"
-                        wo_list.append(f"  - {wo.name} | {wo.production_item} | {progress} | {wo.status}")
+                        wo_list.append(f"• **{wo.name}**\n   {wo.production_item} · {progress} · {wo.status}")
                     return {
                         "success": True,
-                        "message": f"📋 ACTIVE WORK ORDERS:\n" + "\n".join(wo_list)
+                        "message": f"📋 **ACTIVE WORK ORDERS**\n\n" + "\n\n".join(wo_list)
                     }
                 return {"success": True, "message": "No active work orders found."}
             except Exception as e:
@@ -956,10 +956,10 @@ class RaymondLucyAgent:
                     limit=10
                 )
                 if qis:
-                    qi_list = [f"  - {qi.name} | {qi.item_code} | {qi.status}" for qi in qis]
+                    qi_list = [f"• **{qi.name}**\n   {qi.item_code} · {qi.status}" for qi in qis]
                     return {
                         "success": True,
-                        "message": f"🔍 RECENT QUALITY INSPECTIONS:\n" + "\n".join(qi_list)
+                        "message": f"🔍 **RECENT QUALITY INSPECTIONS**\n\n" + "\n\n".join(qi_list)
                     }
                 return {"success": True, "message": "No quality inspections found. Create one in Quality > Quality Inspection."}
             except Exception as e:
@@ -1016,14 +1016,13 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if opportunities:
-                    site_name = frappe.local.site
                     opp_list = []
                     for opp in opportunities:
-                        amt = f"${opp.opportunity_amount:,.2f}" if opp.opportunity_amount else "N/A"
-                        opp_list.append(f"  - [{opp.name}](https://{site_name}/app/opportunity/{opp.name}) | {opp.party_name} | {amt} | {opp.status}")
+                        amt = f"${opp.opportunity_amount:,.2f}" if opp.opportunity_amount else "—"
+                        opp_list.append(f"• **{opp.name}**\n   {opp.party_name} · {amt} · {opp.status}")
                     return {
                         "success": True,
-                        "message": f"🎯 SALES OPPORTUNITIES:\n" + "\n".join(opp_list)
+                        "message": f"🎯 **SALES OPPORTUNITIES**\n\n" + "\n\n".join(opp_list)
                     }
                 return {"success": True, "message": "No active opportunities found."}
             except Exception as e:
@@ -1142,14 +1141,13 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if mrs:
-                    site_name = frappe.local.site
                     mr_list = []
                     for mr in mrs:
                         ordered = f"{mr.per_ordered or 0:.0f}%"
-                        mr_list.append(f"  - [{mr.name}](https://{site_name}/app/material-request/{mr.name}) | {mr.material_request_type} | {mr.status} | Ordered: {ordered}")
+                        mr_list.append(f"• **{mr.name}**\n   {mr.material_request_type} · {mr.status} · Ordered: {ordered}")
                     return {
                         "success": True,
-                        "message": f"📋 MATERIAL REQUESTS:\n" + "\n".join(mr_list)
+                        "message": f"📋 **MATERIAL REQUESTS**\n\n" + "\n\n".join(mr_list)
                     }
                 return {"success": True, "message": "No pending material requests found."}
             except Exception as e:
@@ -1200,11 +1198,10 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if rfqs:
-                    site_name = frappe.local.site
-                    rfq_list = [f"  - [{r.name}](https://{site_name}/app/request-for-quotation/{r.name}) | {r.status} | {r.transaction_date}" for r in rfqs]
+                    rfq_list = [f"• **{r.name}**\n   {r.status} · {r.transaction_date}" for r in rfqs]
                     return {
                         "success": True,
-                        "message": f"📨 REQUEST FOR QUOTATIONS:\n" + "\n".join(rfq_list)
+                        "message": f"📨 **REQUEST FOR QUOTATIONS**\n\n" + "\n\n".join(rfq_list)
                     }
                 return {"success": True, "message": "No RFQs found."}
             except Exception as e:
@@ -1220,14 +1217,13 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if sqs:
-                    site_name = frappe.local.site
                     sq_list = []
                     for sq in sqs:
-                        amt = f"${sq.grand_total:,.2f}" if sq.grand_total else "N/A"
-                        sq_list.append(f"  - [{sq.name}](https://{site_name}/app/supplier-quotation/{sq.name}) | {sq.supplier} | {amt} | {sq.status}")
+                        amt = f"${sq.grand_total:,.2f}" if sq.grand_total else "—"
+                        sq_list.append(f"• **{sq.name}**\n   {sq.supplier} · {amt} · {sq.status}")
                     return {
                         "success": True,
-                        "message": f"📄 SUPPLIER QUOTATIONS:\n" + "\n".join(sq_list)
+                        "message": f"📄 **SUPPLIER QUOTATIONS**\n\n" + "\n\n".join(sq_list)
                     }
                 return {"success": True, "message": "No supplier quotations found."}
             except Exception as e:
@@ -1279,15 +1275,14 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if pos:
-                    site_name = frappe.local.site
                     po_list = []
                     for po in pos:
-                        amt = f"${po.grand_total:,.2f}" if po.grand_total else "N/A"
+                        amt = f"${po.grand_total:,.2f}" if po.grand_total else "—"
                         received = f"{po.per_received or 0:.0f}%"
-                        po_list.append(f"  - [{po.name}](https://{site_name}/app/purchase-order/{po.name}) | {po.supplier} | {amt} | {po.status} | Received: {received}")
+                        po_list.append(f"• **{po.name}**\n   {po.supplier} · {amt} · {po.status} · Rcvd: {received}")
                     return {
                         "success": True,
-                        "message": f"🛒 PURCHASE ORDERS:\n" + "\n".join(po_list)
+                        "message": f"🛒 **PURCHASE ORDERS**\n\n" + "\n\n".join(po_list)
                     }
                 return {"success": True, "message": "No purchase orders found."}
             except Exception as e:
