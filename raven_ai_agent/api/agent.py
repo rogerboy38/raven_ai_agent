@@ -122,14 +122,19 @@ CAPABILITIES_LIST = """
 - `@ai create work order for [item]` - Manufacturing workflows
 - `!command` - Force execute without confirmation
 
-### 🏭 Manufacturing SOP (Aloe Vera Production)
+### 🏭 Manufacturing SOP
 - `@ai show work orders` - List active work orders
+- `@ai create work order for [item] qty [n]` - Create new work order
 - `@ai material status for [WO]` - Check component availability
+- `@ai reserve stock for [WO]` - Reserve materials for work order
+- `@ai start production for [WO]` - Start/release work order
+- `@ai show job cards for [WO]` - List job cards/operations
+- `@ai update progress for [WO] qty [n]` - Report production progress
 - `@ai issue materials for [WO]` - Create Stock Entry (Material Issue)
-- `@ai complete production for [WO]` - Create Stock Entry (Manufacture)
-- `@ai quality check for [item]` - Show/create Quality Inspection
+- `@ai finish work order [WO]` - Complete production & receive goods
+- `@ai quality check` - Show recent Quality Inspections
 - `@ai show BOM cost report` - Compare estimated vs actual costs
-- `@ai troubleshoot [issue]` - Guide through SOP troubleshooting
+- `@ai troubleshoot` - Manufacturing troubleshooting guide
 
 ### 🔄 Sales-to-Purchase Cycle SOP
 - `@ai show opportunities` - List sales opportunities
@@ -854,6 +859,173 @@ class RaymondLucyAgent:
             except Exception as e:
                 return {"success": False, "error": str(e)}
         
+        # Create Work Order
+        if "create work order" in query_lower or "crear orden de produccion" in query_lower:
+            # Extract item and quantity: @ai create work order for ITEM-001 qty 100
+            item_match = re.search(r'(?:for|para)\s+([^\s]+)', query, re.IGNORECASE)
+            qty_match = re.search(r'(?:qty|quantity|cantidad)\s+(\d+)', query, re.IGNORECASE)
+            
+            if item_match:
+                item_code = item_match.group(1).strip()
+                qty = int(qty_match.group(1)) if qty_match else 1
+                
+                try:
+                    # Check if item exists and has BOM
+                    if not frappe.db.exists("Item", item_code):
+                        return {"success": False, "error": f"Item '{item_code}' not found."}
+                    
+                    bom = frappe.db.get_value("BOM", {"item": item_code, "is_active": 1, "is_default": 1}, "name")
+                    if not bom:
+                        return {"success": False, "error": f"No active BOM found for '{item_code}'. Create a BOM first."}
+                    
+                    if not is_confirm:
+                        return {
+                            "requires_confirmation": True,
+                            "preview": f"🏭 CREATE WORK ORDER?\n\n  Item: {item_code}\n  BOM: {bom}\n  Qty: {qty}\n\nSay 'confirm' to proceed."
+                        }
+                    
+                    wo = frappe.get_doc({
+                        "doctype": "Work Order",
+                        "production_item": item_code,
+                        "bom_no": bom,
+                        "qty": qty,
+                        "wip_warehouse": frappe.db.get_single_value("Manufacturing Settings", "default_wip_warehouse"),
+                        "fg_warehouse": frappe.db.get_single_value("Manufacturing Settings", "default_fg_warehouse")
+                    })
+                    wo.insert()
+                    return {
+                        "success": True,
+                        "message": f"✅ Work Order created: **{wo.name}**\n\n  Item: {item_code}\n  Qty: {qty}\n  Status: {wo.status}"
+                    }
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+        
+        # Reserve Stock for Work Order
+        wo_match = re.search(r'(MFG-WO-\d+|LOTE-\d+|P-VTA-\d+|WO-[^\s]+)', query, re.IGNORECASE)
+        if wo_match and ("reserve stock" in query_lower or "reservar" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                wo = frappe.get_doc("Work Order", wo_name)
+                
+                if wo.docstatus != 1:
+                    return {"success": False, "error": f"Work Order {wo_name} must be submitted first."}
+                
+                # Check material availability
+                available_items = []
+                unavailable_items = []
+                for item in wo.required_items:
+                    available = frappe.db.get_value("Bin", 
+                        {"item_code": item.item_code, "warehouse": item.source_warehouse},
+                        "actual_qty") or 0
+                    if available >= item.required_qty:
+                        available_items.append(f"✅ {item.item_code}: {item.required_qty}")
+                    else:
+                        unavailable_items.append(f"❌ {item.item_code}: Need {item.required_qty}, Have {available}")
+                
+                if unavailable_items:
+                    return {
+                        "success": False,
+                        "error": f"Cannot reserve - insufficient stock:\n" + "\n".join(unavailable_items)
+                    }
+                
+                # In ERPNext, stock reservation is typically done via Stock Reservation Entry
+                # For now, we'll just confirm materials are available
+                return {
+                    "success": True,
+                    "message": f"✅ Materials verified for **{wo_name}**\n\nAll items available:\n" + "\n".join(available_items) + "\n\n💡 Use `@ai issue materials for {wo_name}` to transfer to WIP warehouse."
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Start Production (Release Work Order)
+        if wo_match and ("start production" in query_lower or "iniciar produccion" in query_lower or "release" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                wo = frappe.get_doc("Work Order", wo_name)
+                
+                if wo.status == "In Process":
+                    return {"success": True, "message": f"✅ Work Order **{wo_name}** is already in process."}
+                
+                if wo.docstatus == 0:
+                    if not is_confirm:
+                        return {
+                            "requires_confirmation": True,
+                            "preview": f"🚀 START PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Qty: {wo.qty}\n\nThis will submit the Work Order. Say 'confirm' to proceed."
+                        }
+                    wo.submit()
+                    return {
+                        "success": True,
+                        "message": f"✅ Work Order **{wo_name}** submitted and started!\n\n  Status: {wo.status}\n  Item: {wo.production_item}"
+                    }
+                
+                return {"success": True, "message": f"Work Order **{wo_name}** status: {wo.status}"}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Show Job Cards for Work Order
+        if wo_match and ("job card" in query_lower or "tarjeta" in query_lower or "operations" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                job_cards = frappe.get_list("Job Card",
+                    filters={"work_order": wo_name},
+                    fields=["name", "operation", "workstation", "status", "for_quantity", "total_completed_qty"],
+                    order_by="sequence_id"
+                )
+                if job_cards:
+                    jc_list = []
+                    for jc in job_cards:
+                        progress = f"{jc.total_completed_qty or 0}/{jc.for_quantity}"
+                        jc_list.append(f"• **{jc.name}**\n   {jc.operation} · {jc.workstation or 'N/A'} · {progress} · {jc.status}")
+                    return {
+                        "success": True,
+                        "message": f"🎫 **JOB CARDS FOR {wo_name}**\n\n" + "\n\n".join(jc_list)
+                    }
+                return {"success": True, "message": f"No job cards found for {wo_name}. Work order may not have routing defined."}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+        
+        # Update Progress for Work Order
+        if wo_match and ("update progress" in query_lower or "report progress" in query_lower or "actualizar avance" in query_lower):
+            qty_match = re.search(r'(?:qty|quantity|cantidad)\s+(\d+)', query, re.IGNORECASE)
+            if qty_match:
+                produced_qty = int(qty_match.group(1))
+                try:
+                    wo_name = wo_match.group(1)
+                    wo = frappe.get_doc("Work Order", wo_name)
+                    
+                    if wo.docstatus != 1:
+                        return {"success": False, "error": f"Work Order {wo_name} must be submitted first."}
+                    
+                    remaining = wo.qty - (wo.produced_qty or 0)
+                    if produced_qty > remaining:
+                        return {"success": False, "error": f"Cannot produce {produced_qty}. Only {remaining} remaining."}
+                    
+                    if not is_confirm:
+                        return {
+                            "requires_confirmation": True,
+                            "preview": f"📊 UPDATE PROGRESS FOR {wo_name}?\n\n  Current: {wo.produced_qty or 0}/{wo.qty}\n  Adding: {produced_qty}\n  New Total: {(wo.produced_qty or 0) + produced_qty}/{wo.qty}\n\nSay 'confirm' to proceed."
+                        }
+                    
+                    # Create manufacture stock entry for the quantity
+                    se = frappe.get_doc({
+                        "doctype": "Stock Entry",
+                        "stock_entry_type": "Manufacture",
+                        "work_order": wo_name,
+                        "from_bom": 1,
+                        "bom_no": wo.bom_no,
+                        "fg_completed_qty": produced_qty
+                    })
+                    se.get_items()
+                    se.insert()
+                    se.submit()
+                    
+                    return {
+                        "success": True,
+                        "message": f"✅ Progress updated for **{wo_name}**\n\n  Produced: {produced_qty}\n  Stock Entry: {se.name}\n  New Total: {(wo.produced_qty or 0) + produced_qty}/{wo.qty}"
+                    }
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+        
         # Material Status for Work Order
         # Match various WO formats: MFG-WO-02725, LOTE-00225, P-VTA-00425, WO-XXX
         wo_match = re.search(r'(MFG-WO-\d+|LOTE-\d+|P-VTA-\d+|WO-[^\s]+)', query, re.IGNORECASE)
@@ -909,8 +1081,8 @@ class RaymondLucyAgent:
             except Exception as e:
                 return {"success": False, "error": str(e)}
         
-        # Complete Production (Manufacture Entry)
-        if wo_match and ("complete production" in query_lower or "manufacture" in query_lower or "completar" in query_lower):
+        # Finish Work Order / Complete Production (Manufacture Entry)
+        if wo_match and ("finish work order" in query_lower or "complete production" in query_lower or "finalizar" in query_lower or "completar" in query_lower):
             try:
                 wo_name = wo_match.group(1)
                 wo = frappe.get_doc("Work Order", wo_name)
