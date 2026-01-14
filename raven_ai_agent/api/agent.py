@@ -127,7 +127,7 @@ CAPABILITIES_LIST = """
 - `@ai create work order for [item] qty [n]` - Create new work order
 - `@ai material status for [WO]` - Check component availability
 - `@ai reserve stock for [WO]` - Reserve materials for work order
-- `@ai start production for [WO]` - Start/release work order
+- `@ai submit work order [WO]` - Submit/start work order
 - `@ai show job cards for [WO]` - List job cards/operations
 - `@ai update progress for [WO] qty [n]` - Report production progress
 - `@ai issue materials for [WO]` - Create Stock Entry (Material Issue)
@@ -937,8 +937,8 @@ class RaymondLucyAgent:
             except Exception as e:
                 return {"success": False, "error": str(e)}
         
-        # Start Production (Release Work Order)
-        if wo_match and ("start production" in query_lower or "iniciar produccion" in query_lower or "release" in query_lower):
+        # Start Production / Submit Work Order
+        if wo_match and ("start production" in query_lower or "submit work order" in query_lower or "submit wo" in query_lower or "iniciar produccion" in query_lower or "release" in query_lower):
             try:
                 wo_name = wo_match.group(1)
                 wo = frappe.get_doc("Work Order", wo_name)
