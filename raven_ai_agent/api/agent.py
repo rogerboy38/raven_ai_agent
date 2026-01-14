@@ -1206,15 +1206,13 @@ class RaymondLucyAgent:
                         "preview": f"📥 MATERIAL RECEIPT?\n\n  Item: {item_code}\n  Qty: {qty}\n  Warehouse: {target_warehouse}\n\nSay 'confirm' or use '!' prefix to proceed. (Tip: Use `@ai !command` to skip confirmation)"
                     }
                 
-                # Create batch from item code
-                batch_id = item_code[5:] if item_code.startswith("ITEM_") else item_code
-                if not frappe.db.exists("Batch", batch_id):
-                    batch = frappe.get_doc({
-                        "doctype": "Batch",
-                        "batch_id": batch_id,
-                        "item": item_code
-                    })
-                    batch.insert(ignore_permissions=True)
+                # Create batch - let Frappe auto-name it (LOTE###)
+                batch = frappe.get_doc({
+                    "doctype": "Batch",
+                    "item": item_code
+                })
+                batch.insert(ignore_permissions=True)
+                batch_id = batch.name
                 
                 # Create Material Receipt
                 se = frappe.get_doc({
@@ -1261,17 +1259,14 @@ class RaymondLucyAgent:
                     item.s_warehouse = None  # Clear source warehouse
                     if not item.t_warehouse:
                         item.t_warehouse = "FG to Sell Warehouse - AMB-W"
-                    # Create batch if needed
+                    # Create batch if needed - let Frappe auto-name (LOTE###)
                     if item.item_code and not item.batch_no:
-                        batch_id = item.item_code[5:] if item.item_code.startswith("ITEM_") else item.item_code
-                        if not frappe.db.exists("Batch", batch_id):
-                            batch = frappe.get_doc({
-                                "doctype": "Batch",
-                                "batch_id": batch_id,
-                                "item": item.item_code
-                            })
-                            batch.insert(ignore_permissions=True)
-                        item.batch_no = batch_id
+                        batch = frappe.get_doc({
+                            "doctype": "Batch",
+                            "item": item.item_code
+                        })
+                        batch.insert(ignore_permissions=True)
+                        item.batch_no = batch.name
                 
                 se.save()
                 se.submit()
