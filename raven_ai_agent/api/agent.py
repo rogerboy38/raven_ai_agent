@@ -1832,25 +1832,15 @@ def handle_raven_message(doc, method):
         
         user = doc.owner
         frappe.logger().info(f"[AI Agent] Processing query from {user}: {query}")
-        frappe.logger().info(f"[AI Agent] Current session user: {frappe.session.user}")
         
-        # Run queries as the message owner to respect their permissions
-        # But keep Administrator for bot operations
-        original_user = frappe.session.user
+        # Use ignore_permissions flag instead of switching user (avoids logout issue)
+        original_ignore = frappe.flags.ignore_permissions
         try:
-            # Verify user exists before switching
-            if frappe.db.exists("User", user):
-                frappe.set_user(user)
-                frappe.logger().info(f"[AI Agent] Switched to user: {user}")
-            else:
-                frappe.logger().warning(f"[AI Agent] User {user} not found, using Administrator")
-                frappe.set_user("Administrator")
-            
+            frappe.flags.ignore_permissions = True
             agent = RaymondLucyAgent(user)
             result = agent.process_query(query)
         finally:
-            # Switch back to Administrator for sending messages
-            frappe.set_user("Administrator")
+            frappe.flags.ignore_permissions = original_ignore
         
         frappe.logger().info(f"[AI Agent] Result: success={result.get('success')}")
         
