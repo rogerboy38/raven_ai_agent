@@ -1838,8 +1838,14 @@ def handle_raven_message(doc, method):
         user = doc.owner
         frappe.logger().info(f"[AI Agent] Processing query from {user}: {query}")
         
-        agent = RaymondLucyAgent(user)
-        result = agent.process_query(query)
+        # Run queries as the message owner to respect their permissions
+        original_user = frappe.session.user
+        try:
+            frappe.set_user(user)
+            agent = RaymondLucyAgent(user)
+            result = agent.process_query(query)
+        finally:
+            frappe.set_user(original_user)
         
         frappe.logger().info(f"[AI Agent] Result: success={result.get('success')}")
         
