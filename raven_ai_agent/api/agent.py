@@ -1490,18 +1490,19 @@ class RaymondLucyAgent:
                 msg += f"  Active: {'Yes' if result['is_active'] else 'No'} | Default: {'Yes' if result['is_default'] else 'No'}\n"
                 msg += f"  Quantity: {result['quantity']} | Total Cost: ${result['total_cost']:,.2f}\n\n"
                 
-                msg += f"**Items ({len(result['items'])}):**\n"
+                msg += f"**Items ({len(result['items'])}):**\n\n"
                 for item in result["items"]:
                     is_label = item["item_code"].startswith("LBL")
                     icon = "🏷️" if is_label else "📦"
-                    msg += f"  {item['idx']}. {icon} **{item['item_code']}**\n"
-                    msg += f"      {item['item_name']}\n"
-                    msg += f"      Qty: {item['qty']} {item['uom']} | Rate: ${item['rate']:,.2f} | Amount: ${item['amount']:,.2f}\n"
+                    msg += f"{item['idx']}. {icon} **{item['item_code']}**\n"
+                    msg += f"   {item['item_name']}\n"
+                    msg += f"   Qty: {item['qty']} {item['uom']} | Rate: ${item['rate']:,.2f} | Amount: ${item['amount']:,.2f}\n\n"
                 
                 if result["operations"]:
-                    msg += f"\n**Operations ({len(result['operations'])}):**\n"
+                    msg += f"---\n\n**Operations ({len(result['operations'])}):**\n\n"
                     for op in result["operations"]:
-                        msg += f"  {op['idx']}. ⚙️ {op['operation']} @ {op['workstation']} ({op['time_in_mins']} mins)\n"
+                        msg += f"{op['idx']}. ⚙️ **{op['operation']}**\n"
+                        msg += f"   Workstation: {op['workstation']} | Time: {op['time_in_mins']} mins\n\n"
                 
                 return {"success": True, "message": msg}
                 
