@@ -1501,6 +1501,40 @@ class RaymondLucyAgent:
         
         # ==================== END BOM LABEL FIXER ====================
         
+        # ==================== DIRECT WEB SEARCH ====================
+        
+        # Direct web search that shows raw results
+        if query_lower.startswith("search ") or query_lower.startswith("buscar "):
+            try:
+                # Extract search query
+                search_query = query[7:].strip() if query_lower.startswith("search ") else query[7:].strip()
+                # Remove brackets if present
+                search_query = search_query.strip("[]")
+                
+                if len(search_query) > 2:
+                    results = self.duckduckgo_search(search_query, max_results=8)
+                    
+                    if "No search results" in results or "Search error" in results:
+                        return {
+                            "success": False,
+                            "message": f"🔍 **Web Search**: {search_query}\n\n{results}"
+                        }
+                    
+                    return {
+                        "success": True,
+                        "message": f"🔍 **Web Search**: {search_query}\n\n{results}"
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "message": "🔍 **Web Search**\n\nUsage: `@ai search [your query]`\n\nExample: `@ai search aloe acemannan suppliers China`"
+                    }
+                    
+            except Exception as e:
+                return {"success": False, "error": f"Search Error: {str(e)}"}
+        
+        # ==================== END DIRECT WEB SEARCH ====================
+        
         # ==================== SALES-TO-PURCHASE CYCLE SOP ====================
         
         # Show Opportunities
