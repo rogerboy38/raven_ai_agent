@@ -158,6 +158,14 @@ CAPABILITIES_LIST = """
 - `@ai create delivery note for [SO]` - Ship items to customer
 - `@ai create sales invoice for [SO/DN]` - Invoice the customer
 
+### 📦 Sales Order Follow-up Bot
+Use `@sales_order_follow_up` for dedicated SO tracking:
+- `@sales_order_follow_up pending` - List all pending Sales Orders
+- `@sales_order_follow_up status [SO]` - Detailed SO status
+- `@sales_order_follow_up check inventory [SO]` - Check stock availability
+- `@sales_order_follow_up next steps [SO]` - Recommended actions
+- `@sales_order_follow_up track [SO]` - Full purchase cycle tracking
+
 ### 📋 BOM Management
 - `@ai show bom BOM-XXXX` - View all items, operations, costs
 - `@ai !cancel bom BOM-XXXX` - Cancel submitted BOM
