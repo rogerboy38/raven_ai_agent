@@ -158,6 +158,13 @@ CAPABILITIES_LIST = """
 - `@ai create delivery note for [SO]` - Ship items to customer
 - `@ai create sales invoice for [SO/DN]` - Invoice the customer
 
+### 🏷️ BOM Label Fixer
+- `@ai check bom for [item]` - Check if BOM has label item
+- `@ai fix bom for [item]` - Auto-fix missing labels
+- `@ai check bom for items 0302, 0417, 0433` - Bulk check
+- `@ai fix bom for items 0302, 0417, 0433` - Bulk fix
+- `@ai force fix bom BOM-XXX label LBLXXX` - Force SQL insert
+
 ### ℹ️ Help
 - `@ai help` or `@ai capabilities` - Show this list
 - `@ai what can you do` - Show capabilities
@@ -1392,6 +1399,107 @@ class RaymondLucyAgent:
         # ==================== END STOCK ENTRY MANAGEMENT ====================
         
         # ==================== END MANUFACTURING SOP ====================
+        
+        # ==================== BOM LABEL FIXER ====================
+        
+        # Check BOM labels for item
+        if "check bom" in query_lower or "fix bom" in query_lower or "bom label" in query_lower:
+            try:
+                from raven_ai_agent.api.bom_fixer import check_and_fix_item, fix_multiple_items, force_fix_submitted_bom
+                
+                # Extract item code(s)
+                item_match = re.search(r'(?:for|item|items?)\s+([^\s,]+(?:\s*,\s*[^\s,]+)*)', query, re.IGNORECASE)
+                bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
+                
+                # Force fix specific BOM
+                if "force" in query_lower and bom_match:
+                    bom_name = bom_match.group(1)
+                    label_match = re.search(r'label\s+(LBL[^\s]+)', query, re.IGNORECASE)
+                    if label_match:
+                        label_code = label_match.group(1)
+                    else:
+                        # Try to derive from BOM name
+                        base = bom_name.replace("BOM-", "").split("-")[0]
+                        label_code = f"LBL{base}"
+                    
+                    result = force_fix_submitted_bom(bom_name, label_code)
+                    if result["success"]:
+                        return {"success": True, "message": f"⚡ **FORCE FIX RESULT**\n\n{result['message']}"}
+                    else:
+                        return {"success": False, "error": result["message"]}
+                
+                # Check/fix single item
+                elif item_match:
+                    items_str = item_match.group(1)
+                    items = [i.strip() for i in items_str.split(",")]
+                    
+                    auto_fix = "fix" in query_lower or is_confirm
+                    
+                    if len(items) == 1:
+                        result = check_and_fix_item(items[0], auto_fix=auto_fix)
+                        
+                        msg = f"🏭 **BOM LABEL CHECK FOR {items[0]}**\n\n"
+                        msg += f"  Label Item: `{result['label_code']}` {'✅ Exists' if result['label_exists'] else '❌ Missing'}\n"
+                        msg += f"  BOMs Found: {len(result['boms_found'])}\n\n"
+                        
+                        if result['boms_fixed']:
+                            msg += "**Fixed:**\n"
+                            for fix in result['boms_fixed']:
+                                msg += f"  ✅ {fix['bom']}: {fix['action']}\n"
+                        
+                        if result['boms_skipped']:
+                            msg += "\n**Skipped/Pending:**\n"
+                            for skip in result['boms_skipped']:
+                                msg += f"  ⏭️ {skip['bom']}: {skip['reason']}\n"
+                        
+                        if result['errors']:
+                            msg += "\n**Errors:**\n"
+                            for err in result['errors']:
+                                msg += f"  ❌ {err}\n"
+                        
+                        if not auto_fix and any(s.get('action_needed') for s in result.get('boms_skipped', [])):
+                            msg += "\n💡 Use `@ai fix bom for " + items[0] + "` to auto-fix"
+                        
+                        return {"success": True, "message": msg}
+                    else:
+                        # Multiple items
+                        result = fix_multiple_items(items, auto_fix=auto_fix)
+                        
+                        msg = f"🏭 **BOM LABEL BULK CHECK** ({result['mode']})\n\n"
+                        msg += f"  Items: {result['total_items']}\n"
+                        msg += f"  BOMs Fixed: {result['boms_fixed']}\n"
+                        msg += f"  BOMs Skipped: {result['boms_skipped']}\n"
+                        msg += f"  Errors: {result['errors']}\n"
+                        
+                        if not auto_fix:
+                            msg += "\n💡 Use `@ai fix bom for items ...` to auto-fix"
+                        
+                        return {"success": True, "message": msg}
+                
+                else:
+                    return {
+                        "success": True,
+                        "message": """🏭 **BOM LABEL FIXER**
+
+**Commands:**
+• `@ai check bom for 0302` - Check single item
+• `@ai fix bom for 0302` - Auto-fix single item
+• `@ai check bom for items 0302, 0417, 0433` - Check multiple
+• `@ai fix bom for items 0302, 0417, 0433` - Fix multiple
+• `@ai force fix bom BOM-0302-001 label LBL0302` - Force SQL fix
+
+**How it works:**
+1. Checks if label item (LBLxxxx) exists
+2. Finds all BOMs for the item
+3. Draft BOMs: Adds label directly
+4. Submitted BOMs: Cancel → Amend → Add Label → Submit
+5. Cancelled BOMs: Suggests creating new version"""
+                    }
+                    
+            except Exception as e:
+                return {"success": False, "error": f"BOM Fixer Error: {str(e)}"}
+        
+        # ==================== END BOM LABEL FIXER ====================
         
         # ==================== SALES-TO-PURCHASE CYCLE SOP ====================
         
