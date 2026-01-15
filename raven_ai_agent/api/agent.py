@@ -2583,6 +2583,13 @@ def handle_raven_message(doc, method):
                 query = "help"  # Default if only mention
             bot_name = "sales_order_bot"
         
+        # Check for @sales_order_follow_up bot
+        elif "sales_order_follow_up" in plain_text.lower():
+            query = plain_text.lower().replace("@sales_order_follow_up", "").strip()
+            if not query:
+                query = "help"
+            bot_name = "sales_order_follow_up"
+        
         if not query:
             return
         
@@ -2593,8 +2600,16 @@ def handle_raven_message(doc, method):
         original_ignore = frappe.flags.ignore_permissions
         try:
             frappe.flags.ignore_permissions = True
-            agent = RaymondLucyAgent(user)
-            result = agent.process_query(query)
+            
+            # Route to specialized agent based on bot_name
+            if bot_name == "sales_order_follow_up":
+                from raven_ai_agent.agents import SalesOrderFollowupAgent
+                so_agent = SalesOrderFollowupAgent(user)
+                response = so_agent.process_command(query)
+                result = {"success": True, "response": response}
+            else:
+                agent = RaymondLucyAgent(user)
+                result = agent.process_query(query)
         finally:
             frappe.flags.ignore_permissions = original_ignore
         
