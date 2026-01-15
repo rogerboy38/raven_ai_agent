@@ -158,12 +158,18 @@ CAPABILITIES_LIST = """
 - `@ai create delivery note for [SO]` - Ship items to customer
 - `@ai create sales invoice for [SO/DN]` - Invoice the customer
 
-### 🏷️ BOM Label Fixer
-- `@ai check bom for [item]` - Check if BOM has label item
+### 📋 BOM Management
+- `@ai show bom BOM-XXXX` - View all items, operations, costs
+- `@ai !cancel bom BOM-XXXX` - Cancel submitted BOM
+- `@ai !revert bom BOM-XXXX to draft` - Reset cancelled BOM to draft
+- `@ai check bom for [item]` - Check BOM label status
 - `@ai fix bom for [item]` - Auto-fix missing labels
-- `@ai check bom for items 0302, 0417, 0433` - Bulk check
-- `@ai fix bom for items 0302, 0417, 0433` - Bulk fix
 - `@ai force fix bom BOM-XXX label LBLXXX` - Force SQL insert
+
+### 📄 Document Actions
+- `@ai !submit Sales Order SO-XXXX` - Submit sales order
+- `@ai !submit Work Order MFG-WO-XXXX` - Submit work order
+- `@ai unlink sales order from MFG-WO-XXXX` - Remove SO link from WO
 
 ### ℹ️ Help
 - `@ai help` or `@ai capabilities` - Show this list
