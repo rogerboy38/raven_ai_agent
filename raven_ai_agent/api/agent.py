@@ -166,6 +166,11 @@ CAPABILITIES_LIST = """
 - `@ai fix bom for [item]` - Auto-fix missing labels
 - `@ai force fix bom BOM-XXX label LBLXXX` - Force SQL insert
 
+### 🏗️ BOM Creator
+- `@ai !submit bom BOM-XXXX` - Submit BOM Creator to generate BOMs
+- `@ai validate bom BOM-XXXX` - Validate BOM Creator before submission
+- `@ai create bom from tds [TDS-NAME]` - Create BOM Creator from TDS
+
 ### 📄 Document Actions
 - `@ai !submit Sales Order SO-XXXX` - Submit sales order
 - `@ai !submit Work Order MFG-WO-XXXX` - Submit work order
