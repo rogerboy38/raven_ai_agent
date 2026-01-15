@@ -1461,6 +1461,47 @@ class RaymondLucyAgent:
         
         # ==================== END MANUFACTURING SOP ====================
         
+        # ==================== BOM COMMANDS ====================
+        
+        # Show BOM details (all items)
+        bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
+        if bom_match and ("show" in query_lower or "details" in query_lower or "items" in query_lower or "view" in query_lower):
+            try:
+                from raven_ai_agent.api.bom_fixer import get_bom_details
+                
+                bom_name = bom_match.group(1)
+                result = get_bom_details(bom_name)
+                
+                if not result["success"]:
+                    return {"success": False, "error": result["message"]}
+                
+                # Format output
+                status_icon = {"Draft": "📝", "Submitted": "✅", "Cancelled": "❌"}.get(result["status_text"], "❓")
+                
+                msg = f"📋 **BOM: {bom_name}**\n\n"
+                msg += f"  Product: **{result['item']}**\n"
+                msg += f"  Status: {status_icon} {result['status_text']} (docstatus={result['docstatus']})\n"
+                msg += f"  Active: {'Yes' if result['is_active'] else 'No'} | Default: {'Yes' if result['is_default'] else 'No'}\n"
+                msg += f"  Quantity: {result['quantity']} | Total Cost: ${result['total_cost']:,.2f}\n\n"
+                
+                msg += f"**Items ({len(result['items'])}):**\n"
+                for item in result["items"]:
+                    is_label = item["item_code"].startswith("LBL")
+                    icon = "🏷️" if is_label else "📦"
+                    msg += f"  {item['idx']}. {icon} **{item['item_code']}**\n"
+                    msg += f"      {item['item_name']}\n"
+                    msg += f"      Qty: {item['qty']} {item['uom']} | Rate: ${item['rate']:,.2f} | Amount: ${item['amount']:,.2f}\n"
+                
+                if result["operations"]:
+                    msg += f"\n**Operations ({len(result['operations'])}):**\n"
+                    for op in result["operations"]:
+                        msg += f"  {op['idx']}. ⚙️ {op['operation']} @ {op['workstation']} ({op['time_in_mins']} mins)\n"
+                
+                return {"success": True, "message": msg}
+                
+            except Exception as e:
+                return {"success": False, "error": f"BOM Details Error: {str(e)}"}
+        
         # ==================== BOM LABEL FIXER ====================
         
         # Check BOM labels for item
@@ -1561,6 +1602,75 @@ class RaymondLucyAgent:
                 return {"success": False, "error": f"BOM Fixer Error: {str(e)}"}
         
         # ==================== END BOM LABEL FIXER ====================
+        
+        # ==================== BOM CANCEL / REVERT TO DRAFT ====================
+        
+        # Cancel BOM or Revert cancelled BOM to Draft
+        bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
+        if bom_match and ("cancel" in query_lower or "revert" in query_lower or "to draft" in query_lower or "undraft" in query_lower):
+            try:
+                bom_name = bom_match.group(1)
+                bom = frappe.get_doc("BOM", bom_name)
+                
+                # Case 1: Cancel submitted BOM
+                if "cancel" in query_lower and bom.docstatus == 1:
+                    if not is_confirm:
+                        return {
+                            "requires_confirmation": True,
+                            "preview": f"⚠️ **CANCEL BOM {bom_name}?**\n\n  Item: {bom.item}\n  Status: Submitted\n\nThis will cancel the BOM. Say 'confirm' or use `!` prefix."
+                        }
+                    
+                    bom.cancel()
+                    frappe.db.commit()
+                    return {
+                        "success": True,
+                        "message": f"✅ BOM **{bom_name}** has been cancelled.\n\n💡 Use `@ai !revert bom {bom_name} to draft` to make it editable again."
+                    }
+                
+                # Case 2: Revert cancelled BOM to Draft
+                if ("revert" in query_lower or "to draft" in query_lower or "undraft" in query_lower) and bom.docstatus == 2:
+                    if not is_confirm:
+                        return {
+                            "requires_confirmation": True,
+                            "preview": f"🔄 **REVERT BOM {bom_name} TO DRAFT?**\n\n  Item: {bom.item}\n  Current Status: Cancelled (docstatus=2)\n\nThis will reset the BOM to Draft status so you can edit it. Say 'confirm' or use `!` prefix."
+                        }
+                    
+                    # Reset BOM to draft via SQL
+                    frappe.db.sql("""
+                        UPDATE `tabBOM` 
+                        SET docstatus = 0, is_active = 0, is_default = 0
+                        WHERE name = %s
+                    """, bom_name)
+                    
+                    # Reset child tables
+                    frappe.db.sql("UPDATE `tabBOM Item` SET docstatus = 0 WHERE parent = %s", bom_name)
+                    frappe.db.sql("UPDATE `tabBOM Operation` SET docstatus = 0 WHERE parent = %s", bom_name)
+                    frappe.db.sql("UPDATE `tabBOM Explosion Item` SET docstatus = 0 WHERE parent = %s", bom_name)
+                    frappe.db.sql("UPDATE `tabBOM Scrap Item` SET docstatus = 0 WHERE parent = %s", bom_name)
+                    
+                    frappe.db.commit()
+                    
+                    return {
+                        "success": True,
+                        "message": f"✅ BOM **{bom_name}** reverted to Draft!\n\n  Item: {bom.item}\n  Status: Draft (docstatus=0)\n  is_active: No\n  is_default: No\n\n📝 You can now edit the BOM in ERPNext."
+                    }
+                
+                # Case 3: Already in the target state
+                if bom.docstatus == 0:
+                    return {"success": True, "message": f"BOM **{bom_name}** is already in Draft status."}
+                
+                if "cancel" in query_lower and bom.docstatus == 2:
+                    return {"success": True, "message": f"BOM **{bom_name}** is already Cancelled.\n\n💡 Use `@ai !revert bom {bom_name} to draft` to make it editable."}
+                
+                if ("revert" in query_lower or "to draft" in query_lower) and bom.docstatus == 1:
+                    return {"success": False, "error": f"BOM **{bom_name}** is Submitted. Cancel it first with `@ai !cancel bom {bom_name}`"}
+                
+            except frappe.DoesNotExistError:
+                return {"success": False, "error": f"BOM **{bom_name}** not found."}
+            except Exception as e:
+                return {"success": False, "error": f"BOM operation failed: {str(e)}"}
+        
+        # ==================== END BOM CANCEL / REVERT ====================
         
         # ==================== DIRECT WEB SEARCH ====================
         

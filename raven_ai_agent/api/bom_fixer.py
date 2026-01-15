@@ -361,6 +361,78 @@ def get_items_missing_labels(item_codes: List[str] = None) -> List[Dict]:
     return missing
 
 
+def get_bom_details(bom_name: str) -> Dict:
+    """
+    Get complete BOM details including all items.
+    
+    Args:
+        bom_name: The BOM document name
+    
+    Returns:
+        Dict with BOM info and all items
+    """
+    result = {
+        "success": False,
+        "bom_name": bom_name,
+        "item": None,
+        "docstatus": None,
+        "status_text": None,
+        "is_active": False,
+        "is_default": False,
+        "total_cost": 0,
+        "items": [],
+        "operations": [],
+        "message": ""
+    }
+    
+    try:
+        if not frappe.db.exists("BOM", bom_name):
+            result["message"] = f"BOM '{bom_name}' not found"
+            return result
+        
+        bom = frappe.get_doc("BOM", bom_name)
+        
+        status_map = {0: "Draft", 1: "Submitted", 2: "Cancelled"}
+        
+        result["success"] = True
+        result["item"] = bom.item
+        result["item_name"] = bom.item_name if hasattr(bom, 'item_name') else bom.item
+        result["docstatus"] = bom.docstatus
+        result["status_text"] = status_map.get(bom.docstatus, "Unknown")
+        result["is_active"] = bom.is_active
+        result["is_default"] = bom.is_default
+        result["total_cost"] = bom.total_cost if hasattr(bom, 'total_cost') else 0
+        result["quantity"] = bom.quantity if hasattr(bom, 'quantity') else 1
+        
+        # Get all items
+        for item in bom.items:
+            result["items"].append({
+                "idx": item.idx,
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty": item.qty,
+                "rate": item.rate or 0,
+                "amount": item.amount or 0,
+                "uom": item.uom,
+                "source_warehouse": item.source_warehouse or ""
+            })
+        
+        # Get operations if any
+        if hasattr(bom, 'operations') and bom.operations:
+            for op in bom.operations:
+                result["operations"].append({
+                    "idx": op.idx,
+                    "operation": op.operation,
+                    "workstation": op.workstation,
+                    "time_in_mins": op.time_in_mins
+                })
+        
+    except Exception as e:
+        result["message"] = str(e)
+    
+    return result
+
+
 # Whitelist for Frappe API access
 @frappe.whitelist()
 def api_check_and_fix_item(item_code: str, auto_fix: bool = False) -> Dict:
