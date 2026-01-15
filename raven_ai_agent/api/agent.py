@@ -878,10 +878,12 @@ class RaymondLucyAgent:
                     limit=20
                 )
                 if work_orders:
+                    site_name = frappe.local.site
                     wo_list = []
                     for wo in work_orders:
                         progress = f"{wo.produced_qty or 0}/{wo.qty}"
-                        wo_list.append(f"• **{wo.name}**\n   {wo.production_item} · {progress} · {wo.status}")
+                        wo_link = f"https://{site_name}/app/work-order/{wo.name}"
+                        wo_list.append(f"• **[{wo.name}]({wo_link})**\n   {wo.production_item} · {progress} · {wo.status}")
                     return {
                         "success": True,
                         "message": f"📋 **ACTIVE WORK ORDERS**\n\n" + "\n\n".join(wo_list)
@@ -924,9 +926,11 @@ class RaymondLucyAgent:
                         "fg_warehouse": frappe.db.get_single_value("Manufacturing Settings", "default_fg_warehouse")
                     })
                     wo.insert()
+                    site_name = frappe.local.site
+                    wo_link = f"https://{site_name}/app/work-order/{wo.name}"
                     return {
                         "success": True,
-                        "message": f"✅ Work Order created: **{wo.name}**\n\n  Item: {item_code}\n  Qty: {qty}\n  Status: {wo.status}"
+                        "message": f"✅ Work Order created: **[{wo.name}]({wo_link})**\n\n  Item: {item_code}\n  Qty: {qty}\n  Status: {wo.status}"
                     }
                 except Exception as e:
                     return {"success": False, "error": str(e)}
@@ -1053,10 +1057,12 @@ class RaymondLucyAgent:
                     order_by="sequence_id"
                 )
                 if job_cards:
+                    site_name = frappe.local.site
                     jc_list = []
                     for jc in job_cards:
                         progress = f"{jc.total_completed_qty or 0}/{jc.for_quantity}"
-                        jc_list.append(f"• **{jc.name}**\n   {jc.operation} · {jc.workstation or 'N/A'} · {progress} · {jc.status}")
+                        jc_link = f"https://{site_name}/app/job-card/{jc.name}"
+                        jc_list.append(f"• **[{jc.name}]({jc_link})**\n   {jc.operation} · {jc.workstation or 'N/A'} · {progress} · {jc.status}")
                     return {
                         "success": True,
                         "message": f"🎫 **JOB CARDS FOR {wo_name}**\n\n" + "\n\n".join(jc_list)
@@ -1481,11 +1487,15 @@ class RaymondLucyAgent:
                 if not result["success"]:
                     return {"success": False, "error": result["message"]}
                 
-                # Format output
+                # Format output with clickable links
+                site_name = frappe.local.site
                 status_icon = {"Draft": "📝", "Submitted": "✅", "Cancelled": "❌"}.get(result["status_text"], "❓")
                 
-                msg = f"📋 **BOM: {bom_name}**\n\n"
-                msg += f"  Product: **{result['item']}**\n"
+                bom_link = f"https://{site_name}/app/bom/{bom_name}"
+                item_link = f"https://{site_name}/app/item/{result['item']}"
+                
+                msg = f"📋 **BOM: [{bom_name}]({bom_link})**\n\n"
+                msg += f"  Product: **[{result['item']}]({item_link})**\n"
                 msg += f"  Status: {status_icon} {result['status_text']} (docstatus={result['docstatus']})\n"
                 msg += f"  Active: {'Yes' if result['is_active'] else 'No'} | Default: {'Yes' if result['is_default'] else 'No'}\n"
                 msg += f"  Quantity: {result['quantity']} | Total Cost: ${result['total_cost']:,.2f}\n\n"
@@ -1494,15 +1504,18 @@ class RaymondLucyAgent:
                 for item in result["items"]:
                     is_label = item["item_code"].startswith("LBL")
                     icon = "🏷️" if is_label else "📦"
-                    msg += f"{item['idx']}. {icon} **{item['item_code']}**\n"
+                    item_url = f"https://{site_name}/app/item/{item['item_code']}"
+                    msg += f"{item['idx']}. {icon} **[{item['item_code']}]({item_url})**\n"
                     msg += f"   {item['item_name']}\n"
                     msg += f"   Qty: {item['qty']} {item['uom']} | Rate: ${item['rate']:,.2f} | Amount: ${item['amount']:,.2f}\n\n"
                 
                 if result["operations"]:
                     msg += f"---\n\n**Operations ({len(result['operations'])}):**\n\n"
                     for op in result["operations"]:
-                        msg += f"{op['idx']}. ⚙️ **{op['operation']}**\n"
-                        msg += f"   Workstation: {op['workstation']} | Time: {op['time_in_mins']} mins\n\n"
+                        op_link = f"https://{site_name}/app/operation/{op['operation']}"
+                        ws_link = f"https://{site_name}/app/workstation/{op['workstation']}"
+                        msg += f"{op['idx']}. ⚙️ **[{op['operation']}]({op_link})**\n"
+                        msg += f"   Workstation: [{op['workstation']}]({ws_link}) | Time: {op['time_in_mins']} mins\n\n"
                 
                 return {"success": True, "message": msg}
                 
@@ -1745,10 +1758,12 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if opportunities:
+                    site_name = frappe.local.site
                     opp_list = []
                     for opp in opportunities:
                         amt = f"${opp.opportunity_amount:,.2f}" if opp.opportunity_amount else "—"
-                        opp_list.append(f"• **{opp.name}**\n   {opp.party_name} · {amt} · {opp.status}")
+                        opp_link = f"https://{site_name}/app/opportunity/{opp.name}"
+                        opp_list.append(f"• **[{opp.name}]({opp_link})**\n   {opp.party_name} · {amt} · {opp.status}")
                     return {
                         "success": True,
                         "message": f"🎯 **SALES OPPORTUNITIES**\n\n" + "\n\n".join(opp_list)
@@ -1870,10 +1885,12 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if mrs:
+                    site_name = frappe.local.site
                     mr_list = []
                     for mr in mrs:
                         ordered = f"{mr.per_ordered or 0:.0f}%"
-                        mr_list.append(f"• **{mr.name}**\n   {mr.material_request_type} · {mr.status} · Ordered: {ordered}")
+                        mr_link = f"https://{site_name}/app/material-request/{mr.name}"
+                        mr_list.append(f"• **[{mr.name}]({mr_link})**\n   {mr.material_request_type} · {mr.status} · Ordered: {ordered}")
                     return {
                         "success": True,
                         "message": f"📋 **MATERIAL REQUESTS**\n\n" + "\n\n".join(mr_list)
@@ -1927,7 +1944,8 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if rfqs:
-                    rfq_list = [f"• **{r.name}**\n   {r.status} · {r.transaction_date}" for r in rfqs]
+                    site_name = frappe.local.site
+                    rfq_list = [f"• **[{r.name}](https://{site_name}/app/request-for-quotation/{r.name})**\n   {r.status} · {r.transaction_date}" for r in rfqs]
                     return {
                         "success": True,
                         "message": f"📨 **REQUEST FOR QUOTATIONS**\n\n" + "\n\n".join(rfq_list)
@@ -1946,10 +1964,12 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if sqs:
+                    site_name = frappe.local.site
                     sq_list = []
                     for sq in sqs:
                         amt = f"${sq.grand_total:,.2f}" if sq.grand_total else "—"
-                        sq_list.append(f"• **{sq.name}**\n   {sq.supplier} · {amt} · {sq.status}")
+                        sq_link = f"https://{site_name}/app/supplier-quotation/{sq.name}"
+                        sq_list.append(f"• **[{sq.name}]({sq_link})**\n   {sq.supplier} · {amt} · {sq.status}")
                     return {
                         "success": True,
                         "message": f"📄 **SUPPLIER QUOTATIONS**\n\n" + "\n\n".join(sq_list)
@@ -2004,11 +2024,13 @@ class RaymondLucyAgent:
                     limit=15
                 )
                 if pos:
+                    site_name = frappe.local.site
                     po_list = []
                     for po in pos:
                         amt = f"${po.grand_total:,.2f}" if po.grand_total else "—"
                         received = f"{po.per_received or 0:.0f}%"
-                        po_list.append(f"• **{po.name}**\n   {po.supplier} · {amt} · {po.status} · Rcvd: {received}")
+                        po_link = f"https://{site_name}/app/purchase-order/{po.name}"
+                        po_list.append(f"• **[{po.name}]({po_link})**\n   {po.supplier} · {amt} · {po.status} · Rcvd: {received}")
                     return {
                         "success": True,
                         "message": f"🛒 **PURCHASE ORDERS**\n\n" + "\n\n".join(po_list)
