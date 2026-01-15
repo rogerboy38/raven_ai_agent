@@ -261,11 +261,20 @@ class BOMCreatorAgent:
                 fields=["name", "is_active", "is_default"]
             )
             
+            # Add links to created BOMs
+            bom_links = []
+            for bom in created_boms:
+                bom["link"] = self.make_link("BOM", bom["name"])
+                bom_links.append(f"[{bom['name']}]({bom['link']})")
+            
+            bom_list_str = ", ".join(bom_links) if bom_links else "None"
+            
             return {
                 "success": True,
                 "bom_creator": bom_creator_name,
+                "bom_creator_link": self.make_link("BOM Creator", bom_creator_name),
                 "created_boms": created_boms,
-                "message": f"✅ BOM Creator submitted. Created {len(created_boms)} BOMs."
+                "message": f"✅ BOM Creator submitted. Created {len(created_boms)} BOMs:\n\n{bom_list_str}"
             }
         except Exception as e:
             frappe.db.rollback()
