@@ -804,8 +804,8 @@ class RaymondLucyAgent:
             frappe.logger().info(f"[Workflow] Creating SO from {qtn_match.group(1)}, confirm={is_confirm}")
             return executor.create_sales_order_from_quotation(qtn_match.group(1).upper(), confirm=is_confirm)
         
-        # Sales Order patterns
-        so_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
+        # Sales Order patterns - supports SAL-ORD-YYYY-NNNNN and SO-XXXXX-NAME formats
+        so_match = re.search(r'(SAL-ORD-\d+-\d+|SO-[\w\-]+)', query, re.IGNORECASE)
         
         # Submit Sales Order
         if so_match and "submit" in query_lower and "sales order" in query_lower:
@@ -963,7 +963,7 @@ class RaymondLucyAgent:
                 return {"success": False, "error": str(e)}
         
         # Start Production / Submit Work Order
-        if wo_match and ("start production" in query_lower or "submit work order" in query_lower or "submit wo" in query_lower or "iniciar produccion" in query_lower or "release" in query_lower):
+        if wo_match and ("start production" in query_lower or "submit work order" in query_lower or "submit wo" in query_lower or "iniciar produccion" in query_lower or "release" in query_lower or "submit" in query_lower):
             try:
                 wo_name = wo_match.group(1)
                 wo = frappe.get_doc("Work Order", wo_name)
@@ -971,11 +971,26 @@ class RaymondLucyAgent:
                 if wo.status == "In Process":
                     return {"success": True, "message": f"✅ Work Order **{wo_name}** is already in process."}
                 
+                if wo.docstatus == 1:
+                    return {"success": True, "message": f"✅ Work Order **{wo_name}** is already submitted.\n\n  Status: {wo.status}"}
+                
+                if wo.docstatus == 2:
+                    return {"success": False, "error": f"Work Order {wo_name} is cancelled and cannot be submitted."}
+                
+                # Check if linked Sales Order is cancelled
+                if wo.sales_order:
+                    so_status = frappe.db.get_value("Sales Order", wo.sales_order, "docstatus")
+                    if so_status == 2:
+                        return {
+                            "success": False,
+                            "error": f"Cannot submit Work Order **{wo_name}** - linked Sales Order **{wo.sales_order}** is cancelled.\n\n💡 **Options:**\n1. Unlink the SO: `@ai unlink sales order from {wo_name}`\n2. Create a new WO without SO link"
+                        }
+                
                 if wo.docstatus == 0:
                     if not is_confirm:
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🚀 START PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Qty: {wo.qty}\n\nThis will submit the Work Order. Say 'confirm' to proceed."
+                            "preview": f"🚀 START PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Qty: {wo.qty}\n  Sales Order: {wo.sales_order or 'None'}\n\nThis will submit the Work Order. Say 'confirm' or use `!` prefix to proceed."
                         }
                     wo.submit()
                     return {
@@ -984,6 +999,41 @@ class RaymondLucyAgent:
                     }
                 
                 return {"success": True, "message": f"Work Order **{wo_name}** status: {wo.status}"}
+            except Exception as e:
+                error_msg = str(e)
+                if "cancelled" in error_msg.lower():
+                    return {"success": False, "error": f"Cannot submit - linked document is cancelled.\n\n**Error:** {error_msg}\n\n💡 Unlink the cancelled document first."}
+                return {"success": False, "error": str(e)}
+        
+        # Unlink Sales Order from Work Order
+        if wo_match and ("unlink" in query_lower and "sales order" in query_lower):
+            try:
+                wo_name = wo_match.group(1)
+                wo = frappe.get_doc("Work Order", wo_name)
+                
+                if not wo.sales_order:
+                    return {"success": True, "message": f"Work Order **{wo_name}** has no linked Sales Order."}
+                
+                old_so = wo.sales_order
+                
+                if wo.docstatus != 0:
+                    return {"success": False, "error": f"Cannot modify submitted Work Order {wo_name}. Cancel it first or create a new one."}
+                
+                if not is_confirm:
+                    return {
+                        "requires_confirmation": True,
+                        "preview": f"🔗 UNLINK SALES ORDER FROM {wo_name}?\n\n  Current SO: {old_so}\n\nThis will remove the SO link. Say 'confirm' or use `!` prefix."
+                    }
+                
+                wo.sales_order = None
+                wo.sales_order_item = None
+                wo.save()
+                frappe.db.commit()
+                
+                return {
+                    "success": True,
+                    "message": f"✅ Unlinked Sales Order **{old_so}** from Work Order **{wo_name}**\n\nYou can now submit the Work Order."
+                }
             except Exception as e:
                 return {"success": False, "error": str(e)}
         

@@ -476,6 +476,38 @@ class WorkflowExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    # ========== SUBMIT SALES ORDER ==========
+    
+    def submit_sales_order(self, so_name: str, confirm: bool = False) -> Dict:
+        """Submit a Sales Order"""
+        try:
+            so = frappe.get_doc("Sales Order", so_name)
+            
+            if so.docstatus == 1:
+                return {"success": True, "message": f"✅ Sales Order **{so_name}** is already submitted"}
+            
+            if so.docstatus == 2:
+                return {"success": False, "error": f"Sales Order {so_name} is cancelled and cannot be submitted"}
+            
+            if not confirm:
+                return {
+                    "success": True,
+                    "requires_confirmation": True,
+                    "preview": f"**Submit Sales Order {so_name}?**\n\n  Customer: {so.customer}\n  Total: {so.grand_total:,.2f}\n  Items: {len(so.items)}\n\n⚠️ Say 'confirm' or use `!` prefix to proceed"
+                }
+            
+            so.submit()
+            frappe.db.commit()
+            
+            return {
+                "success": True,
+                "message": f"✅ Sales Order **{so_name}** submitted successfully!",
+                "sales_order": so_name,
+                "link": self.make_link("Sales Order", so_name)
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     # ========== WORK ORDER FROM SALES ORDER ==========
     
     def create_work_orders_from_sales_order(self, so_name: str, confirm: bool = False) -> Dict:
