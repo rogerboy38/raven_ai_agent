@@ -397,18 +397,29 @@ class RaymondLucyAgent:
             results = []
             
             # Parse DuckDuckGo HTML results
-            for result in soup.find_all('div', class_='result')[:max_results]:
+            for idx, result in enumerate(soup.find_all('div', class_='result')[:max_results], 1):
                 title_tag = result.find('a', class_='result__a')
                 snippet_tag = result.find('a', class_='result__snippet')
                 
                 if title_tag:
                     title = title_tag.get_text(strip=True)
-                    link = title_tag.get('href', '')
+                    raw_link = title_tag.get('href', '')
+                    # Extract actual URL from DuckDuckGo redirect
+                    if 'uddg=' in raw_link:
+                        try:
+                            from urllib.parse import unquote, parse_qs, urlparse
+                            parsed = urlparse(raw_link)
+                            params = parse_qs(parsed.query)
+                            link = unquote(params.get('uddg', [raw_link])[0])
+                        except:
+                            link = raw_link
+                    else:
+                        link = raw_link
                     snippet = snippet_tag.get_text(strip=True) if snippet_tag else ''
-                    results.append(f"**{title}**\n{link}\n{snippet}")
+                    results.append(f"**{idx}. {title}**\n🔗 {link}\n📝 {snippet}")
             
             if results:
-                return "Web Search Results:\n\n" + "\n\n".join(results)
+                return "\n\n".join(results)
             else:
                 return f"No search results found for: {query}"
                 
@@ -1511,6 +1522,11 @@ class RaymondLucyAgent:
                 # Remove brackets if present
                 search_query = search_query.strip("[]")
                 
+                # Check if user wants to save results
+                save_to_memory = "[save]" in query_lower or "[guardar]" in query_lower
+                if save_to_memory:
+                    search_query = search_query.replace("[save]", "").replace("[guardar]", "").strip()
+                
                 if len(search_query) > 2:
                     results = self.duckduckgo_search(search_query, max_results=8)
                     
@@ -1520,14 +1536,29 @@ class RaymondLucyAgent:
                             "message": f"🔍 **Web Search**: {search_query}\n\n{results}"
                         }
                     
+                    # Save to memory if requested
+                    save_msg = ""
+                    if save_to_memory:
+                        try:
+                            import datetime
+                            self.store_memory(
+                                content=f"Search: {search_query}\n\n{results[:1500]}",
+                                category="research",
+                                importance="medium"
+                            )
+                            save_msg = "\n\n✅ *Saved to memory*"
+                        except Exception as me:
+                            save_msg = f"\n\n⚠️ Could not save: {str(me)}"
+                    
+                    footer = "\n\n---\n💡 Add `[save]` to save results to memory"
                     return {
                         "success": True,
-                        "message": f"🔍 **Web Search**: {search_query}\n\n{results}"
+                        "message": f"🔍 **Web Search**: {search_query}\n\n{results}{save_msg}{footer}"
                     }
                 else:
                     return {
                         "success": True,
-                        "message": "🔍 **Web Search**\n\nUsage: `@ai search [your query]`\n\nExample: `@ai search aloe acemannan suppliers China`"
+                        "message": "🔍 **Web Search**\n\nUsage: `@ai search [your query]`\n\nExample: `@ai search aloe acemannan suppliers China`\n\nAdd `[save]` to save results to memory"
                     }
                     
             except Exception as e:
