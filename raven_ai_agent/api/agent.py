@@ -136,7 +136,7 @@ CAPABILITIES_LIST = """
 - `@ai show BOM cost report` - Compare estimated vs actual costs
 
 **Stock Entry Management:**
-- `@ai material receipt [ITEM] qty [n]` - Create Material Receipt entry
+- `@ai material receipt [ITEM] qty [n] price $[x]` - Create Material Receipt entry with price
 - `@ai convert [STE] to material receipt` - Convert draft to Material Receipt
 - `@ai verify stock entries` - Check submitted vs draft entries
 - `@ai check stock ledger` - Show recent stock ledger entries
@@ -1192,46 +1192,76 @@ class RaymondLucyAgent:
                 item_code = item_match.group(1).upper().replace("-", "_")
                 warehouse_match = re.search(r'warehouse[:\s]+([^\n,]+)', query, re.IGNORECASE)
                 qty_match = re.search(r'qty[:\s]*(\d+\.?\d*)|quantity[:\s]*(\d+\.?\d*)|(\d+\.?\d*)\s*(?:units?|pcs?|qty)', query, re.IGNORECASE)
+                price_match = re.search(r'price[:\s]*\$?(\d+\.?\d*)|rate[:\s]*\$?(\d+\.?\d*)|\$(\d+\.?\d*)', query, re.IGNORECASE)
                 
                 target_warehouse = warehouse_match.group(1).strip() if warehouse_match else "FG to Sell Warehouse - AMB-W"
                 qty = float(qty_match.group(1) or qty_match.group(2) or qty_match.group(3)) if qty_match else 1
+                price = float(price_match.group(1) or price_match.group(2) or price_match.group(3)) if price_match else None
                 
                 # Check if item exists
                 if not frappe.db.exists("Item", item_code):
                     return {"success": False, "error": f"Item {item_code} not found"}
                 
+                # Get item valuation rate if no price specified
+                if not price:
+                    price = frappe.db.get_value("Item", item_code, "valuation_rate") or 0
+                
                 if not is_confirm:
+                    price_info = f"  Price: ${price:.2f}" if price else "  Price: (auto)"
                     return {
                         "requires_confirmation": True,
-                        "preview": f"📥 MATERIAL RECEIPT?\n\n  Item: {item_code}\n  Qty: {qty}\n  Warehouse: {target_warehouse}\n\nSay 'confirm' or use '!' prefix to proceed. (Tip: Use `@ai !command` to skip confirmation)"
+                        "preview": f"📥 MATERIAL RECEIPT?\n\n  Item: {item_code}\n  Qty: {qty}\n{price_info}\n  Warehouse: {target_warehouse}\n\nSay 'confirm' or use '!' prefix to proceed. (Tip: Use `@ai !command` to skip confirmation)"
                     }
                 
-                # Create batch - let Frappe auto-name it (LOTE###)
-                batch = frappe.get_doc({
-                    "doctype": "Batch",
-                    "item": item_code
-                })
-                batch.insert(ignore_permissions=True)
-                batch_id = batch.name
+                # Look for existing batch first, create if not found
+                existing_batches = frappe.get_all("Batch",
+                    filters={"item": item_code},
+                    fields=["name"],
+                    order_by="creation desc",
+                    limit=1
+                )
                 
-                # Create Material Receipt
+                if existing_batches:
+                    batch_id = existing_batches[0]["name"]
+                else:
+                    # Create new batch - let Frappe auto-name it (LOTE###)
+                    batch = frappe.get_doc({
+                        "doctype": "Batch",
+                        "item": item_code
+                    })
+                    batch.insert(ignore_permissions=True)
+                    batch_id = batch.name
+                
+                # Create Material Receipt with price
                 se = frappe.get_doc({
                     "doctype": "Stock Entry",
                     "stock_entry_type": "Material Receipt",
-                    "purpose": "Material Receipt",
-                    "items": [{
-                        "item_code": item_code,
-                        "qty": qty,
-                        "t_warehouse": target_warehouse,
-                        "batch_no": batch_id
-                    }]
+                    "purpose": "Material Receipt"
                 })
+                
+                # Set movement type if field exists
+                if hasattr(se, 'custom_movement_type'):
+                    se.custom_movement_type = "561"
+                
+                item_entry = {
+                    "item_code": item_code,
+                    "qty": qty,
+                    "t_warehouse": target_warehouse,
+                    "batch_no": batch_id
+                }
+                
+                if price:
+                    item_entry["basic_rate"] = price
+                    item_entry["valuation_rate"] = price
+                
+                se.append("items", item_entry)
                 se.insert(ignore_permissions=True)
                 se.submit()
                 
+                total_value = qty * price if price else 0
                 return {
                     "success": True,
-                    "message": f"✅ Material Receipt created: **{se.name}**\n\n  Item: {item_code}\n  Qty: {qty}\n  Batch: {batch_id}\n  Warehouse: {target_warehouse}"
+                    "message": f"✅ Material Receipt created: **{se.name}**\n\n  Item: {item_code}\n  Qty: {qty}\n  Price: ${price:.2f}\n  Total: ${total_value:.2f}\n  Batch: {batch_id}\n  Warehouse: {target_warehouse}"
                 }
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -1255,18 +1285,31 @@ class RaymondLucyAgent:
                 se.stock_entry_type = "Material Receipt"
                 se.purpose = "Material Receipt"
                 
+                # Set movement type if field exists
+                if hasattr(se, 'custom_movement_type'):
+                    se.custom_movement_type = "561"
+                
                 for item in se.items:
                     item.s_warehouse = None  # Clear source warehouse
                     if not item.t_warehouse:
                         item.t_warehouse = "FG to Sell Warehouse - AMB-W"
-                    # Create batch if needed - let Frappe auto-name (LOTE###)
+                    # Find existing batch or create new one
                     if item.item_code and not item.batch_no:
-                        batch = frappe.get_doc({
-                            "doctype": "Batch",
-                            "item": item.item_code
-                        })
-                        batch.insert(ignore_permissions=True)
-                        item.batch_no = batch.name
+                        existing_batches = frappe.get_all("Batch",
+                            filters={"item": item.item_code},
+                            fields=["name"],
+                            order_by="creation desc",
+                            limit=1
+                        )
+                        if existing_batches:
+                            item.batch_no = existing_batches[0]["name"]
+                        else:
+                            batch = frappe.get_doc({
+                                "doctype": "Batch",
+                                "item": item.item_code
+                            })
+                            batch.insert(ignore_permissions=True)
+                            item.batch_no = batch.name
                 
                 se.save()
                 se.submit()
