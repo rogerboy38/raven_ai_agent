@@ -100,6 +100,13 @@ When showing documents:
 CAPABILITIES_LIST = """
 ## 🤖 AI Agent Capabilities
 
+**Available Bots:**
+| Bot | Purpose |
+|-----|---------|
+| `@ai` | General ERPNext operations, manufacturing, sales, purchasing |
+| `@sales_order_follow_up` | Dedicated SO tracking and fulfillment |
+| `@bom_creator` | BOM Creator automation |
+
 ### 📊 ERPNext Data Access
 - `@ai show my quotations` - View your quotations, sales orders, work orders
 - `@ai show pending deliveries` - Delivery notes, stock levels, inventory
