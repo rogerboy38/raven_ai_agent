@@ -122,26 +122,39 @@ CAPABILITIES_LIST = """
 - `@ai create work order for [item]` - Manufacturing workflows
 - `!command` - Force execute without confirmation
 
-### 🏭 Manufacturing SOP
+### 🏭 Manufacturing SOP (Work Order → Finished Goods)
+
+**Workflow:** Create WO → Submit → Issue Materials → Job Cards → Complete → FG Entry
+
+**Work Order Management:**
 - `@ai show work orders` - List active work orders
 - `@ai create work order for [item] qty [n]` - Create new work order
+- `@ai submit work order [WO]` - Submit/start work order
 - `@ai material status for [WO]` - Check component availability
 - `@ai reserve stock for [WO]` - Reserve materials for work order
-- `@ai submit work order [WO]` - Submit/start work order
-- `@ai show job cards for [WO]` - List job cards/operations
+
+**Production Execution:**
+- `@ai issue materials for [WO]` - Transfer materials to WIP warehouse
+- `@ai show job cards for [WO]` - List operations (linked to Project Tasks)
 - `@ai update progress for [WO] qty [n]` - Report production progress
-- `@ai issue materials for [WO]` - Create Stock Entry (Material Issue)
-- `@ai finish work order [WO]` - Complete production & receive goods
+- `@ai finish work order [WO]` - Complete production & receive FG
+
+**Quality & Costing:**
 - `@ai quality check` - Show recent Quality Inspections
 - `@ai show BOM cost report` - Compare estimated vs actual costs
+- `@ai troubleshoot` - Manufacturing troubleshooting guide
 
 **Stock Entry Management:**
-- `@ai material receipt [ITEM] qty [n] price $[x]` - Create Material Receipt entry with price
+- `@ai material receipt [ITEM] qty [n] price $[x]` - Create Material Receipt with price
 - `@ai convert [STE] to material receipt` - Convert draft to Material Receipt
 - `@ai verify stock entries` - Check submitted vs draft entries
 - `@ai check stock ledger` - Show recent stock ledger entries
 - `@ai list batches` - Show recently created batches
-- `@ai troubleshoot` - Manufacturing troubleshooting guide
+
+**Project Task ↔ BOM Operation Mapping:**
+Job Cards auto-generated from BOM Operations align with Project Template tasks:
+- TASK-00008: Recepción → TASK-00010: Molienda → TASK-00011: Prensado
+- TASK-00012: Decolorado → TASK-00013: Filtrado → TASK-00023: Secado Spray
 
 ### 🔄 Sales-to-Purchase Cycle SOP
 - `@ai show opportunities` - List sales opportunities
