@@ -1559,7 +1559,12 @@ class RaymondLucyAgent:
                                 remaining = len(bc.items) - display_limit
                                 msg += f"\n[📦 View {remaining} more items...]({bc_link}#items)\n"
                             
-                            return {"success": True, "message": msg}
+                            return {
+                                "success": True, 
+                                "message": msg,
+                                "link_doctype": "BOM Creator",
+                                "link_document": bom_name
+                            }
                         else:
                             return {"success": False, "error": bc_result["error"]}
                 
@@ -2709,12 +2714,16 @@ def handle_raven_message(doc, method):
                 frappe.logger().warning(f"[AI Agent] Bot {bot_name} not found")
         
         response_text = result.get("response") or result.get("message") or result.get("error") or "No response generated"
+        link_doctype = result.get("link_doctype")
+        link_document = result.get("link_document")
         
         if bot:
             bot.send_message(
                 channel_id=doc.channel_id,
                 text=response_text,
-                markdown=True
+                markdown=True,
+                link_doctype=link_doctype,
+                link_document=link_document
             )
         else:
             # Fallback: create message directly

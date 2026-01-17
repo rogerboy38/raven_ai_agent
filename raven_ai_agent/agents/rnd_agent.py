@@ -527,6 +527,12 @@ class RnDAgent:
                     return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
+        # Show BOM or BOM Creator
+        bom_match = re.search(r'show\s+(?:bom|bom\s+creator)\s+([^\s]+)', message, re.IGNORECASE)
+        if bom_match:
+            bom_name = bom_match.group(1)
+            return self._get_bom_or_creator(bom_name)
+        
         # Help
         return """## R&D Bot Commands
 
@@ -534,6 +540,9 @@ class RnDAgent:
 • `show tds` - List all TDS specifications
 • `search tds [query]` - Search TDS by item/name
 • `tds detail [TDS-NAME]` - View TDS details
+
+**BOM / BOM Creator:**
+• `show bom [NAME]` - View BOM or BOM Creator details
 
 **Formulation:**
 • `formulation [ITEM]` - Get formulation/recipe for item
@@ -549,3 +558,83 @@ class RnDAgent:
 • `acemannan` - Product info and properties
 • `acemannan [property]` - Specific property (immunomodulator, antiviral, wound_healing, etc.)
 """
+    
+    def _get_bom_or_creator(self, bom_name: str) -> str:
+        """Get BOM or BOM Creator details with table formatting"""
+        try:
+            from raven_ai_agent.api.bom_fixer import get_bom_details
+            
+            # First try regular BOM
+            result = get_bom_details(bom_name)
+            
+            if result["success"]:
+                bom_link = self.make_link("BOM", bom_name)
+                item_link = self.make_link("Item", result["item"])
+                
+                status_icon = {"Draft": "📝", "Submitted": "✅", "Cancelled": "❌"}.get(result["status_text"], "❓")
+                active_badge = "✓ Active" if result.get("is_active") else "○ Inactive"
+                default_badge = "⭐ Default" if result.get("is_default") else ""
+                
+                lines = [f"📋 **BOM: {bom_link}**\n"]
+                lines.append(f"  Product: **{item_link}**")
+                lines.append(f"  Status: {status_icon} {result['status_text']} | {active_badge} {default_badge}")
+                lines.append(f"  Total Cost: ${result.get('total_cost', 0):,.2f}\n")
+                
+                if result.get("items"):
+                    lines.append(f"**Items ({len(result['items'])}):**\n")
+                    lines.append("| # | Item Code | Description | Qty | UOM |")
+                    lines.append("|---|-----------|-------------|-----|-----|")
+                    display_limit = 25
+                    for idx, item in enumerate(result['items'][:display_limit], 1):
+                        item_url = self.make_link("Item", item.get("item_code", ""))
+                        desc = (item.get("item_name") or item.get("item_code", ""))[:30]
+                        lines.append(f"| {idx} | {item_url} | {desc} | {item.get('qty', 1)} | {item.get('uom', '-')} |")
+                    
+                    if len(result['items']) > display_limit:
+                        remaining = len(result['items']) - display_limit
+                        lines.append(f"\n*... and {remaining} more items*")
+                
+                return "\n".join(lines)
+            
+            # If not found, try BOM Creator
+            if "not found" in result.get("message", "").lower():
+                if frappe.db.exists("BOM Creator", bom_name):
+                    from raven_ai_agent.agents.bom_creator_agent import BOMCreatorAgent
+                    bc_agent = BOMCreatorAgent()
+                    bc_result = bc_agent.get_bom_creator(bom_name)
+                    
+                    if bc_result["success"]:
+                        bc = frappe.get_doc("BOM Creator", bom_name)
+                        
+                        bc_link = self.make_link("BOM Creator", bom_name)
+                        item_link = self.make_link("Item", bc.item_code)
+                        
+                        status_icon = {"Draft": "📝", "Submitted": "✅", "In Progress": "⏳", "Completed": "✅"}.get(bc.status, "❓")
+                        
+                        lines = [f"🏗️ **BOM Creator: {bc_link}**\n"]
+                        lines.append(f"  Product: **{item_link}**")
+                        lines.append(f"  Status: {status_icon} {bc.status}")
+                        lines.append(f"  Raw Material Cost: ${bc.raw_material_cost or 0:,.2f}\n")
+                        
+                        if bc.items:
+                            lines.append(f"**Items ({len(bc.items)}):**\n")
+                            lines.append("| # | Item Code | Description | Qty | UOM |")
+                            lines.append("|---|-----------|-------------|-----|-----|")
+                            display_limit = 25
+                            for idx, item in enumerate(bc.items[:display_limit], 1):
+                                item_url = self.make_link("Item", item.item_code)
+                                desc = (item.item_name or item.item_code)[:30]
+                                lines.append(f"| {idx} | {item_url} | {desc} | {item.qty or 1} | {item.uom or '-'} |")
+                            
+                            if len(bc.items) > display_limit:
+                                remaining = len(bc.items) - display_limit
+                                lines.append(f"\n*... and {remaining} more items*")
+                        
+                        return "\n".join(lines)
+                    else:
+                        return f"❌ Error: {bc_result.get('error', 'Unknown error')}"
+            
+            return f"❌ BOM or BOM Creator '{bom_name}' not found"
+            
+        except Exception as e:
+            return f"❌ Error: {str(e)}"
