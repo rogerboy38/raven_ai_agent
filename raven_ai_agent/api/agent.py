@@ -1509,14 +1509,56 @@ class RaymondLucyAgent:
         
         # ==================== BOM COMMANDS ====================
         
-        # Show BOM details (all items)
-        bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
+        # Show BOM or BOM Creator details
+        # Match BOM-xxx or any name pattern for BOM Creator (e.g., TEST-BOM-FIX)
+        bom_match = re.search(r'show\s+(?:bom|bom\s+creator)\s+([^\s]+)', query, re.IGNORECASE)
+        if not bom_match:
+            bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
+        
         if bom_match and ("show" in query_lower or "details" in query_lower or "items" in query_lower or "view" in query_lower):
             try:
                 from raven_ai_agent.api.bom_fixer import get_bom_details
                 
                 bom_name = bom_match.group(1)
+                
+                # First try regular BOM
                 result = get_bom_details(bom_name)
+                
+                # If not found, try BOM Creator
+                if not result["success"] and "not found" in result.get("message", "").lower():
+                    if frappe.db.exists("BOM Creator", bom_name):
+                        from raven_ai_agent.agents.bom_creator_agent import BOMCreatorAgent
+                        bc_agent = BOMCreatorAgent()
+                        bc_result = bc_agent.get_bom_creator(bom_name)
+                        
+                        if bc_result["success"]:
+                            site_name = frappe.local.site
+                            bc = frappe.get_doc("BOM Creator", bom_name)
+                            
+                            bc_link = f"https://{site_name}/app/bom-creator/{bom_name}"
+                            item_link = f"https://{site_name}/app/item/{bc.item_code}"
+                            
+                            status_icon = {"Draft": "📝", "Submitted": "✅", "In Progress": "⏳", "Completed": "✅"}.get(bc.status, "❓")
+                            
+                            msg = f"🏗️ **BOM Creator: [{bom_name}]({bc_link})**\n\n"
+                            msg += f"  Product: **[{bc.item_code}]({item_link})**\n"
+                            msg += f"  Status: {status_icon} {bc.status}\n"
+                            msg += f"  Raw Material Cost: ${bc.raw_material_cost or 0:,.2f}\n\n"
+                            
+                            msg += f"**Items ({len(bc.items)}):**\n\n"
+                            msg += "| # | Item Code | Description | Qty | UOM |\n"
+                            msg += "|---|-----------|-------------|-----|-----|\n"
+                            for idx, item in enumerate(bc.items[:30], 1):  # Limit to 30 for readability
+                                item_url = f"https://{site_name}/app/item/{item.item_code}"
+                                desc = (item.item_name or item.item_code)[:30]
+                                msg += f"| {idx} | [{item.item_code}]({item_url}) | {desc} | {item.qty or 1} | {item.uom or '-'} |\n"
+                            
+                            if len(bc.items) > 30:
+                                msg += f"\n... and {len(bc.items) - 30} more items\n"
+                            
+                            return {"success": True, "message": msg}
+                        else:
+                            return {"success": False, "error": bc_result["error"]}
                 
                 if not result["success"]:
                     return {"success": False, "error": result["message"]}
