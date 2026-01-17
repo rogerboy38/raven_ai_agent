@@ -34,18 +34,37 @@ class RnDAgent:
     def get_tds_list(self, limit: int = 20) -> Dict:
         """List TDS Product Specifications"""
         try:
+            # Get available fields dynamically
+            meta = frappe.get_meta("TDS Product Specification")
+            available_fields = [f.fieldname for f in meta.fields]
+            
+            # Base fields that should exist
+            fields = ["name"]
+            if "item_code" in available_fields:
+                fields.append("item_code")
+            if "item" in available_fields:
+                fields.append("item")
+            if "item_name" in available_fields:
+                fields.append("item_name")
+            if "product_name" in available_fields:
+                fields.append("product_name")
+            if "status" in available_fields:
+                fields.append("status")
+            
             tds_list = frappe.get_all("TDS Product Specification",
-                fields=["name", "item_code", "product_name", "status", "creation"],
+                fields=fields,
                 order_by="creation desc",
                 limit=limit)
             
             result = []
             for tds in tds_list:
+                item_code = tds.get("item_code") or tds.get("item") or "N/A"
+                product_name = tds.get("product_name") or tds.get("item_name") or tds.name
                 result.append({
                     "name": tds.name,
                     "link": self.make_link("TDS Product Specification", tds.name),
-                    "item_code": tds.item_code,
-                    "product_name": tds.product_name,
+                    "item_code": item_code,
+                    "product_name": product_name,
                     "status": tds.get("status", "N/A")
                 })
             
@@ -58,27 +77,35 @@ class RnDAgent:
         try:
             tds = frappe.get_doc("TDS Product Specification", tds_name)
             
-            # Get formulation items if available
+            # Get item_code from whichever field exists
+            item_code = getattr(tds, 'item_code', None) or getattr(tds, 'item', None) or "N/A"
+            product_name = getattr(tds, 'product_name', None) or getattr(tds, 'item_name', None) or tds.name
+            
+            # Get formulation items if available - check for different possible child table names
             formulation = []
-            if hasattr(tds, 'items') and tds.items:
-                for item in tds.items:
-                    formulation.append({
-                        "item_code": item.item_code,
-                        "item_name": getattr(item, 'item_name', ''),
-                        "qty": getattr(item, 'qty', 0),
-                        "uom": getattr(item, 'uom', ''),
-                        "percentage": getattr(item, 'percentage', 0)
-                    })
+            child_tables = ['items', 'ingredients', 'formulation_items', 'tds_items']
+            for table_name in child_tables:
+                if hasattr(tds, table_name) and getattr(tds, table_name):
+                    for item in getattr(tds, table_name):
+                        formulation.append({
+                            "item_code": getattr(item, 'item_code', '') or getattr(item, 'item', ''),
+                            "item_name": getattr(item, 'item_name', ''),
+                            "qty": getattr(item, 'qty', 0) or getattr(item, 'quantity', 0),
+                            "uom": getattr(item, 'uom', '') or getattr(item, 'stock_uom', ''),
+                            "percentage": getattr(item, 'percentage', 0) or getattr(item, 'percent', 0)
+                        })
+                    break
             
             return {
                 "success": True,
                 "name": tds.name,
                 "link": self.make_link("TDS Product Specification", tds.name),
-                "item_code": tds.item_code,
-                "product_name": getattr(tds, 'product_name', ''),
+                "item_code": item_code,
+                "product_name": product_name,
                 "description": getattr(tds, 'description', ''),
                 "status": getattr(tds, 'status', 'N/A'),
-                "formulation": formulation
+                "formulation": formulation,
+                "ingredients": formulation  # Alias for compatibility
             }
         except frappe.DoesNotExistError:
             return {"success": False, "error": f"TDS '{tds_name}' not found"}
@@ -88,31 +115,55 @@ class RnDAgent:
     def search_tds(self, query: str) -> Dict:
         """Search TDS by item code or product name"""
         try:
+            # Get available fields dynamically
+            meta = frappe.get_meta("TDS Product Specification")
+            available_fields = [f.fieldname for f in meta.fields]
+            
+            fields = ["name"]
+            search_fields = []
+            
+            if "item_code" in available_fields:
+                fields.append("item_code")
+                search_fields.append("item_code")
+            if "item" in available_fields:
+                fields.append("item")
+                search_fields.append("item")
+            if "item_name" in available_fields:
+                fields.append("item_name")
+                search_fields.append("item_name")
+            if "product_name" in available_fields:
+                fields.append("product_name")
+                search_fields.append("product_name")
+            if "status" in available_fields:
+                fields.append("status")
+            
+            # Simple name search that always works
             tds_list = frappe.get_all("TDS Product Specification",
-                filters=[
-                    ["item_code", "like", f"%{query}%"],
-                ],
-                or_filters=[
-                    ["product_name", "like", f"%{query}%"],
-                    ["name", "like", f"%{query}%"]
-                ],
-                fields=["name", "item_code", "product_name", "status"],
+                filters={"name": ["like", f"%{query}%"]},
+                fields=fields,
                 limit=10)
             
-            # Fallback search if no results
-            if not tds_list:
-                tds_list = frappe.get_all("TDS Product Specification",
-                    filters={"item_code": ["like", f"%{query}%"]},
-                    fields=["name", "item_code", "product_name", "status"],
-                    limit=10)
+            # Also search by other fields if available
+            for field in search_fields:
+                if len(tds_list) < 10:
+                    more = frappe.get_all("TDS Product Specification",
+                        filters={field: ["like", f"%{query}%"]},
+                        fields=fields,
+                        limit=10)
+                    existing_names = [t.name for t in tds_list]
+                    for t in more:
+                        if t.name not in existing_names:
+                            tds_list.append(t)
             
             result = []
-            for tds in tds_list:
+            for tds in tds_list[:10]:
+                item_code = tds.get("item_code") or tds.get("item") or "N/A"
+                product_name = tds.get("product_name") or tds.get("item_name") or tds.name
                 result.append({
                     "name": tds.name,
                     "link": self.make_link("TDS Product Specification", tds.name),
-                    "item_code": tds.item_code,
-                    "product_name": tds.product_name
+                    "item_code": item_code,
+                    "product_name": product_name
                 })
             
             return {"success": True, "count": len(result), "results": result}
@@ -124,11 +175,23 @@ class RnDAgent:
     def get_formulation(self, item_code: str) -> Dict:
         """Get formulation/recipe for an item from BOM or TDS"""
         try:
-            # Try to get from BOM first
+            # Clean item_code (remove brackets if present)
+            item_code = item_code.strip().strip('[]')
+            
+            # Try exact match first
             bom = frappe.get_value("BOM", 
                 {"item": item_code, "is_active": 1, "is_default": 1},
                 ["name", "item", "quantity", "total_cost"],
                 as_dict=True)
+            
+            # Try searching by like pattern if no exact match
+            if not bom:
+                bom_search = frappe.get_all("BOM",
+                    filters={"item": ["like", f"%{item_code}%"], "is_active": 1},
+                    fields=["name", "item", "quantity", "total_cost"],
+                    limit=1)
+                if bom_search:
+                    bom = bom_search[0]
             
             if bom:
                 bom_doc = frappe.get_doc("BOM", bom.name)
@@ -147,15 +210,27 @@ class RnDAgent:
                     "source": "BOM",
                     "bom_name": bom.name,
                     "link": self.make_link("BOM", bom.name),
-                    "item_code": item_code,
+                    "item_code": bom.get("item", item_code),
                     "quantity": bom.quantity,
                     "ingredients": ingredients
                 }
             
-            # Try TDS if no BOM
-            tds = frappe.get_value("TDS Product Specification",
-                {"item_code": item_code},
-                "name")
+            # Try TDS if no BOM - check multiple field possibilities
+            tds = None
+            meta = frappe.get_meta("TDS Product Specification")
+            available_fields = [f.fieldname for f in meta.fields]
+            
+            if "item_code" in available_fields:
+                tds = frappe.get_value("TDS Product Specification", {"item_code": item_code}, "name")
+            if not tds and "item" in available_fields:
+                tds = frappe.get_value("TDS Product Specification", {"item": item_code}, "name")
+            if not tds:
+                # Search by name pattern
+                tds_search = frappe.get_all("TDS Product Specification",
+                    filters={"name": ["like", f"%{item_code}%"]},
+                    limit=1)
+                if tds_search:
+                    tds = tds_search[0].name
             
             if tds:
                 return self.get_tds_details(tds)
