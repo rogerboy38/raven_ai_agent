@@ -326,6 +326,122 @@ class BOMCreatorAgent:
     
     # ========== NATURAL LANGUAGE HANDLER ==========
     
+    def create_bom_for_batch(self, batch_name: str, options: Dict = None) -> Dict:
+        """Create BOM for a Batch AMB - Ported from amb_w_tds.batch_amb.create_bom_with_wizard"""
+        try:
+            # Get batch document
+            batch = frappe.get_doc("Batch AMB", batch_name)
+            
+            item_to_manufacture = batch.item_to_manufacture or getattr(batch, 'current_item_code', None)
+            if not item_to_manufacture:
+                return {"success": False, "error": "No item to manufacture specified in batch"}
+            
+            options = options or {}
+            
+            # Get quantity from batch
+            bom_quantity = (batch.planned_qty or 
+                          getattr(batch, 'batch_quantity', None) or 
+                          getattr(batch, 'total_net_weight', None) or 1000)
+            
+            # Get UOM from Item (not Batch)
+            item = frappe.get_doc("Item", item_to_manufacture)
+            uom = item.stock_uom
+            
+            # Check if BOM Creator already exists
+            existing_bom = frappe.db.get_value("BOM Creator", 
+                {"project": batch_name}, 
+                ["name", "item_code"], as_dict=True)
+            
+            if existing_bom:
+                return {
+                    "success": True,
+                    "status": "exists",
+                    "bom_name": existing_bom.name,
+                    "item_code": item_to_manufacture,
+                    "qty": bom_quantity,
+                    "uom": uom,
+                    "url": self.make_link("BOM Creator", existing_bom.name),
+                    "message": f"BOM Creator already exists: [{existing_bom.name}]({self.make_link('BOM Creator', existing_bom.name)})"
+                }
+            
+            # Check if standard BOM exists
+            existing_std_bom = frappe.db.get_value("BOM", 
+                {"item": item_to_manufacture, "is_active": 1}, "name")
+            
+            if existing_std_bom:
+                return {
+                    "success": True,
+                    "status": "bom_exists",
+                    "bom_name": existing_std_bom,
+                    "item_code": item_to_manufacture,
+                    "url": self.make_link("BOM", existing_std_bom),
+                    "message": f"Active BOM already exists: [{existing_std_bom}]({self.make_link('BOM', existing_std_bom)})"
+                }
+            
+            # Create BOM Creator document
+            bc = frappe.new_doc("BOM Creator")
+            bc.item_code = item_to_manufacture
+            bc.item_name = item.item_name
+            bc.quantity = bom_quantity
+            bc.uom = uom
+            bc.project = batch_name
+            bc.company = getattr(batch, 'company', None) or frappe.defaults.get_user_default("Company") or "AMB-Wellness"
+            bc.currency = "MXN"
+            
+            # Add raw material placeholder
+            raw_materials = []
+            if frappe.db.exists("Item", "M033"):
+                raw_materials.append({"item_code": "M033", "item_name": "Aloe Vera Gel", "qty": bom_quantity * 0.05, "uom": "Kg"})
+            elif frappe.db.exists("Item", "0202"):
+                raw_materials.append({"item_code": "0202", "qty": bom_quantity * 0.05, "uom": "Kg"})
+            
+            for rm in raw_materials:
+                bc.append("items", {
+                    "item_code": rm["item_code"],
+                    "item_name": rm.get("item_name", rm["item_code"]),
+                    "qty": rm["qty"],
+                    "uom": rm.get("uom", "Kg"),
+                    "rate": 0,
+                    "fg_item": item_to_manufacture,
+                    "is_expandable": 0
+                })
+            
+            # Add packaging if requested
+            if options.get("include_packaging", True):
+                pkg_item = options.get("primary_packaging", "E001")
+                if frappe.db.exists("Item", pkg_item):
+                    pkg_qty = options.get("packages_count", 1)
+                    bc.append("items", {
+                        "item_code": pkg_item,
+                        "qty": pkg_qty,
+                        "uom": "Nos",
+                        "rate": 0,
+                        "fg_item": item_to_manufacture,
+                        "is_expandable": 0
+                    })
+            
+            bc.flags.ignore_permissions = True
+            bc.insert()
+            frappe.db.commit()
+            
+            return {
+                "success": True,
+                "bom_name": bc.name,
+                "item_code": item_to_manufacture,
+                "qty": bom_quantity,
+                "uom": uom,
+                "item_count": len(bc.items),
+                "url": self.make_link("BOM Creator", bc.name),
+                "message": f"✅ **BOM Creator created:** [{bc.name}]({self.make_link('BOM Creator', bc.name)})\n\n  • Item: {item_to_manufacture}\n  • Qty: {bom_quantity} {uom}\n  • Materials: {len(bc.items)} items\n  • Batch: [{batch_name}]({self.make_link('Batch AMB', batch_name)})\n\n📝 Use `@ai submit bom {bc.name}` to generate actual BOMs."
+            }
+            
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Batch AMB '{batch_name}' not found"}
+        except Exception as e:
+            frappe.db.rollback()
+            frappe.log_error(f"BOM Creation for Batch Error: {str(e)}")
+            return {"success": False, "error": f"Error creating BOM: {str(e)}"}
+    
     def handle_bom_request(self, message: str) -> Dict:
         """Parse and handle natural language BOM requests"""
         message_lower = message.lower()
@@ -359,9 +475,22 @@ class BOMCreatorAgent:
                 return self.submit_bom_creator(match.group(1))
             return {"success": False, "error": "Please specify BOM Creator name"}
         
+        # Create BOM for Batch
+        if "create bom" in message_lower and ("batch" in message_lower or "lote" in message_lower):
+            import re
+            # Match LOTE-XX-XX-XXXX or similar batch names
+            match = re.search(r'(LOTE-[^\s]+)', message, re.IGNORECASE)
+            if not match:
+                # Also try to match batch/lote followed by name
+                match = re.search(r'(?:batch|lote)\s+([^\s]+)', message_lower)
+            if match:
+                batch_name = match.group(1).upper()
+                return self.create_bom_for_batch(batch_name)
+            return {"success": False, "error": "Please specify batch name: '@ai create bom for batch LOTE-XXXX'"}
+        
         return {
             "success": False, 
-            "error": "Unknown command. Available: create bom from tds [NAME], validate bom [NAME], submit bom [NAME]"
+            "error": "Unknown command. Available: create bom from tds [NAME], create bom for batch [BATCH], validate bom [NAME], submit bom [NAME]"
         }
 
 
@@ -390,6 +519,13 @@ def submit_bom_creator(bom_creator_name: str) -> Dict:
     """API: Submit BOM Creator"""
     agent = BOMCreatorAgent()
     return agent.submit_bom_creator(bom_creator_name)
+
+@frappe.whitelist()
+def create_bom_for_batch(batch_name: str, options: str = None) -> Dict:
+    """API: Create BOM for a Batch AMB"""
+    agent = BOMCreatorAgent()
+    opts = json.loads(options) if options else {}
+    return agent.create_bom_for_batch(batch_name, opts)
 
 @frappe.whitelist()
 def handle_bom_request(message: str) -> Dict:

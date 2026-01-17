@@ -200,6 +200,7 @@ Use `@sales_order_follow_up` for dedicated SO tracking:
 - `@ai !submit bom BOM-XXXX` - Submit BOM Creator to generate BOMs
 - `@ai validate bom BOM-XXXX` - Validate BOM Creator before submission
 - `@ai create bom from tds [TDS-NAME]` - Create BOM Creator from TDS
+- `@ai create bom for batch LOTE-XXXX` - Create BOM for a Batch AMB
 
 ### 📄 Document Actions
 - `@ai !submit Sales Order SO-XXXX` - Submit sales order
@@ -900,6 +901,32 @@ class RaymondLucyAgent:
                         "success": False,
                         "error": result.get("error", "Failed to submit BOM Creator")
                     }
+        
+        # Create BOM for Batch: @ai create bom for batch LOTE-XXXX
+        if "create bom" in query_lower and ("batch" in query_lower or "lote" in query_lower):
+            batch_match = re.search(r'(LOTE-[^\s]+)', query, re.IGNORECASE)
+            if not batch_match:
+                batch_match = re.search(r'(?:batch|lote)\s+([^\s]+)', query, re.IGNORECASE)
+            
+            if batch_match:
+                batch_name = batch_match.group(1).upper()
+                try:
+                    from raven_ai_agent.agents.bom_creator_agent import create_bom_for_batch
+                    result = create_bom_for_batch(batch_name)
+                    if result.get("success"):
+                        return {
+                            "success": True,
+                            "message": result.get("message", f"✅ BOM created for batch '{batch_name}'")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": result.get("error", "Failed to create BOM for batch")
+                        }
+                except Exception as e:
+                    return {"success": False, "error": f"Error creating BOM for batch: {str(e)}"}
+            else:
+                return {"success": False, "error": "Please specify batch name: '@ai create bom for batch LOTE-XXXX'"}
         
         # ==================== MANUFACTURING SOP COMMANDS ====================
         
