@@ -1546,17 +1546,18 @@ class RaymondLucyAgent:
                             msg += f"  Status: {status_icon} {bc.status}\n"
                             msg += f"  Raw Material Cost: ${bc.raw_material_cost or 0:,.2f}\n\n"
                             
-                            msg += f"**Items ({len(bc.items)}):**\n\n"
+                            msg += f"**Items ({len(bc.items)}):** [📋 View All]({bc_link}#items)\n\n"
                             msg += "| # | Item Code | Description | Qty | UOM |\n"
                             msg += "|---|-----------|-------------|-----|-----|\n"
                             display_limit = 25
                             for idx, item in enumerate(bc.items[:display_limit], 1):
+                                item_url = f"https://{site_name}/app/item/{item.item_code}"
                                 desc = (item.item_name or item.item_code)[:30]
-                                msg += f"| {idx} | **{item.item_code}** | {desc} | {item.qty or 1} | {item.uom or '-'} |\n"
+                                msg += f"| {idx} | [{item.item_code}]({item_url}) | {desc} | {item.qty or 1} | {item.uom or '-'} |\n"
                             
                             if len(bc.items) > display_limit:
                                 remaining = len(bc.items) - display_limit
-                                msg += f"\n➡️ *{remaining} more items - open BOM Creator to view all*\n"
+                                msg += f"\n[📦 View {remaining} more items...]({bc_link}#items)\n"
                             
                             return {
                                 "success": True, 
