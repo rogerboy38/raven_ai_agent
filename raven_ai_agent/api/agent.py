@@ -2718,22 +2718,30 @@ def handle_raven_message(doc, method):
         link_document = result.get("link_document")
         
         if bot:
-            # Check if bot.send_message supports link_doctype/link_document
-            # If not, we create the message directly
+            # Try to add document link for mobile support, fallback to regular send
             if link_doctype and link_document:
-                # Create message with document link for proper mobile support
-                reply_doc = frappe.get_doc({
-                    "doctype": "Raven Message",
-                    "channel_id": doc.channel_id,
-                    "text": response_text,
-                    "message_type": "Text",
-                    "is_bot_message": 1,
-                    "bot": bot_name,
-                    "link_doctype": link_doctype,
-                    "link_document": link_document
-                })
-                reply_doc.insert(ignore_permissions=True)
-                frappe.db.commit()
+                try:
+                    # Get bot's raven_user for proper linking
+                    raven_user = getattr(bot, 'raven_user', None)
+                    reply_doc = frappe.get_doc({
+                        "doctype": "Raven Message",
+                        "channel_id": doc.channel_id,
+                        "text": response_text,
+                        "message_type": "Text",
+                        "is_bot_message": 1,
+                        "bot": raven_user,
+                        "link_doctype": link_doctype,
+                        "link_document": link_document
+                    })
+                    reply_doc.insert(ignore_permissions=True)
+                    frappe.db.commit()
+                except Exception as e:
+                    frappe.logger().warning(f"[AI Agent] Document link failed: {e}, using fallback")
+                    bot.send_message(
+                        channel_id=doc.channel_id,
+                        text=response_text,
+                        markdown=True
+                    )
             else:
                 bot.send_message(
                     channel_id=doc.channel_id,
