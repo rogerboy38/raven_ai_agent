@@ -31,11 +31,17 @@ class RnDAgent:
     
     # ========== TDS OPERATIONS ==========
     
-    def get_tds_list(self, limit: int = 20) -> Dict:
-        """List TDS Product Specifications"""
+    def get_tds_list(self, filter_code: str = None, limit: int = 20) -> Dict:
+        """List TDS Product Specifications, optionally filtered by code"""
         try:
+            filters = {}
+            if filter_code:
+                # Filter by name containing the code
+                filters = {"name": ["like", f"%{filter_code}%"]}
+            
             tds_list = frappe.get_all("TDS Product Specification",
-                fields=["name", "item_code", "item_name", "product_item", "workflow_state", "tds_version"],
+                filters=filters,
+                fields=["name", "item_code", "item_name", "product_item", "workflow_state", "tds_version", "tds_sequence"],
                 order_by="creation desc",
                 limit=limit)
             
@@ -46,11 +52,13 @@ class RnDAgent:
                     "link": self.make_link("TDS Product Specification", tds.name),
                     "item_code": tds.get("item_code") or "N/A",
                     "item_name": tds.get("item_name") or tds.name,
+                    "product_item": tds.get("product_item") or "",
                     "status": tds.get("workflow_state") or "N/A",
-                    "version": tds.get("tds_version") or ""
+                    "version": tds.get("tds_version") or "",
+                    "sequence": tds.get("tds_sequence") or 0
                 })
             
-            return {"success": True, "count": len(result), "tds_list": result}
+            return {"success": True, "count": len(result), "tds_list": result, "filter": filter_code}
         except Exception as e:
             return {"success": False, "error": str(e)}
     
@@ -354,11 +362,21 @@ class RnDAgent:
         
         # TDS Commands
         if "show tds" in message_lower or "list tds" in message_lower:
-            result = self.get_tds_list()
+            # Extract filter code if provided (e.g., "show tds 0803")
+            filter_code = None
+            parts = message_lower.replace("show tds", "").replace("list tds", "").strip().split()
+            if parts:
+                filter_code = parts[0].strip()
+            
+            result = self.get_tds_list(filter_code=filter_code)
             if result["success"]:
-                lines = [f"## TDS Product Specifications ({result['count']} found)\n"]
+                title = f"## TDS Product Specifications"
+                if result.get("filter"):
+                    title += f" (filtered by '{result['filter']}')"
+                title += f" ({result['count']} found)\n"
+                lines = [title]
                 for tds in result["tds_list"]:
-                    lines.append(f"• {tds['link']} | {tds['item_code']} | {tds['item_name']} | {tds['status']}")
+                    lines.append(f"• {tds['link']} | {tds['status']} | {tds['product_item']} | {tds['version']}")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
