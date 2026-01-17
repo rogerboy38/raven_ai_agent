@@ -1546,20 +1546,24 @@ class RaymondLucyAgent:
                             msg += f"  Status: {status_icon} {bc.status}\n"
                             msg += f"  Raw Material Cost: ${bc.raw_material_cost or 0:,.2f}\n\n"
                             
-                            msg += f"**Items ({len(bc.items)}):** [📋 View All]({bc_link}#items)\n\n"
+                            msg += f"**Items ({len(bc.items)}):**\n\n"
                             msg += "| # | Item Code | Description | Qty | UOM |\n"
                             msg += "|---|-----------|-------------|-----|-----|\n"
                             display_limit = 25
                             for idx, item in enumerate(bc.items[:display_limit], 1):
-                                item_url = f"https://{site_name}/app/item/{item.item_code}"
                                 desc = (item.item_name or item.item_code)[:30]
-                                msg += f"| {idx} | [{item.item_code}]({item_url}) | {desc} | {item.qty or 1} | {item.uom or '-'} |\n"
+                                msg += f"| {idx} | **{item.item_code}** | {desc} | {item.qty or 1} | {item.uom or '-'} |\n"
                             
                             if len(bc.items) > display_limit:
                                 remaining = len(bc.items) - display_limit
-                                msg += f"\n[📦 View {remaining} more items...]({bc_link}#items)\n"
+                                msg += f"\n➡️ *{remaining} more items - open BOM Creator to view all*\n"
                             
-                            return {"success": True, "message": msg}
+                            return {
+                                "success": True, 
+                                "message": msg,
+                                "link_doctype": "BOM Creator",
+                                "link_document": bom_name
+                            }
                         else:
                             return {"success": False, "error": bc_result["error"]}
                 
@@ -2708,24 +2712,46 @@ def handle_raven_message(doc, method):
             except frappe.DoesNotExistError:
                 frappe.logger().warning(f"[AI Agent] Bot {bot_name} not found")
         
-        response_text = result.get("response") or result.get("error") or "No response generated"
+        response_text = result.get("response") or result.get("message") or result.get("error") or "No response generated"
+        link_doctype = result.get("link_doctype")
+        link_document = result.get("link_document")
         
         if bot:
-            # Use bot's send_message for proper integration
-            bot.send_message(
-                channel_id=doc.channel_id,
-                text=response_text,
-                markdown=True
-            )
+            # Check if bot.send_message supports link_doctype/link_document
+            # If not, we create the message directly
+            if link_doctype and link_document:
+                # Create message with document link for proper mobile support
+                reply_doc = frappe.get_doc({
+                    "doctype": "Raven Message",
+                    "channel_id": doc.channel_id,
+                    "text": response_text,
+                    "message_type": "Text",
+                    "is_bot_message": 1,
+                    "bot": bot_name,
+                    "link_doctype": link_doctype,
+                    "link_document": link_document
+                })
+                reply_doc.insert(ignore_permissions=True)
+                frappe.db.commit()
+            else:
+                bot.send_message(
+                    channel_id=doc.channel_id,
+                    text=response_text,
+                    markdown=True
+                )
         else:
             # Fallback: create message directly
-            reply_doc = frappe.get_doc({
+            msg_data = {
                 "doctype": "Raven Message",
                 "channel_id": doc.channel_id,
                 "text": response_text,
                 "message_type": "Text",
                 "is_bot_message": 1
-            })
+            }
+            if link_doctype and link_document:
+                msg_data["link_doctype"] = link_doctype
+                msg_data["link_document"] = link_document
+            reply_doc = frappe.get_doc(msg_data)
             reply_doc.insert(ignore_permissions=True)
             frappe.db.commit()
         
