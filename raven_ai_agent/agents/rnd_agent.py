@@ -370,13 +370,18 @@ class RnDAgent:
             
             result = self.get_tds_list(filter_code=filter_code)
             if result["success"]:
-                title = f"## TDS Product Specifications"
+                title = f"## 📝 TDS Product Specifications"
                 if result.get("filter"):
-                    title += f" (filtered by '{result['filter']}')"
-                title += f" ({result['count']} found)\n"
+                    title += f" (filter: {result['filter']})"
+                title += f"\n**{result['count']} records found**\n"
                 lines = [title]
+                lines.append("| TDS Name | Status | Product | Version |")
+                lines.append("|----------|--------|---------|---------|")
                 for tds in result["tds_list"]:
-                    lines.append(f"• {tds['link']} | {tds['status']} | {tds['product_item']} | {tds['version']}")
+                    name_short = tds['name'][:35] + "..." if len(tds['name']) > 35 else tds['name']
+                    product_short = (tds['product_item'] or '-')[:30]
+                    version_short = (tds['version'] or '-')[:20]
+                    lines.append(f"| {tds['link']} | {tds['status']} | {product_short} | {version_short} |")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
@@ -388,9 +393,12 @@ class RnDAgent:
             if result["success"]:
                 if result["count"] == 0:
                     return f"No TDS found matching '{query}'"
-                lines = [f"## TDS Search Results ({result['count']} found)\n"]
+                lines = [f"## 🔍 TDS Search Results\n**{result['count']} found for '{query}'**\n"]
+                lines.append("| TDS Name | Item Code | Item Name |")
+                lines.append("|----------|-----------|-----------|")
                 for tds in result["results"]:
-                    lines.append(f"• {tds['link']} | {tds['item_code']} | {tds['item_name']}")
+                    item_name_short = (tds['item_name'] or '-')[:40]
+                    lines.append(f"| {tds['link']} | {tds['item_code']} | {item_name_short} |")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
@@ -398,25 +406,38 @@ class RnDAgent:
             name = tds_name or message_lower.replace("tds", "").replace("detail", "").strip()
             result = self.get_tds_details(name)
             if result["success"]:
-                lines = [f"## TDS: {result['link']}\n"]
-                lines.append(f"**Item Code:** {result['item_code']}")
-                lines.append(f"**Item Name:** {result['item_name']}")
-                lines.append(f"**Status:** {result['status']}")
-                lines.append(f"**Version:** {result['version']}")
-                if result.get("cas_number"):
-                    lines.append(f"**CAS Number:** {result['cas_number']}")
-                if result.get("inci_name"):
-                    lines.append(f"**INCI Name:** {result['inci_name']}")
+                lines = [f"## 📝 TDS: {result['link']}\n"]
+                lines.append("---")
+                lines.append(f"🎯 **Item Code:** {result['item_code']}")
+                lines.append(f"")
+                lines.append(f"📦 **Item Name:** {result['item_name']}")
+                lines.append(f"")
+                lines.append(f"📊 **Status:** {result['status']} | **Version:** {result['version']}")
+                lines.append(f"")
+                if result.get("cas_number") or result.get("inci_name"):
+                    lines.append("---")
+                    if result.get("cas_number"):
+                        lines.append(f"🧪 **CAS Number:** {result['cas_number']}")
+                    if result.get("inci_name"):
+                        lines.append(f"🌿 **INCI Name:** {result['inci_name']}")
+                    lines.append("")
                 if result.get("shelf_life"):
-                    lines.append(f"\n**Shelf Life:** {result['shelf_life'][:200]}")
+                    lines.append("---")
+                    lines.append(f"⏳ **Shelf Life:**")
+                    lines.append(f"{result['shelf_life'][:300]}")
+                    lines.append("")
                 if result.get("parameters"):
-                    lines.append("\n**Quality Parameters:**")
-                    for param in result["parameters"][:10]:
+                    lines.append("---")
+                    lines.append("🔬 **Quality Parameters:**")
+                    lines.append("")
+                    lines.append("| Parameter | Value | UOM |")
+                    lines.append("|-----------|-------|-----|")
+                    for param in result["parameters"][:15]:
                         spec = param['specification'] or param['parameter_group'] or 'Parameter'
                         val = param['value'] or ''
                         if param['min_value'] is not None or param['max_value'] is not None:
                             val = f"{param['min_value'] or ''} - {param['max_value'] or ''}"
-                        lines.append(f"  • {spec}: {val} {param['uom'] or ''}")
+                        lines.append(f"| {spec} | {val} | {param['uom'] or '-'} |")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
