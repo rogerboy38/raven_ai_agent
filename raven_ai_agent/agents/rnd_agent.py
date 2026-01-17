@@ -380,8 +380,8 @@ class RnDAgent:
                 for tds in result["tds_list"]:
                     name_short = tds['name'][:35] + "..." if len(tds['name']) > 35 else tds['name']
                     product_short = (tds['product_item'] or '-')[:30]
-                    version_short = (tds['version'] or '-')[:20]
-                    lines.append(f"| {tds['link']} | {tds['status']} | {product_short} | {version_short} |")
+                    version_full = tds['version'] or '-'
+                    lines.append(f"| {tds['link']} | {tds['status']} | {product_short} | {version_full} |")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
