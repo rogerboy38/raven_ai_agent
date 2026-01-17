@@ -105,6 +105,7 @@ CAPABILITIES_LIST = """
 |-----|---------|
 | `@ai` | General ERPNext operations, manufacturing, sales, purchasing |
 | `@sales_order_follow_up` | Dedicated SO tracking and fulfillment |
+| `@rnd_bot` | R&D/Formulation research, innovation tracking |
 | `@bom_creator` | BOM Creator automation |
 
 ### 📊 ERPNext Data Access
@@ -2618,6 +2619,13 @@ def handle_raven_message(doc, method):
                 query = "help"
             bot_name = "sales_order_follow_up"
         
+        # Check for @rnd_bot
+        elif "rnd_bot" in plain_text.lower():
+            query = plain_text.lower().replace("@rnd_bot", "").strip()
+            if not query:
+                query = "help"
+            bot_name = "rnd_bot"
+        
         if not query:
             return
         
@@ -2634,6 +2642,11 @@ def handle_raven_message(doc, method):
                 from raven_ai_agent.agents import SalesOrderFollowupAgent
                 so_agent = SalesOrderFollowupAgent(user)
                 response = so_agent.process_command(query)
+                result = {"success": True, "response": response}
+            elif bot_name == "rnd_bot":
+                from raven_ai_agent.agents import RnDAgent
+                rnd_agent = RnDAgent(user)
+                response = rnd_agent.process_command(query)
                 result = {"success": True, "response": response}
             else:
                 agent = RaymondLucyAgent(user)
