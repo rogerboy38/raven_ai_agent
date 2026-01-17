@@ -34,38 +34,20 @@ class RnDAgent:
     def get_tds_list(self, limit: int = 20) -> Dict:
         """List TDS Product Specifications"""
         try:
-            # Get available fields dynamically
-            meta = frappe.get_meta("TDS Product Specification")
-            available_fields = [f.fieldname for f in meta.fields]
-            
-            # Base fields that should exist
-            fields = ["name"]
-            if "item_code" in available_fields:
-                fields.append("item_code")
-            if "item" in available_fields:
-                fields.append("item")
-            if "item_name" in available_fields:
-                fields.append("item_name")
-            if "product_name" in available_fields:
-                fields.append("product_name")
-            if "status" in available_fields:
-                fields.append("status")
-            
             tds_list = frappe.get_all("TDS Product Specification",
-                fields=fields,
+                fields=["name", "item_code", "item_name", "product_item", "workflow_state", "tds_version"],
                 order_by="creation desc",
                 limit=limit)
             
             result = []
             for tds in tds_list:
-                item_code = tds.get("item_code") or tds.get("item") or "N/A"
-                product_name = tds.get("product_name") or tds.get("item_name") or tds.name
                 result.append({
                     "name": tds.name,
                     "link": self.make_link("TDS Product Specification", tds.name),
-                    "item_code": item_code,
-                    "product_name": product_name,
-                    "status": tds.get("status", "N/A")
+                    "item_code": tds.get("item_code") or "N/A",
+                    "item_name": tds.get("item_name") or tds.name,
+                    "status": tds.get("workflow_state") or "N/A",
+                    "version": tds.get("tds_version") or ""
                 })
             
             return {"success": True, "count": len(result), "tds_list": result}
@@ -77,35 +59,36 @@ class RnDAgent:
         try:
             tds = frappe.get_doc("TDS Product Specification", tds_name)
             
-            # Get item_code from whichever field exists
-            item_code = getattr(tds, 'item_code', None) or getattr(tds, 'item', None) or "N/A"
-            product_name = getattr(tds, 'product_name', None) or getattr(tds, 'item_name', None) or tds.name
-            
-            # Get formulation items if available - check for different possible child table names
-            formulation = []
-            child_tables = ['items', 'ingredients', 'formulation_items', 'tds_items']
-            for table_name in child_tables:
-                if hasattr(tds, table_name) and getattr(tds, table_name):
-                    for item in getattr(tds, table_name):
-                        formulation.append({
-                            "item_code": getattr(item, 'item_code', '') or getattr(item, 'item', ''),
-                            "item_name": getattr(item, 'item_name', ''),
-                            "qty": getattr(item, 'qty', 0) or getattr(item, 'quantity', 0),
-                            "uom": getattr(item, 'uom', '') or getattr(item, 'stock_uom', ''),
-                            "percentage": getattr(item, 'percentage', 0) or getattr(item, 'percent', 0)
-                        })
-                    break
+            # Get quality inspection parameters
+            parameters = []
+            if hasattr(tds, 'item_quality_inspection_parameter') and tds.item_quality_inspection_parameter:
+                for param in tds.item_quality_inspection_parameter:
+                    parameters.append({
+                        "specification": getattr(param, 'specification', ''),
+                        "parameter_group": getattr(param, 'parameter_group', ''),
+                        "value": getattr(param, 'value', ''),
+                        "uom": getattr(param, 'custom_uom', ''),
+                        "min_value": getattr(param, 'min_value', None),
+                        "max_value": getattr(param, 'max_value', None),
+                        "method": getattr(param, 'custom_method', '')
+                    })
             
             return {
                 "success": True,
                 "name": tds.name,
                 "link": self.make_link("TDS Product Specification", tds.name),
-                "item_code": item_code,
-                "product_name": product_name,
-                "description": getattr(tds, 'description', ''),
-                "status": getattr(tds, 'status', 'N/A'),
-                "formulation": formulation,
-                "ingredients": formulation  # Alias for compatibility
+                "item_code": tds.item_code or "N/A",
+                "item_name": tds.item_name or tds.name,
+                "product_item": tds.product_item or "",
+                "status": tds.workflow_state or "N/A",
+                "version": tds.tds_version or "",
+                "approval_date": str(tds.approval_date) if tds.approval_date else "",
+                "cas_number": tds.cas_number or "",
+                "inci_name": tds.inci_name or "",
+                "shelf_life": tds.shelf_life or "",
+                "packaging": tds.packaging or "",
+                "storage": tds.storage_and_handling_conditions or "",
+                "parameters": parameters
             }
         except frappe.DoesNotExistError:
             return {"success": False, "error": f"TDS '{tds_name}' not found"}
@@ -113,38 +96,18 @@ class RnDAgent:
             return {"success": False, "error": str(e)}
     
     def search_tds(self, query: str) -> Dict:
-        """Search TDS by item code or product name"""
+        """Search TDS by item code or item name"""
         try:
-            # Get available fields dynamically
-            meta = frappe.get_meta("TDS Product Specification")
-            available_fields = [f.fieldname for f in meta.fields]
+            fields = ["name", "item_code", "item_name", "workflow_state"]
             
-            fields = ["name"]
-            search_fields = []
-            
-            if "item_code" in available_fields:
-                fields.append("item_code")
-                search_fields.append("item_code")
-            if "item" in available_fields:
-                fields.append("item")
-                search_fields.append("item")
-            if "item_name" in available_fields:
-                fields.append("item_name")
-                search_fields.append("item_name")
-            if "product_name" in available_fields:
-                fields.append("product_name")
-                search_fields.append("product_name")
-            if "status" in available_fields:
-                fields.append("status")
-            
-            # Simple name search that always works
+            # Search by name
             tds_list = frappe.get_all("TDS Product Specification",
                 filters={"name": ["like", f"%{query}%"]},
                 fields=fields,
                 limit=10)
             
-            # Also search by other fields if available
-            for field in search_fields:
+            # Also search by item_code and item_name
+            for field in ["item_code", "item_name"]:
                 if len(tds_list) < 10:
                     more = frappe.get_all("TDS Product Specification",
                         filters={field: ["like", f"%{query}%"]},
@@ -157,13 +120,11 @@ class RnDAgent:
             
             result = []
             for tds in tds_list[:10]:
-                item_code = tds.get("item_code") or tds.get("item") or "N/A"
-                product_name = tds.get("product_name") or tds.get("item_name") or tds.name
                 result.append({
                     "name": tds.name,
                     "link": self.make_link("TDS Product Specification", tds.name),
-                    "item_code": item_code,
-                    "product_name": product_name
+                    "item_code": tds.get("item_code") or "N/A",
+                    "item_name": tds.get("item_name") or tds.name
                 })
             
             return {"success": True, "count": len(result), "results": result}
@@ -397,7 +358,7 @@ class RnDAgent:
             if result["success"]:
                 lines = [f"## TDS Product Specifications ({result['count']} found)\n"]
                 for tds in result["tds_list"]:
-                    lines.append(f"• {tds['link']} | {tds['item_code']} | {tds['product_name']}")
+                    lines.append(f"• {tds['link']} | {tds['item_code']} | {tds['item_name']} | {tds['status']}")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
@@ -411,7 +372,7 @@ class RnDAgent:
                     return f"No TDS found matching '{query}'"
                 lines = [f"## TDS Search Results ({result['count']} found)\n"]
                 for tds in result["results"]:
-                    lines.append(f"• {tds['link']} | {tds['item_code']} | {tds['product_name']}")
+                    lines.append(f"• {tds['link']} | {tds['item_code']} | {tds['item_name']}")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
@@ -421,12 +382,23 @@ class RnDAgent:
             if result["success"]:
                 lines = [f"## TDS: {result['link']}\n"]
                 lines.append(f"**Item Code:** {result['item_code']}")
-                lines.append(f"**Product:** {result['product_name']}")
+                lines.append(f"**Item Name:** {result['item_name']}")
                 lines.append(f"**Status:** {result['status']}")
-                if result.get("formulation"):
-                    lines.append("\n**Formulation:**")
-                    for ing in result["formulation"]:
-                        lines.append(f"  • {ing['item_code']}: {ing['qty']} {ing['uom']} ({ing['percentage']}%)")
+                lines.append(f"**Version:** {result['version']}")
+                if result.get("cas_number"):
+                    lines.append(f"**CAS Number:** {result['cas_number']}")
+                if result.get("inci_name"):
+                    lines.append(f"**INCI Name:** {result['inci_name']}")
+                if result.get("shelf_life"):
+                    lines.append(f"\n**Shelf Life:** {result['shelf_life'][:200]}")
+                if result.get("parameters"):
+                    lines.append("\n**Quality Parameters:**")
+                    for param in result["parameters"][:10]:
+                        spec = param['specification'] or param['parameter_group'] or 'Parameter'
+                        val = param['value'] or ''
+                        if param['min_value'] is not None or param['max_value'] is not None:
+                            val = f"{param['min_value'] or ''} - {param['max_value'] or ''}"
+                        lines.append(f"  • {spec}: {val} {param['uom'] or ''}")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
