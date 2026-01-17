@@ -196,6 +196,7 @@ Use `@sales_order_follow_up` for dedicated SO tracking:
 - `@ai force fix bom BOM-XXX label LBLXXX` - Force SQL insert
 
 ### 🏗️ BOM Creator
+- `@ai show bom [NAME]` - View BOM or BOM Creator details
 - `@ai !submit bom BOM-XXXX` - Submit BOM Creator to generate BOMs
 - `@ai validate bom BOM-XXXX` - Validate BOM Creator before submission
 - `@ai create bom from tds [TDS-NAME]` - Create BOM Creator from TDS
@@ -913,15 +914,15 @@ class RaymondLucyAgent:
                 )
                 if work_orders:
                     site_name = frappe.local.site
-                    wo_list = []
+                    msg = "📋 **ACTIVE WORK ORDERS**\n\n"
+                    msg += "| Work Order | Product | Progress | Status | Start Date |\n"
+                    msg += "|------------|---------|----------|--------|------------|\n"
                     for wo in work_orders:
                         progress = f"{wo.produced_qty or 0}/{wo.qty}"
-                        wo_link = f"https://{site_name}/app/work-order/{wo.name}"
-                        wo_list.append(f"• **[{wo.name}]({wo_link})**\n   {wo.production_item} · {progress} · {wo.status}")
-                    return {
-                        "success": True,
-                        "message": f"📋 **ACTIVE WORK ORDERS**\n\n" + "\n\n".join(wo_list)
-                    }
+                        wo_link = f"[{wo.name}](https://{site_name}/app/work-order/{wo.name})"
+                        start_date = str(wo.planned_start_date or '-')
+                        msg += f"| {wo_link} | {wo.production_item} | {progress} | {wo.status} | {start_date} |\n"
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "No active work orders found."}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -1962,15 +1963,14 @@ class RaymondLucyAgent:
                 )
                 if mrs:
                     site_name = frappe.local.site
-                    mr_list = []
+                    msg = "📋 **MATERIAL REQUESTS**\n\n"
+                    msg += "| MR | Type | Status | Schedule | Ordered |\n"
+                    msg += "|----|------|--------|----------|---------|\n"
                     for mr in mrs:
                         ordered = f"{mr.per_ordered or 0:.0f}%"
-                        mr_link = f"https://{site_name}/app/material-request/{mr.name}"
-                        mr_list.append(f"• **[{mr.name}]({mr_link})**\n   {mr.material_request_type} · {mr.status} · Ordered: {ordered}")
-                    return {
-                        "success": True,
-                        "message": f"📋 **MATERIAL REQUESTS**\n\n" + "\n\n".join(mr_list)
-                    }
+                        mr_link = f"[{mr.name}](https://{site_name}/app/material-request/{mr.name})"
+                        msg += f"| {mr_link} | {mr.material_request_type} | {mr.status} | {mr.schedule_date} | {ordered} |\n"
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "No pending material requests found."}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -2021,11 +2021,13 @@ class RaymondLucyAgent:
                 )
                 if rfqs:
                     site_name = frappe.local.site
-                    rfq_list = [f"• **[{r.name}](https://{site_name}/app/request-for-quotation/{r.name})**\n   {r.status} · {r.transaction_date}" for r in rfqs]
-                    return {
-                        "success": True,
-                        "message": f"📨 **REQUEST FOR QUOTATIONS**\n\n" + "\n\n".join(rfq_list)
-                    }
+                    msg = "📨 **REQUEST FOR QUOTATIONS**\n\n"
+                    msg += "| RFQ | Status | Date |\n"
+                    msg += "|-----|--------|------|\n"
+                    for r in rfqs:
+                        rfq_link = f"[{r.name}](https://{site_name}/app/request-for-quotation/{r.name})"
+                        msg += f"| {rfq_link} | {r.status} | {r.transaction_date} |\n"
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "No RFQs found."}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -2041,15 +2043,14 @@ class RaymondLucyAgent:
                 )
                 if sqs:
                     site_name = frappe.local.site
-                    sq_list = []
+                    msg = "📄 **SUPPLIER QUOTATIONS**\n\n"
+                    msg += "| Quotation | Supplier | Amount | Status | Date |\n"
+                    msg += "|-----------|----------|--------|--------|------|\n"
                     for sq in sqs:
                         amt = f"${sq.grand_total:,.2f}" if sq.grand_total else "—"
-                        sq_link = f"https://{site_name}/app/supplier-quotation/{sq.name}"
-                        sq_list.append(f"• **[{sq.name}]({sq_link})**\n   {sq.supplier} · {amt} · {sq.status}")
-                    return {
-                        "success": True,
-                        "message": f"📄 **SUPPLIER QUOTATIONS**\n\n" + "\n\n".join(sq_list)
-                    }
+                        sq_link = f"[{sq.name}](https://{site_name}/app/supplier-quotation/{sq.name})"
+                        msg += f"| {sq_link} | {sq.supplier} | {amt} | {sq.status} | {sq.transaction_date} |\n"
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "No supplier quotations found."}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -2095,22 +2096,21 @@ class RaymondLucyAgent:
             try:
                 pos = frappe.get_list("Purchase Order",
                     filters={"docstatus": ["<", 2]},
-                    fields=["name", "supplier", "grand_total", "status", "per_received"],
+                    fields=["name", "supplier", "grand_total", "status", "per_received", "transaction_date"],
                     order_by="modified desc",
                     limit=15
                 )
                 if pos:
                     site_name = frappe.local.site
-                    po_list = []
+                    msg = "🛒 **PURCHASE ORDERS**\n\n"
+                    msg += "| PO | Supplier | Amount | Status | Received | Date |\n"
+                    msg += "|----|----------|--------|--------|----------|------|\n"
                     for po in pos:
                         amt = f"${po.grand_total:,.2f}" if po.grand_total else "—"
                         received = f"{po.per_received or 0:.0f}%"
-                        po_link = f"https://{site_name}/app/purchase-order/{po.name}"
-                        po_list.append(f"• **[{po.name}]({po_link})**\n   {po.supplier} · {amt} · {po.status} · Rcvd: {received}")
-                    return {
-                        "success": True,
-                        "message": f"🛒 **PURCHASE ORDERS**\n\n" + "\n\n".join(po_list)
-                    }
+                        po_link = f"[{po.name}](https://{site_name}/app/purchase-order/{po.name})"
+                        msg += f"| {po_link} | {po.supplier} | {amt} | {po.status} | {received} | {po.transaction_date} |\n"
+                    return {"success": True, "message": msg}
                 return {"success": True, "message": "No purchase orders found."}
             except Exception as e:
                 return {"success": False, "error": str(e)}
