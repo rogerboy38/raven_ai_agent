@@ -527,11 +527,16 @@ class RnDAgent:
                     return "\n".join(lines)
             return f"❌ Error: {result['error']}"
         
-        # Show BOM or BOM Creator
+        # Show BOM or BOM Creator (with optional 'all items' flag)
+        all_items_match = re.search(r'show\s+all\s+items\s+(?:bom|bom\s+creator)\s+([^\s]+)', message, re.IGNORECASE)
+        if all_items_match:
+            bom_name = all_items_match.group(1)
+            return self._get_bom_or_creator(bom_name, show_all=True)
+        
         bom_match = re.search(r'show\s+(?:bom|bom\s+creator)\s+([^\s]+)', message, re.IGNORECASE)
         if bom_match:
             bom_name = bom_match.group(1)
-            return self._get_bom_or_creator(bom_name)
+            return self._get_bom_or_creator(bom_name, show_all=False)
         
         # Help
         return """## R&D Bot Commands
@@ -542,7 +547,8 @@ class RnDAgent:
 • `tds detail [TDS-NAME]` - View TDS details
 
 **BOM / BOM Creator:**
-• `show bom [NAME]` - View BOM or BOM Creator details
+• `show bom [NAME]` - View BOM or BOM Creator (25 items max)
+• `show all items bom [NAME]` - View all items in BOM
 
 **Formulation:**
 • `formulation [ITEM]` - Get formulation/recipe for item
@@ -559,7 +565,7 @@ class RnDAgent:
 • `acemannan [property]` - Specific property (immunomodulator, antiviral, wound_healing, etc.)
 """
     
-    def _get_bom_or_creator(self, bom_name: str) -> str:
+    def _get_bom_or_creator(self, bom_name: str, show_all: bool = False) -> str:
         """Get BOM or BOM Creator details with table formatting"""
         try:
             from raven_ai_agent.api.bom_fixer import get_bom_details
@@ -581,18 +587,21 @@ class RnDAgent:
                 lines.append(f"  Total Cost: ${result.get('total_cost', 0):,.2f}\n")
                 
                 if result.get("items"):
+                    display_limit = None if show_all else 25
+                    items_to_show = result['items'] if show_all else result['items'][:25]
+                    
                     lines.append(f"**Items ({len(result['items'])}):**\n")
                     lines.append("| # | Item Code | Description | Qty | UOM |")
                     lines.append("|---|-----------|-------------|-----|-----|")
-                    display_limit = 25
-                    for idx, item in enumerate(result['items'][:display_limit], 1):
-                        item_url = self.make_link("Item", item.get("item_code", ""))
-                        desc = (item.get("item_name") or item.get("item_code", ""))[:30]
+                    for idx, item in enumerate(items_to_show, 1):
+                        item_code = item.get("item_code", "")
+                        item_url = self.make_link("Item", item_code)
+                        desc = (item.get("item_name") or item_code)[:30]
                         lines.append(f"| {idx} | {item_url} | {desc} | {item.get('qty', 1)} | {item.get('uom', '-')} |")
                     
-                    if len(result['items']) > display_limit:
-                        remaining = len(result['items']) - display_limit
-                        lines.append(f"\n*... and {remaining} more items*")
+                    if not show_all and len(result['items']) > 25:
+                        remaining = len(result['items']) - 25
+                        lines.append(f"\n*... and {remaining} more items. Use `show all items bom {bom_name}` to see all.*")
                 
                 return "\n".join(lines)
             
@@ -617,18 +626,19 @@ class RnDAgent:
                         lines.append(f"  Raw Material Cost: ${bc.raw_material_cost or 0:,.2f}\n")
                         
                         if bc.items:
+                            items_to_show = bc.items if show_all else bc.items[:25]
+                            
                             lines.append(f"**Items ({len(bc.items)}):**\n")
                             lines.append("| # | Item Code | Description | Qty | UOM |")
                             lines.append("|---|-----------|-------------|-----|-----|")
-                            display_limit = 25
-                            for idx, item in enumerate(bc.items[:display_limit], 1):
+                            for idx, item in enumerate(items_to_show, 1):
                                 item_url = self.make_link("Item", item.item_code)
                                 desc = (item.item_name or item.item_code)[:30]
                                 lines.append(f"| {idx} | {item_url} | {desc} | {item.qty or 1} | {item.uom or '-'} |")
                             
-                            if len(bc.items) > display_limit:
-                                remaining = len(bc.items) - display_limit
-                                lines.append(f"\n*... and {remaining} more items*")
+                            if not show_all and len(bc.items) > 25:
+                                remaining = len(bc.items) - 25
+                                lines.append(f"\n*... and {remaining} more items. Use `show all items bom {bom_name}` to see all.*")
                         
                         return "\n".join(lines)
                     else:
