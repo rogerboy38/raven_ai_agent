@@ -103,6 +103,25 @@ class ExecutiveInsightsAgent:
                     "department": "finance",
                     "keywords": ["pending invoice", "not invoiced", "delivered not billed"],
                     "description": "Delivered but not invoiced"
+                },
+                # New models from Insights team spec
+                "fact_order_items": {
+                    "altitude": "bird",
+                    "department": "sales",
+                    "keywords": ["order items", "product mix", "line items"],
+                    "description": "Line-item detail for product mix analysis"
+                },
+                "fact_shipments": {
+                    "altitude": "bird",
+                    "department": "logistics",
+                    "keywords": ["shipments", "direct shipment", "transport"],
+                    "description": "Logistics operations tracking"
+                },
+                "list_late_orders": {
+                    "altitude": "dog",
+                    "department": "sales",
+                    "keywords": ["late orders", "overdue orders", "delayed"],
+                    "description": "Exception list for overdue orders"
                 }
             },
             "dashboards": {
@@ -579,3 +598,7 @@ def get_alerts(user: str = None) -> Dict:
     """Get alerts/exceptions"""
     agent = ExecutiveInsightsAgent(user or frappe.session.user)
     return {"message": agent._dog_view()}
+
+
+# Alias for compatibility with agent.py import
+ExecutiveAgent = ExecutiveInsightsAgent

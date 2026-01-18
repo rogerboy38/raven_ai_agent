@@ -2734,7 +2734,7 @@ def handle_raven_message(doc, method):
             elif bot_name == "executive":
                 from raven_ai_agent.agents.executive_agent import ExecutiveAgent
                 exec_agent = ExecutiveAgent(user)
-                response = exec_agent.handle_message(query)
+                response = exec_agent.process_command(query)
                 result = {"success": True, "response": response}
             else:
                 agent = RaymondLucyAgent(user)
