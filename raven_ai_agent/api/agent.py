@@ -2702,6 +2702,13 @@ def handle_raven_message(doc, method):
                 query = "help"
             bot_name = "rnd_bot"
         
+        # Check for @executive bot
+        elif "executive" in plain_text.lower():
+            query = plain_text.lower().replace("@executive", "").strip()
+            if not query:
+                query = "helicopter"  # Default to helicopter view
+            bot_name = "executive"
+        
         if not query:
             return
         
@@ -2723,6 +2730,11 @@ def handle_raven_message(doc, method):
                 from raven_ai_agent.agents import RnDAgent
                 rnd_agent = RnDAgent(user)
                 response = rnd_agent.process_command(query)
+                result = {"success": True, "response": response}
+            elif bot_name == "executive":
+                from raven_ai_agent.agents.executive_agent import ExecutiveAgent
+                exec_agent = ExecutiveAgent(user)
+                response = exec_agent.handle_message(query)
                 result = {"success": True, "response": response}
             else:
                 agent = RaymondLucyAgent(user)
