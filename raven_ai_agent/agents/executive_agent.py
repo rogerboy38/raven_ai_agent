@@ -253,32 +253,43 @@ class ExecutiveInsightsAgent:
                   AND sii.name IS NULL
             """, as_dict=True)[0].count or 0
             
-            # Format response
-            msg = f"""## 🚁 Executive Summary - {today.strftime('%B %Y')}
+            # Format response with better spacing
+            msg = f"""## 🚁 Executive Summary
+### {today.strftime('%B %d, %Y')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ### 📊 Key Metrics
-| Metric | Value |
-|--------|-------|
-| 💰 Revenue MTD | ${revenue_mtd:,.2f} |
-| 📦 Orders MTD | {orders_count} |
-| 📋 Open Orders | {open_orders.count} (${open_orders.total:,.2f}) |
 
-### 🏭 Operations
-| Status | Count |
-|--------|-------|
+💰 **Revenue MTD:** ${revenue_mtd:,.2f}
+
+📦 **Orders MTD:** {orders_count}
+
+📋 **Open Orders:** {open_orders.count} orders (${open_orders.total:,.2f})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### 🏭 Operations Status
+
 """
             for status, count in wo_summary.items():
-                msg += f"| {status} | {count} |\n"
+                emoji = "🟢" if status == "Completed" else "🟡" if status == "In Process" else "⚪"
+                msg += f"{emoji} **{status}:** {count}\n\n"
             
-            msg += f"""
-### ⚠️ Alerts
-| Alert | Count |
-|-------|-------|
-| 🔴 Overdue Orders | {overdue_count} |
-| 🟡 Pending Invoices | {pending_invoice_count} |
+            msg += f"""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
----
-💡 Use `@executive alerts` for details | `@executive sales` for pipeline
+### ⚠️ Alerts
+
+🔴 **Overdue Orders:** {overdue_count}
+
+🟡 **Pending Invoices:** {pending_invoice_count}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 **Quick Commands:**
+• `@executive alerts` → See details
+• `@executive sales` → Pipeline view
+• `@executive operations` → Production status
 """
             return msg
             
@@ -304,11 +315,10 @@ class ExecutiveInsightsAgent:
             """, as_dict=True)
             
             if overdue_orders:
-                alerts.append("### 🔴 Overdue Sales Orders\n")
-                alerts.append("| Order | Customer | Days Late | Amount |\n|-------|----------|-----------|--------|\n")
+                alerts.append("### 🔴 Overdue Sales Orders\n\n")
                 for o in overdue_orders:
                     link = f"[{o.name}](https://{self.site_name}/app/sales-order/{o.name})"
-                    alerts.append(f"| {link} | {o.customer[:20]} | {o.days_overdue} | ${o.grand_total:,.0f} |\n")
+                    alerts.append(f"• {link}\n  📍 {o.customer[:25]} · ⏰ {o.days_overdue} days late · 💵 ${o.grand_total:,.0f}\n\n")
             
             # Late Work Orders
             late_wo = frappe.db.sql("""
@@ -323,11 +333,11 @@ class ExecutiveInsightsAgent:
             """, as_dict=True)
             
             if late_wo:
-                alerts.append("\n### 🟠 Late Work Orders\n")
-                alerts.append("| Work Order | Item | Days Late | Qty |\n|------------|------|-----------|-----|\n")
+                alerts.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+                alerts.append("### 🟠 Late Work Orders\n\n")
                 for w in late_wo:
                     link = f"[{w.name}](https://{self.site_name}/app/work-order/{w.name})"
-                    alerts.append(f"| {link} | {w.production_item[:20]} | {w.days_late} | {w.qty} |\n")
+                    alerts.append(f"• {link}\n  🏭 {w.production_item[:25]} · ⏰ {w.days_late} days late · 📦 Qty: {w.qty}\n\n")
             
             # Pending Quotations (no response > 7 days)
             stale_quotes = frappe.db.sql("""
@@ -342,16 +352,16 @@ class ExecutiveInsightsAgent:
             """, as_dict=True)
             
             if stale_quotes:
-                alerts.append("\n### 🟡 Stale Quotations (>7 days)\n")
-                alerts.append("| Quotation | Customer | Days | Amount |\n|-----------|----------|------|--------|\n")
+                alerts.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+                alerts.append("### 🟡 Stale Quotations (>7 days)\n\n")
                 for q in stale_quotes:
                     link = f"[{q.name}](https://{self.site_name}/app/quotation/{q.name})"
-                    alerts.append(f"| {link} | {q.party_name[:20]} | {q.days_pending} | ${q.grand_total:,.0f} |\n")
+                    alerts.append(f"• {link}\n  👤 {q.party_name[:25]} · ⏰ {q.days_pending} days · 💵 ${q.grand_total:,.0f}\n\n")
             
             if alerts:
-                return "## 🐕 Follow-Up Required\n\n" + "".join(alerts)
+                return "## 🐕 Follow-Up Required\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" + "".join(alerts) + "\n💡 Click links to open in ERPNext"
             else:
-                return "## ✅ All Clear!\n\nNo urgent items requiring follow-up."
+                return "## ✅ All Clear!\n\n🎉 No urgent items requiring follow-up.\n\nEverything is running smoothly!"
                 
         except Exception as e:
             frappe.logger().error(f"[Executive Agent] Dog view error: {str(e)}")
