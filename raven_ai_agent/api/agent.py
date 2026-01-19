@@ -206,6 +206,7 @@ Use `@sales_order_follow_up` for dedicated SO tracking:
 - `@ai !submit Sales Order SO-XXXX` - Submit sales order
 - `@ai !submit Work Order MFG-WO-XXXX` - Submit work order
 - `@ai unlink sales order from MFG-WO-XXXX` - Remove SO link from WO
+- `@ai !fix quotation SAL-QTN-XXXX` - Fix cancelled quotation (revert to draft)
 
 ### ℹ️ Help
 - `@ai help` or `@ai capabilities` - Show this list
@@ -2334,6 +2335,64 @@ class RaymondLucyAgent:
                 return {"success": False, "error": str(e)}
         
         # ==================== END SALES-TO-PURCHASE CYCLE SOP ====================
+        
+        # ==================== FIX QUOTATION (Cancelled → Draft) ====================
+        
+        # Fix quotation: @ai fix quotation SAL-QTN-XXXX or @ai !fix quotation SAL-QTN-XXXX
+        if "fix" in query_lower and "quotation" in query_lower:
+            qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+            if qtn_match:
+                qtn_name = qtn_match.group(1).upper()
+                try:
+                    qtn = frappe.get_doc("Quotation", qtn_name)
+                    site_name = frappe.local.site
+                    qtn_link = f"https://{site_name}/app/quotation/{qtn_name}"
+                    
+                    # Case 1: Quotation is cancelled - revert to draft
+                    if qtn.docstatus == 2:
+                        if not is_confirm:
+                            return {
+                                "requires_confirmation": True,
+                                "preview": f"🔧 **FIX QUOTATION {qtn_name}?**\n\n  Customer: {qtn.party_name}\n  Status: Cancelled (docstatus=2)\n  Total: ${qtn.grand_total:,.2f}\n\nThis will reset the quotation to Draft so you can modify it.\n\n⚠️ Use `@ai !fix quotation {qtn_name}` or say 'confirm' to proceed."
+                            }
+                        
+                        # Reset quotation to draft via SQL
+                        frappe.db.sql("""
+                            UPDATE `tabQuotation` 
+                            SET docstatus = 0, status = 'Draft'
+                            WHERE name = %s
+                        """, qtn_name)
+                        
+                        # Reset child tables
+                        frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus = 0 WHERE parent = %s", qtn_name)
+                        
+                        frappe.db.commit()
+                        
+                        return {
+                            "success": True,
+                            "message": f"✅ Quotation **[{qtn_name}]({qtn_link})** fixed!\n\n  Customer: {qtn.party_name}\n  Status: Draft (docstatus=0)\n  Total: ${qtn.grand_total:,.2f}\n\n📝 You can now edit the quotation in ERPNext."
+                        }
+                    
+                    # Case 2: Already in draft
+                    elif qtn.docstatus == 0:
+                        return {
+                            "success": True,
+                            "message": f"✅ Quotation **[{qtn_name}]({qtn_link})** is already in Draft status.\n\n  Customer: {qtn.party_name}\n  Status: {qtn.status}"
+                        }
+                    
+                    # Case 3: Submitted - needs to be cancelled first
+                    elif qtn.docstatus == 1:
+                        return {
+                            "success": False,
+                            "error": f"Quotation **[{qtn_name}]({qtn_link})** is Submitted.\n\nTo fix it:\n1. Cancel it first in ERPNext\n2. Then run `@ai !fix quotation {qtn_name}`"
+                        }
+                    
+                except frappe.DoesNotExistError:
+                    return {"success": False, "error": f"Quotation **{qtn_name}** not found."}
+                except Exception as e:
+                    return {"success": False, "error": f"Failed to fix quotation: {str(e)}"}
+        
+        # ==================== END FIX QUOTATION ====================
         
         # Create Supplier from research: @ai create supplier [name]
         if "create supplier" in query_lower or "crear proveedor" in query_lower:
