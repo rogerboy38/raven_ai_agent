@@ -207,6 +207,7 @@ Use `@sales_order_follow_up` for dedicated SO tracking:
 - `@ai !submit Work Order MFG-WO-XXXX` - Submit work order
 - `@ai unlink sales order from MFG-WO-XXXX` - Remove SO link from WO
 - `@ai !fix quotation SAL-QTN-XXXX` - Fix cancelled quotation (revert to draft)
+- `@ai !fix quotation from SAL-QTN-XXXX to SAL-QTN-YYYY` - Batch fix range
 
 ### ℹ️ Help
 - `@ai help` or `@ai capabilities` - Show this list
@@ -2338,7 +2339,66 @@ class RaymondLucyAgent:
         
         # ==================== FIX QUOTATION (Cancelled → Draft) ====================
         
-        # Fix quotation: @ai fix quotation SAL-QTN-XXXX or @ai !fix quotation SAL-QTN-XXXX
+        # Fix quotation range: @ai !fix quotation from SAL-QTN-2024-00752 to SAL-QTN-2024-00760
+        if "fix" in query_lower and "quotation" in query_lower and "from" in query_lower and "to" in query_lower:
+            range_match = re.search(r'from\s+(SAL-QTN-(\d+)-(\d+))\s+to\s+(SAL-QTN-(\d+)-(\d+))', query, re.IGNORECASE)
+            if range_match:
+                start_name = range_match.group(1).upper()
+                start_year = range_match.group(2)
+                start_num = int(range_match.group(3))
+                end_name = range_match.group(4).upper()
+                end_year = range_match.group(5)
+                end_num = int(range_match.group(6))
+                
+                # Validate same year
+                if start_year != end_year:
+                    return {"success": False, "error": "Range must be within the same year."}
+                
+                if start_num > end_num:
+                    return {"success": False, "error": f"Invalid range: start ({start_num}) > end ({end_num})"}
+                
+                if end_num - start_num > 50:
+                    return {"success": False, "error": "Range too large (max 50 quotations at once)."}
+                
+                site_name = frappe.local.site
+                fixed = []
+                skipped = []
+                errors = []
+                
+                for num in range(start_num, end_num + 1):
+                    qtn_name = f"SAL-QTN-{start_year}-{num:05d}"
+                    try:
+                        qtn = frappe.get_doc("Quotation", qtn_name)
+                        if qtn.docstatus == 2:  # Cancelled
+                            frappe.db.sql("""
+                                UPDATE `tabQuotation` 
+                                SET docstatus = 0, status = 'Draft'
+                                WHERE name = %s
+                            """, qtn_name)
+                            frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus = 0 WHERE parent = %s", qtn_name)
+                            fixed.append(f"[{qtn_name}](https://{site_name}/app/quotation/{qtn_name})")
+                        elif qtn.docstatus == 0:
+                            skipped.append(f"{qtn_name} (already Draft)")
+                        elif qtn.docstatus == 1:
+                            skipped.append(f"{qtn_name} (Submitted)")
+                    except frappe.DoesNotExistError:
+                        errors.append(f"{qtn_name} (not found)")
+                    except Exception as e:
+                        errors.append(f"{qtn_name} ({str(e)[:30]})")
+                
+                frappe.db.commit()
+                
+                msg = f"🔧 **BATCH FIX QUOTATIONS** ({start_name} → {end_name})\n\n"
+                if fixed:
+                    msg += f"✅ **Fixed ({len(fixed)}):**\n" + "\n".join([f"  • {q}" for q in fixed]) + "\n\n"
+                if skipped:
+                    msg += f"⏭️ **Skipped ({len(skipped)}):**\n" + "\n".join([f"  • {q}" for q in skipped]) + "\n\n"
+                if errors:
+                    msg += f"❌ **Errors ({len(errors)}):**\n" + "\n".join([f"  • {q}" for q in errors])
+                
+                return {"success": True, "message": msg}
+        
+        # Fix single quotation: @ai fix quotation SAL-QTN-XXXX or @ai !fix quotation SAL-QTN-XXXX
         if "fix" in query_lower and "quotation" in query_lower:
             qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
             if qtn_match:
