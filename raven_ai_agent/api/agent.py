@@ -2466,10 +2466,13 @@ class RaymondLucyAgent:
         }
         
         # Update quotation item: @ai !update quotation SAL-QTN-XXXX item ITEM-CODE [customer CUSTOMER]
-        if "update quotation" in query_lower and "item" in query_lower:
+        if ("update" in query_lower and "quotation" in query_lower and "item" in query_lower) or \
+           ("actualizar" in query_lower and "cotizacion" in query_lower):
             qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
-            item_match = re.search(r'item\s+([^\s]+)', query, re.IGNORECASE)
+            item_match = re.search(r'item\s+(\S+)', query, re.IGNORECASE)
             customer_match = re.search(r'customer\s+(.+?)(?:\s*$)', query, re.IGNORECASE)
+            
+            frappe.logger().info(f"[AI Agent] Update quotation: qtn_match={qtn_match}, item_match={item_match}")
             
             if qtn_match and item_match:
                 qtn_name = qtn_match.group(1).upper()
@@ -2557,6 +2560,12 @@ class RaymondLucyAgent:
                 except Exception as e:
                     frappe.db.rollback()
                     return {"success": False, "error": f"Failed to update quotation: {str(e)}"}
+            else:
+                # Pattern didn't match - provide usage help
+                return {
+                    "success": False,
+                    "error": "**Usage:** `@ai !update quotation SAL-QTN-YYYY-NNNNN item ITEM-CODE`\n\nExample: `@ai !update quotation SAL-QTN-2024-00753 item 0307`"
+                }
         
         # ==================== END UPDATE QUOTATION ITEM & TDS ====================
         
