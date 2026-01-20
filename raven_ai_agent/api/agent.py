@@ -208,6 +208,7 @@ Use `@sales_order_follow_up` for dedicated SO tracking:
 - `@ai unlink sales order from MFG-WO-XXXX` - Remove SO link from WO
 - `@ai !fix quotation SAL-QTN-XXXX` - Fix cancelled quotation (revert to draft)
 - `@ai !fix quotation from SAL-QTN-XXXX to SAL-QTN-YYYY` - Batch fix range
+- `@ai !update quotation SAL-QTN-XXXX item ITEM-CODE` - Update quotation item & TDS
 
 ### ℹ️ Help
 - `@ai help` or `@ai capabilities` - Show this list
@@ -2453,6 +2454,111 @@ class RaymondLucyAgent:
                     return {"success": False, "error": f"Failed to fix quotation: {str(e)}"}
         
         # ==================== END FIX QUOTATION ====================
+        
+        # ==================== UPDATE QUOTATION ITEM & TDS ====================
+        
+        # Template items mapping to their variants
+        TEMPLATE_VARIANTS = {
+            "0323": "0323 INNOVALOE ALOE VERA GEL SPRAY DRIED POWDER 200:1 ORGANIC-ORGC-Aloin NMT 0.1 PPM (0.5% ST)-100/50",
+            "0310": "0310-NLT 10% PS",
+            "0803": "0803- KOSHER-ORGANIC-LAS3-HADS NMT 2 PPM-ACM 15/20",
+            "0335": "0335-BTW 8-10%-NMT 1 PPM",
+        }
+        
+        # Update quotation item: @ai !update quotation SAL-QTN-XXXX item ITEM-CODE [customer CUSTOMER]
+        if "update quotation" in query_lower and "item" in query_lower:
+            qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
+            item_match = re.search(r'item\s+([^\s]+)', query, re.IGNORECASE)
+            customer_match = re.search(r'customer\s+(.+?)(?:\s*$)', query, re.IGNORECASE)
+            
+            if qtn_match and item_match:
+                qtn_name = qtn_match.group(1).upper()
+                new_item_code = item_match.group(1).strip()
+                customer_override = customer_match.group(1).strip() if customer_match else None
+                
+                try:
+                    # Check if item is a template - use variant instead
+                    if new_item_code in TEMPLATE_VARIANTS:
+                        new_item_code = TEMPLATE_VARIANTS[new_item_code]
+                    
+                    # Verify item exists
+                    if not frappe.db.exists("Item", new_item_code):
+                        return {"success": False, "error": f"Item **{new_item_code}** not found."}
+                    
+                    # Get quotation
+                    qtn = frappe.get_doc("Quotation", qtn_name)
+                    site_name = frappe.local.site
+                    qtn_link = f"https://{site_name}/app/quotation/{qtn_name}"
+                    
+                    # Must be in draft
+                    if qtn.docstatus != 0:
+                        return {"success": False, "error": f"Quotation **{qtn_name}** must be in Draft. Use `@ai !fix quotation {qtn_name}` first."}
+                    
+                    # Get customer name for TDS lookup
+                    customer_name = customer_override or qtn.party_name or ""
+                    customer_keyword = customer_name.split()[0].upper() if customer_name else ""
+                    
+                    # Get new item details
+                    new_item = frappe.get_doc("Item", new_item_code)
+                    
+                    # TDS Lookup Logic (priority: customer-specific > item > parent TDS MASTER)
+                    tds_name = None
+                    
+                    # 1. Try customer-specific TDS
+                    if customer_keyword:
+                        tds_list = frappe.get_all("TDS Product Specification",
+                            filters=[["name", "like", f"{new_item_code}%"]],
+                            pluck="name")
+                        for t in tds_list:
+                            if customer_keyword in t.upper():
+                                tds_name = t
+                                break
+                    
+                    # 2. Try exact item TDS
+                    if not tds_name:
+                        if frappe.db.exists("TDS Product Specification", new_item_code):
+                            tds_name = new_item_code
+                    
+                    # 3. Try parent TDS MASTER
+                    if not tds_name:
+                        parent_code = new_item_code[:2] + "00" if len(new_item_code) >= 2 else None
+                        if parent_code:
+                            tds_master = f"{parent_code} TDS MASTER"
+                            if frappe.db.exists("TDS Product Specification", tds_master):
+                                tds_name = tds_master
+                    
+                    if not is_confirm:
+                        preview = f"📝 **UPDATE QUOTATION ITEM?**\n\n"
+                        preview += f"  Quotation: [{qtn_name}]({qtn_link})\n"
+                        preview += f"  Customer: {customer_name}\n\n"
+                        preview += f"  **Current Item(s):** {', '.join([i.item_code for i in qtn.items])}\n"
+                        preview += f"  **New Item:** {new_item_code}\n"
+                        preview += f"  **TDS:** {tds_name or '⚠️ Not found'}\n\n"
+                        preview += f"Use `@ai !update quotation {qtn_name} item {new_item_code}` to proceed."
+                        return {"requires_confirmation": True, "preview": preview}
+                    
+                    # Update all items in the quotation
+                    for item in qtn.items:
+                        item.item_code = new_item_code
+                        item.item_name = new_item.item_name
+                        if hasattr(item, 'custom_tds_amb'):
+                            item.custom_tds_amb = tds_name
+                    
+                    qtn.save()
+                    frappe.db.commit()
+                    
+                    return {
+                        "success": True,
+                        "message": f"✅ Quotation **[{qtn_name}]({qtn_link})** updated!\n\n  Item: {new_item_code}\n  TDS: {tds_name or 'Not set'}\n  Customer: {customer_name}"
+                    }
+                    
+                except frappe.DoesNotExistError:
+                    return {"success": False, "error": f"Quotation **{qtn_name}** not found."}
+                except Exception as e:
+                    frappe.db.rollback()
+                    return {"success": False, "error": f"Failed to update quotation: {str(e)}"}
+        
+        # ==================== END UPDATE QUOTATION ITEM & TDS ====================
         
         # Create Supplier from research: @ai create supplier [name]
         if "create supplier" in query_lower or "crear proveedor" in query_lower:
