@@ -2507,46 +2507,58 @@ class RaymondLucyAgent:
                     # TDS Lookup Logic (priority: customer-specific > item > parent TDS MASTER)
                     tds_name = None
                     
-                    # 1. Try customer-specific TDS
-                    if customer_keyword:
-                        tds_list = frappe.get_all("TDS Product Specification",
-                            filters=[["name", "like", f"{new_item_code}%"]],
-                            pluck="name")
+                    # Get base item code (first 4 chars like "0334")
+                    base_item_code = new_item_code.split("-")[0].split()[0][:4] if new_item_code else ""
+                    
+                    # 1. Try customer-specific TDS using LIKE search
+                    if customer_keyword and base_item_code:
+                        tds_list = frappe.db.sql("""
+                            SELECT name FROM `tabTDS Product Specification`
+                            WHERE name LIKE %s
+                            ORDER BY name
+                        """, (f"{base_item_code}%",), as_dict=True)
+                        
                         for t in tds_list:
-                            if customer_keyword in t.upper():
-                                tds_name = t
+                            if customer_keyword in t.name.upper():
+                                tds_name = t.name
                                 break
                     
                     # 2. Try exact item TDS
-                    if not tds_name:
-                        if frappe.db.exists("TDS Product Specification", new_item_code):
-                            tds_name = new_item_code
+                    if not tds_name and base_item_code:
+                        if frappe.db.exists("TDS Product Specification", base_item_code):
+                            tds_name = base_item_code
                     
                     # 3. Try parent TDS MASTER
-                    if not tds_name:
-                        parent_code = new_item_code[:2] + "00" if len(new_item_code) >= 2 else None
-                        if parent_code:
-                            tds_master = f"{parent_code} TDS MASTER"
-                            if frappe.db.exists("TDS Product Specification", tds_master):
-                                tds_name = tds_master
+                    if not tds_name and len(base_item_code) >= 2:
+                        parent_code = base_item_code[:2] + "00"
+                        tds_master = f"{parent_code} TDS MASTER"
+                        if frappe.db.exists("TDS Product Specification", tds_master):
+                            tds_name = tds_master
                     
                     if not is_confirm:
                         preview = f"📝 **UPDATE QUOTATION ITEM?**\n\n"
                         preview += f"  Quotation: [{qtn_name}]({qtn_link})\n"
                         preview += f"  Customer: {customer_name}\n\n"
-                        preview += f"  **Current Item(s):** {', '.join([i.item_code for i in qtn.items])}\n"
+                        preview += f"  **Current Item(s):** {', '.join([f'{i.item_code} (qty:{i.qty}, rate:{i.rate})' for i in qtn.items])}\n"
                         preview += f"  **New Item:** {new_item_code}\n"
                         preview += f"  **TDS:** {tds_name or '⚠️ Not found'}\n\n"
                         preview += f"Use `@ai !update quotation {qtn_name} item {new_item_code}` to proceed."
                         return {"requires_confirmation": True, "preview": preview}
                     
-                    # Update all items in the quotation
+                    # Update items - ONLY change item_code, item_name, and TDS
+                    # PRESERVE: qty, rate, amount, uom, and all other fields
                     for item in qtn.items:
                         item.item_code = new_item_code
                         item.item_name = new_item.item_name
+                        # Set TDS if field exists (can be None to clear it)
                         if hasattr(item, 'custom_tds_amb'):
                             item.custom_tds_amb = tds_name
                     
+                    # Also update quotation-level TDS AMB if it exists
+                    if hasattr(qtn, 'custom_tds_amb'):
+                        qtn.custom_tds_amb = tds_name
+                    
+                    qtn.flags.ignore_validate = True
                     qtn.save()
                     frappe.db.commit()
                     
