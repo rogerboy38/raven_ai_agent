@@ -99,9 +99,10 @@ class MiniMaxProvider(LLMProvider):
                 })
         
         # Use chatcompletion_v2 for OpenAI-compatible format
+        url = f"{self.BASE_URL}/text/chatcompletion_v2?GroupId={self.group_id}"
         with httpx.Client(timeout=60.0) as client:
             response = client.post(
-                f"{self.BASE_URL}/text/chatcompletion_v2",
+                url,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
@@ -135,9 +136,10 @@ class MiniMaxProvider(LLMProvider):
         model = model or self.default_model
         
         with httpx.Client(timeout=60.0) as client:
+            url = f"{self.BASE_URL}/text/chatcompletion_v2?GroupId={self.group_id}"
             with client.stream(
                 "POST",
-                f"{self.BASE_URL}/text/chatcompletion_v2",
+                url,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
