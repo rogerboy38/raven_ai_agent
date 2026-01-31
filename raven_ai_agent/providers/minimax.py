@@ -98,11 +98,30 @@ class MiniMaxProvider(LLMProvider):
         # Use OpenAI-compatible endpoint (simpler format)
         url = f"{self.BASE_URL}/chat/completions"
         
-        # Standard OpenAI format - no special 'name' field needed
-        formatted_messages = [
-            {"role": m["role"], "content": m.get("content", "")}
-            for m in messages
-        ]
+        # Standard OpenAI format - filter out empty messages
+        formatted_messages = []
+        for m in messages:
+            content = m.get("content", "")
+            if content and content.strip():  # Only include non-empty messages
+                formatted_messages.append({
+                    "role": m["role"],
+                    "content": content
+                })
+        
+        # Ensure at least one user message exists
+        if not any(m["role"] == "user" for m in formatted_messages):
+            formatted_messages.append({"role": "user", "content": "Hello"})
+        
+        payload = {
+            "model": model,
+            "messages": formatted_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens  # Use max_tokens instead of max_completion_tokens
+        }
+        
+        # Debug logging
+        frappe.logger().debug(f"[MiniMax] Request URL: {url}")
+        frappe.logger().debug(f"[MiniMax] Payload: {payload}")
         
         with httpx.Client(timeout=60.0) as client:
             response = client.post(
@@ -111,14 +130,12 @@ class MiniMaxProvider(LLMProvider):
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
                 },
-                json={
-                    "model": model,
-                    "messages": formatted_messages,
-                    "temperature": temperature,
-                    "max_completion_tokens": max_tokens,
-                    "stream": False
-                }
+                json=payload
             )
+            
+            # Log response for debugging
+            if response.status_code != 200:
+                frappe.logger().error(f"[MiniMax] Error {response.status_code}: {response.text}")
             
             response.raise_for_status()
             data = response.json()
