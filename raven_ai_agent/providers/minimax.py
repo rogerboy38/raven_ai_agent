@@ -38,35 +38,41 @@ class MiniMaxProvider(LLMProvider):
     MODELS = {
         "MiniMax-M2": "Agentic capabilities, Advanced reasoning",
         "MiniMax-M2-Stable": "High concurrency and commercial use",
+        "MiniMax-M2.1": "Coding Plan model - polyglot programming mastery",
     }
     
     PRICING = {
         "MiniMax-M2": {"input": 1.00, "output": 4.00},
         "MiniMax-M2-Stable": {"input": 1.00, "output": 4.00},
+        "MiniMax-M2.1": {"input": 0, "output": 0},  # Included in Coding Plan
     }
     
-    DEFAULT_MODEL = "MiniMax-M2"
+    DEFAULT_MODEL = "MiniMax-M2.1"  # Default to Coding Plan model
     
     def __init__(self, settings: Dict):
         super().__init__(settings)
         
-        api_key = settings.get("minimax_api_key")
+        # Try Coding Plan key first (sk-cp-...), then regular API key
+        api_key = settings.get("minimax_cp_key") or settings.get("minimax_api_key")
         group_id = settings.get("minimax_group_id")
         
         if not api_key:
             try:
                 agent_settings = frappe.get_single("AI Agent Settings")
-                api_key = agent_settings.get_password("minimax_api_key")
+                # Prefer Coding Plan key
+                api_key = agent_settings.get_password("minimax_cp_key") or agent_settings.get_password("minimax_api_key")
                 group_id = getattr(agent_settings, "minimax_group_id", None)
             except Exception:
                 pass
         
         if not api_key:
-            raise ValueError("MiniMax API key not configured")
+            raise ValueError("MiniMax API key not configured (set minimax_cp_key or minimax_api_key)")
         
         self.api_key = api_key
         self.group_id = group_id or "0"  # Default group
-        self.default_model = settings.get("minimax_model") or self.DEFAULT_MODEL
+        # Use M2.1 for Coding Plan keys (sk-cp-), M2 for regular keys
+        default = "MiniMax-M2.1" if api_key.startswith("sk-cp-") else "MiniMax-M2"
+        self.default_model = settings.get("minimax_model") or default
         self.model = self.default_model
     
     def chat(

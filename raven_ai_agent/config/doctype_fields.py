@@ -118,6 +118,12 @@ NEW_FIELDS = [
         "label": "MiniMax API Key"
     },
     {
+        "fieldname": "minimax_cp_key",
+        "fieldtype": "Password",
+        "label": "MiniMax Coding Plan Key",
+        "description": "sk-cp-... key from Coding Plan subscription (preferred over API key)"
+    },
+    {
         "fieldname": "minimax_group_id",
         "fieldtype": "Data",
         "label": "MiniMax Group ID"
