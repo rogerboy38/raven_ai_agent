@@ -52,6 +52,13 @@ class RaymondLucyAgentV2:
         
         self.autonomy_level = 1  # Default COPILOT
     
+    def _safe_get_password(self, settings, field_name):
+        """Safely get password field"""
+        try:
+            return settings.get_password(field_name)
+        except Exception:
+            return None
+    
     def _get_settings(self) -> Dict:
         """Load AI Agent Settings with all provider configs"""
         try:
@@ -64,20 +71,20 @@ class RaymondLucyAgentV2:
                 "confidence_threshold": settings.confidence_threshold or 0.7,
                 
                 # OpenAI
-                "openai_api_key": settings.get_password("openai_api_key") if hasattr(settings, "openai_api_key") else None,
+                "openai_api_key": settings.get_password("openai_api_key"),
                 "model": settings.model or "gpt-4o-mini",
                 
                 # DeepSeek
-                "deepseek_api_key": settings.get_password("deepseek_api_key") if hasattr(settings, "deepseek_api_key") else None,
+                "deepseek_api_key": self._safe_get_password(settings, "deepseek_api_key"),
                 "deepseek_model": getattr(settings, "deepseek_model", "deepseek-chat"),
                 "deepseek_use_reasoning": getattr(settings, "deepseek_use_reasoning", False),
                 
-                # Claude (future)
-                "claude_api_key": settings.get_password("claude_api_key") if hasattr(settings, "claude_api_key") else None,
+                # Claude
+                "claude_api_key": self._safe_get_password(settings, "claude_api_key"),
                 "claude_model": getattr(settings, "claude_model", "claude-3-5-sonnet-20241022"),
                 
-                # MiniMax (future)
-                "minimax_api_key": settings.get_password("minimax_api_key") if hasattr(settings, "minimax_api_key") else None,
+                # MiniMax
+                "minimax_api_key": self._safe_get_password(settings, "minimax_api_key"),
                 "minimax_group_id": getattr(settings, "minimax_group_id", None),
                 
                 # Ollama (future)
