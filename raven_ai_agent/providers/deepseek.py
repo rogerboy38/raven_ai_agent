@@ -59,7 +59,8 @@ class DeepSeekProvider(LLMProvider):
             base_url=self.BASE_URL
         )
         
-        self.default_model = settings.get("deepseek_model", self.DEFAULT_MODEL)
+        self.default_model = settings.get("deepseek_model") or self.DEFAULT_MODEL
+        self.model = self.default_model
     
     def chat(
         self,
