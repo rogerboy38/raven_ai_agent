@@ -36,21 +36,19 @@ class MiniMaxProvider(LLMProvider):
     BASE_URL = "https://api.minimax.io/v1"
     
     MODELS = {
-        "abab6.5s-chat": "Flagship model, 1M context, best quality",
-        "abab6.5g-chat": "General purpose, 245K context",
-        "abab6.5t-chat": "Turbo mode, faster responses",
-        "abab5.5-chat": "Legacy model, stable",
+        "M2-her": "Dialogue/role-playing model, 64K context",
+        "MiniMax-M1": "General purpose model",
+        "MiniMax-M2.1": "Latest coding model",
     }
     
     # Pricing per 1M tokens (USD) - approximate
     PRICING = {
-        "abab6.5s-chat": {"input": 1.00, "output": 4.00},
-        "abab6.5g-chat": {"input": 0.50, "output": 2.00},
-        "abab6.5t-chat": {"input": 0.30, "output": 1.20},
-        "abab5.5-chat": {"input": 0.20, "output": 0.80},
+        "M2-her": {"input": 1.00, "output": 4.00},
+        "MiniMax-M1": {"input": 0.50, "output": 2.00},
+        "MiniMax-M2.1": {"input": 0.30, "output": 1.20},
     }
     
-    DEFAULT_MODEL = "abab6.5s-chat"
+    DEFAULT_MODEL = "M2-her"
     
     def __init__(self, settings: Dict):
         super().__init__(settings)
@@ -71,7 +69,8 @@ class MiniMaxProvider(LLMProvider):
         
         self.api_key = api_key
         self.group_id = group_id or "0"  # Default group
-        self.default_model = settings.get("minimax_model", self.DEFAULT_MODEL)
+        self.default_model = settings.get("minimax_model") or self.DEFAULT_MODEL
+        self.model = self.default_model
     
     def chat(
         self,
