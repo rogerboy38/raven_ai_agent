@@ -170,29 +170,11 @@ class RaymondLucyAgentV2:
                 )
                 answer = f"**Reasoning:**\n{result['reasoning']}\n\n**Answer:**\n{result['answer']}"
             else:
-                result = self.provider.chat(
+                answer = self.provider.chat(
                     messages=messages,
                     max_tokens=self.settings.get("max_tokens", 2000),
-                    temperature=0.3,
-                    return_usage=True
+                    temperature=0.3
                 )
-                answer = result.get("content", result) if isinstance(result, dict) else result
-                
-                # Track usage for cost monitoring
-                if isinstance(result, dict) and "usage" in result:
-                    usage = result["usage"]
-                    self.cost_monitor.track_usage(
-                        user=self.user,
-                        provider=self.provider.name,
-                        model=self.provider.model,
-                        prompt_tokens=usage.get("prompt_tokens", 0),
-                        completion_tokens=usage.get("completion_tokens", 0)
-                    )
-                    
-                    # Check budget warning
-                    budget_warning = self.cost_monitor.check_budget(self.user)
-                    if budget_warning:
-                        answer = f"⚠️ **Cost Warning:** {budget_warning}\n\n{answer}"
             
             return {
                 "success": True,
