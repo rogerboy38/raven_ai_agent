@@ -36,17 +36,16 @@ class MiniMaxProvider(LLMProvider):
     BASE_URL = "https://api.minimax.io/v1"
     
     MODELS = {
-        "MiniMax-Text-01": "Flagship text model, OpenAI-compatible",
-        "MiniMax-Text-01-128K": "128K context version",
+        "MiniMax-M1": "General purpose model",
+        "MiniMax-M2.1": "Latest model",
     }
     
-    # Pricing per 1M tokens (USD) - approximate
     PRICING = {
-        "MiniMax-Text-01": {"input": 1.00, "output": 4.00},
-        "MiniMax-Text-01-128K": {"input": 1.00, "output": 4.00},
+        "MiniMax-M1": {"input": 1.00, "output": 4.00},
+        "MiniMax-M2.1": {"input": 1.00, "output": 4.00},
     }
     
-    DEFAULT_MODEL = "MiniMax-Text-01"
+    DEFAULT_MODEL = "MiniMax-M1"
     
     def __init__(self, settings: Dict):
         super().__init__(settings)
@@ -97,6 +96,19 @@ class MiniMaxProvider(LLMProvider):
         
         # Use chatcompletion_v2 for OpenAI-compatible format
         url = f"{self.BASE_URL}/text/chatcompletion_v2"
+        
+        # Convert messages to MiniMax format (requires 'name' field)
+        formatted_messages = []
+        for m in messages:
+            msg = {"role": m["role"], "content": m.get("content", "")}
+            if m["role"] == "system":
+                msg["name"] = "system"
+            elif m["role"] == "user":
+                msg["name"] = "user"
+            else:
+                msg["name"] = "assistant"
+            formatted_messages.append(msg)
+        
         with httpx.Client(timeout=60.0) as client:
             response = client.post(
                 url,
@@ -106,9 +118,9 @@ class MiniMaxProvider(LLMProvider):
                 },
                 json={
                     "model": model,
-                    "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+                    "messages": formatted_messages,
                     "temperature": temperature,
-                    "max_tokens": max_tokens,
+                    "max_completion_tokens": max_tokens,
                     "stream": False
                 }
             )
