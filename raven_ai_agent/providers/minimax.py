@@ -77,37 +77,17 @@ class MiniMaxProvider(LLMProvider):
         max_tokens: int = 2000,
         stream: bool = False
     ) -> str:
-        """Send chat request to MiniMax API"""
+        """Send chat request to MiniMax API using OpenAI-compatible endpoint"""
         model = model or self.default_model
         
-        # Convert to MiniMax format
-        minimax_messages = []
-        system_prompt = ""
+        # Use OpenAI-compatible endpoint (simpler format)
+        url = f"{self.BASE_URL}/chat/completions"
         
-        for msg in messages:
-            if msg["role"] == "system":
-                system_prompt += msg["content"] + "\n"
-            else:
-                minimax_messages.append({
-                    "sender_type": "USER" if msg["role"] == "user" else "BOT",
-                    "sender_name": "user" if msg["role"] == "user" else "assistant",
-                    "text": msg["content"]
-                })
-        
-        # Use chatcompletion_v2 for OpenAI-compatible format
-        url = f"{self.BASE_URL}/text/chatcompletion_v2"
-        
-        # Convert messages to MiniMax format (requires 'name' field)
-        formatted_messages = []
-        for m in messages:
-            msg = {"role": m["role"], "content": m.get("content", "")}
-            if m["role"] == "system":
-                msg["name"] = "system"
-            elif m["role"] == "user":
-                msg["name"] = "user"
-            else:
-                msg["name"] = "assistant"
-            formatted_messages.append(msg)
+        # Standard OpenAI format - no special 'name' field needed
+        formatted_messages = [
+            {"role": m["role"], "content": m.get("content", "")}
+            for m in messages
+        ]
         
         with httpx.Client(timeout=60.0) as client:
             response = client.post(
@@ -120,7 +100,7 @@ class MiniMaxProvider(LLMProvider):
                     "model": model,
                     "messages": formatted_messages,
                     "temperature": temperature,
-                    "max_completion_tokens": max_tokens,
+                    "max_tokens": max_tokens,
                     "stream": False
                 }
             )
@@ -128,9 +108,9 @@ class MiniMaxProvider(LLMProvider):
             response.raise_for_status()
             data = response.json()
             
-            if data.get("base_resp", {}).get("status_code") != 0:
-                error_msg = data.get("base_resp", {}).get("status_msg", "Unknown error")
-                raise Exception(f"MiniMax API error: {error_msg}")
+            # Check for API-level errors
+            if "error" in data:
+                raise Exception(f"MiniMax API error: {data['error']}")
             
             return data["choices"][0]["message"]["content"]
     
@@ -141,11 +121,11 @@ class MiniMaxProvider(LLMProvider):
         temperature: float = 0.3,
         max_tokens: int = 2000
     ) -> Generator[str, None, None]:
-        """Stream response from MiniMax"""
+        """Stream response from MiniMax using OpenAI-compatible endpoint"""
         model = model or self.default_model
         
         with httpx.Client(timeout=60.0) as client:
-            url = f"{self.BASE_URL}/text/chatcompletion_v2"
+            url = f"{self.BASE_URL}/chat/completions"
             with client.stream(
                 "POST",
                 url,
@@ -164,7 +144,10 @@ class MiniMaxProvider(LLMProvider):
                 for line in response.iter_lines():
                     if line.startswith("data: "):
                         import json
-                        data = json.loads(line[6:])
+                        chunk = line[6:]
+                        if chunk.strip() == "[DONE]":
+                            break
+                        data = json.loads(chunk)
                         if data.get("choices"):
                             delta = data["choices"][0].get("delta", {})
                             if delta.get("content"):
