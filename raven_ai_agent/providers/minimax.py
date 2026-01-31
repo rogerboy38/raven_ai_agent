@@ -116,8 +116,13 @@ class MiniMaxProvider(LLMProvider):
             "model": model,
             "messages": formatted_messages,
             "temperature": temperature,
-            "max_tokens": max_tokens  # Use max_tokens instead of max_completion_tokens
+            "max_tokens": max_tokens
         }
+        
+        # TEMP: print to bench console for debugging
+        print("=== MiniMax payload ===")
+        print(payload)
+        print("=== END MiniMax payload ===")
         
         # Debug logging
         frappe.logger().debug(f"[MiniMax] Request URL: {url}")
