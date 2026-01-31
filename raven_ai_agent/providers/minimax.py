@@ -33,7 +33,7 @@ class MiniMaxProvider(LLMProvider):
     """
     
     name = "minimax"
-    BASE_URL = "https://api.minimax.chat/v1"
+    BASE_URL = "https://api.minimax.io/v1"
     
     MODELS = {
         "abab6.5s-chat": "Flagship model, 1M context, best quality",
@@ -99,7 +99,7 @@ class MiniMaxProvider(LLMProvider):
                 })
         
         # Use chatcompletion_v2 for OpenAI-compatible format
-        url = f"{self.BASE_URL}/text/chatcompletion_v2?GroupId={self.group_id}"
+        url = f"{self.BASE_URL}/text/chatcompletion_v2"
         with httpx.Client(timeout=60.0) as client:
             response = client.post(
                 url,
@@ -136,7 +136,7 @@ class MiniMaxProvider(LLMProvider):
         model = model or self.default_model
         
         with httpx.Client(timeout=60.0) as client:
-            url = f"{self.BASE_URL}/text/chatcompletion_v2?GroupId={self.group_id}"
+            url = f"{self.BASE_URL}/text/chatcompletion_v2"
             with client.stream(
                 "POST",
                 url,
