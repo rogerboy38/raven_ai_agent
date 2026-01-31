@@ -83,8 +83,9 @@ class RaymondLucyAgentV2:
                 "claude_api_key": self._safe_get_password(settings, "claude_api_key"),
                 "claude_model": getattr(settings, "claude_model", "claude-3-5-sonnet-20241022"),
                 
-                # MiniMax
-                "minimax_api_key": self._safe_get_password(settings, "minimax_api_key"),
+                # MiniMax - support both API key and Coding Plan key
+                "minimax_api_key": self._safe_get_password(settings, "minimax_api_key") or frappe.conf.get("MINIMAX_API_KEY"),
+                "minimax_cp_key": self._safe_get_password(settings, "minimax_cp_key") or frappe.conf.get("MINIMAX_CP_KEY"),
                 "minimax_group_id": getattr(settings, "minimax_group_id", None),
                 
                 # Ollama (future)
