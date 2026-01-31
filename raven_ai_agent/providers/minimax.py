@@ -53,8 +53,10 @@ class MiniMaxProvider(LLMProvider):
         super().__init__(settings)
         
         # Try Coding Plan key first (sk-cp-...), then regular API key
-        api_key = settings.get("minimax_cp_key") or settings.get("minimax_api_key")
-        group_id = settings.get("minimax_group_id")
+        # Support both lowercase (frappe style) and uppercase (env var style)
+        api_key = (settings.get("minimax_cp_key") or settings.get("MINIMAX_CP_KEY") or
+                   settings.get("minimax_api_key") or settings.get("MINIMAX_API_KEY"))
+        group_id = settings.get("minimax_group_id") or settings.get("MINIMAX_GROUP_ID")
         
         if not api_key:
             try:
@@ -65,8 +67,15 @@ class MiniMaxProvider(LLMProvider):
             except Exception:
                 pass
         
+        # Also check frappe.conf for uppercase keys
         if not api_key:
-            raise ValueError("MiniMax API key not configured (set minimax_cp_key or minimax_api_key)")
+            try:
+                api_key = frappe.conf.get("MINIMAX_CP_KEY") or frappe.conf.get("MINIMAX_API_KEY")
+            except Exception:
+                pass
+        
+        if not api_key:
+            raise ValueError("MiniMax API key not configured (set MINIMAX_CP_KEY or MINIMAX_API_KEY)")
         
         self.api_key = api_key
         self.group_id = group_id or "0"  # Default group
