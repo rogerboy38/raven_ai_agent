@@ -39,7 +39,7 @@ class RaymondLucyAgentV2:
         
         try:
             self.provider = get_provider(provider_name.lower(), self.settings)
-            self.cost_monitor = CostMonitor(self.settings)
+            self.cost_monitor = CostMonitor()
             frappe.logger().info(f"[AI Agent V2] Using provider: {provider_name}")
         except Exception as e:
             # Fallback to configured fallback provider
