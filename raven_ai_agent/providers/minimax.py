@@ -134,11 +134,6 @@ class MiniMaxProvider(LLMProvider):
             "max_tokens": max_tokens
         }
         
-        # TEMP: print to bench console for debugging
-        print("=== MiniMax payload ===")
-        print(payload)
-        print("=== END MiniMax payload ===")
-        
         # Debug logging
         frappe.logger().debug(f"[MiniMax] Request URL: {url}")
         frappe.logger().debug(f"[MiniMax] Payload: {payload}")
