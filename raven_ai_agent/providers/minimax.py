@@ -36,19 +36,17 @@ class MiniMaxProvider(LLMProvider):
     BASE_URL = "https://api.minimax.io/v1"
     
     MODELS = {
-        "M2-her": "Dialogue/role-playing model, 64K context",
-        "MiniMax-M1": "General purpose model",
-        "MiniMax-M2.1": "Latest coding model",
+        "MiniMax-Text-01": "Flagship text model, OpenAI-compatible",
+        "MiniMax-Text-01-128K": "128K context version",
     }
     
     # Pricing per 1M tokens (USD) - approximate
     PRICING = {
-        "M2-her": {"input": 1.00, "output": 4.00},
-        "MiniMax-M1": {"input": 0.50, "output": 2.00},
-        "MiniMax-M2.1": {"input": 0.30, "output": 1.20},
+        "MiniMax-Text-01": {"input": 1.00, "output": 4.00},
+        "MiniMax-Text-01-128K": {"input": 1.00, "output": 4.00},
     }
     
-    DEFAULT_MODEL = "M2-her"
+    DEFAULT_MODEL = "MiniMax-Text-01"
     
     def __init__(self, settings: Dict):
         super().__init__(settings)
