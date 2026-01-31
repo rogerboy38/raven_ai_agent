@@ -69,8 +69,7 @@
             "fieldname": "default_provider",
             "fieldtype": "Select",
             "label": "Default Provider",
-            "options": "OpenAI\nDeepSeek\nClaude\nMiniMax",
-            "reqd": 1
+            "options": "OpenAI\nDeepSeek\nClaude\nMiniMax"
         },
         {
             "fieldname": "fallback_provider",
