@@ -36,16 +36,16 @@ class MiniMaxProvider(LLMProvider):
     BASE_URL = "https://api.minimax.io/v1"
     
     MODELS = {
-        "MiniMax-M1": "General purpose model",
-        "MiniMax-M2.1": "Latest model",
+        "MiniMax-M2": "Agentic capabilities, Advanced reasoning",
+        "MiniMax-M2-Stable": "High concurrency and commercial use",
     }
     
     PRICING = {
-        "MiniMax-M1": {"input": 1.00, "output": 4.00},
-        "MiniMax-M2.1": {"input": 1.00, "output": 4.00},
+        "MiniMax-M2": {"input": 1.00, "output": 4.00},
+        "MiniMax-M2-Stable": {"input": 1.00, "output": 4.00},
     }
     
-    DEFAULT_MODEL = "MiniMax-M1"
+    DEFAULT_MODEL = "MiniMax-M2"
     
     def __init__(self, settings: Dict):
         super().__init__(settings)
