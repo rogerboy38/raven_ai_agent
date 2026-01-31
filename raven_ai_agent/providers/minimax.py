@@ -99,14 +99,29 @@ class MiniMaxProvider(LLMProvider):
         url = f"{self.BASE_URL}/chat/completions"
         
         # Standard OpenAI format - filter out empty messages
+        # MiniMax doesn't support multiple system messages, so merge them
         formatted_messages = []
+        system_content = []
+        
         for m in messages:
             content = m.get("content", "")
-            if content and content.strip():  # Only include non-empty messages
+            if not content or not content.strip():
+                continue
+            
+            if m["role"] == "system":
+                system_content.append(content)
+            else:
                 formatted_messages.append({
                     "role": m["role"],
                     "content": content
                 })
+        
+        # Add merged system message at the beginning
+        if system_content:
+            formatted_messages.insert(0, {
+                "role": "system",
+                "content": "\n\n".join(system_content)
+            })
         
         # Ensure at least one user message exists
         if not any(m["role"] == "user" for m in formatted_messages):
