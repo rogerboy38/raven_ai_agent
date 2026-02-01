@@ -16,6 +16,10 @@ When performing these actions, ALWAYS invoke the corresponding skill FIRST:
 
 | Action | Skill |
 |--------|-------|
+| Suggesting formulations from inventory | `formulation-advisor` |
+| Finding batches that match TDS | `formulation-advisor` |
+| Blending cuñetes for target specs | `formulation-advisor` |
+| Optimizing raw material selection | `formulation-advisor` |
 | Scanning migration status | `migration-fixer` |
 | Fixing quotation data | `migration-fixer` |
 | Comparing FoxPro vs ERPNext | `migration-fixer` |
