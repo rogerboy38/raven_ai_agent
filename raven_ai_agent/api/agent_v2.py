@@ -1,6 +1,7 @@
 """
-Agent V2 - Multi-Provider Support
+Agent V2 - Multi-Provider Support with Dynamic Skills
 Drop-in replacement for the original agent.py with provider abstraction
+and auto-learning skill system.
 """
 
 import frappe
@@ -10,6 +11,9 @@ from typing import Optional, Dict, List
 # Import the provider system
 from raven_ai_agent.providers import get_provider, LLMProvider
 from raven_ai_agent.utils.cost_monitor import CostMonitor
+
+# Import the skill system
+from raven_ai_agent.skills import get_router, list_available_skills
 
 
 class RaymondLucyAgentV2:
@@ -51,6 +55,9 @@ class RaymondLucyAgentV2:
                 raise ValueError(f"Failed to initialize provider: {e}")
         
         self.autonomy_level = 1  # Default COPILOT
+        
+        # Initialize skill router
+        self.skill_router = get_router(agent=self)
     
     def _safe_get_password(self, settings, field_name):
         """Safely get password field"""
@@ -120,12 +127,25 @@ class RaymondLucyAgentV2:
         
         # Handle help command
         if any(h in query_lower for h in ["help", "capabilities", "what can you do"]):
+            skills_help = self.skill_router.get_skills_help()
             return {
                 "success": True,
-                "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 1]\n{CAPABILITIES_LIST}",
+                "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 1]\n{CAPABILITIES_LIST}\n\n{skills_help}",
                 "autonomy_level": 1,
                 "context_used": {"help": True},
                 "provider": self.provider.name
+            }
+        
+        # TRY SKILLS FIRST - Route to specialized skills
+        skill_result = self.skill_router.route(query, context={"user": self.user})
+        if skill_result and skill_result.get("handled"):
+            return {
+                "success": True,
+                "response": f"[CONFIDENCE: HIGH] [SKILL: {skill_result['skill']}]\n\n{skill_result['response']}",
+                "autonomy_level": 1,
+                "context_used": {"skill": skill_result['skill']},
+                "provider": "skill",
+                "skill_used": skill_result['skill']
             }
         
         # Create temporary V1 agent for context/workflow methods
@@ -290,4 +310,41 @@ def get_available_providers() -> Dict:
     return {
         "default": getattr(settings, "default_provider", "OpenAI"),
         "providers": providers
+    }
+
+
+
+@frappe.whitelist()
+def get_available_skills() -> Dict:
+    """List available skills with their triggers"""
+    skills = list_available_skills()
+    return {
+        "skills": skills,
+        "count": len(skills)
+    }
+
+
+@frappe.whitelist()
+def route_to_skill(query: str) -> Dict:
+    """
+    Directly route a query to skills (bypasses LLM).
+    
+    Useful for testing skill routing.
+    """
+    user = frappe.session.user
+    agent = RaymondLucyAgentV2(user)
+    
+    result = agent.skill_router.route(query, context={"user": user})
+    
+    if result and result.get("handled"):
+        return {
+            "success": True,
+            "skill": result["skill"],
+            "response": result["response"],
+            "confidence": result.get("confidence", 0)
+        }
+    
+    return {
+        "success": False,
+        "message": "No skill matched this query"
     }

@@ -20,10 +20,20 @@ from raven_ai_agent.skills.migration_fixer.api import (
     handle_migration_command
 )
 
+from raven_ai_agent.skills.migration_fixer.skill import MigrationFixerSkill
+
+# Export for auto-discovery
+SKILL_CLASS = MigrationFixerSkill
+
 __all__ = [
+    # Core
     "MigrationFixer",
+    "MigrationFixerSkill",
+    "SKILL_CLASS",
+    # Functions
     "scan_migration",
     "fix_folio",
+    # API
     "scan_folios",
     "validate_folio",
     "preview_fix", 
