@@ -71,14 +71,21 @@ class SkillCreatorSkill(SkillBase):
     description = "Create new skills following the established patterns"
     triggers = ["create skill", "new skill", "add skill", "generate skill"]
     
-    def __init__(self):
+    def __init__(self, agent=None):
+        super().__init__(agent)
         self.skills_dir = Path(__file__).parent.parent
     
     def can_handle(self, query: str) -> bool:
         query_lower = query.lower()
         return any(t in query_lower for t in self.triggers)
     
-    def execute(self, query: str, context: dict = None) -> dict:
+    def handle(self, query: str, context: dict = None) -> dict:
+        """Handle skill creation requests."""
+        if not self.can_handle(query):
+            return None
+        return self._execute(query, context)
+    
+    def _execute(self, query: str, context: dict = None) -> dict:
         # Parse the skill name from query
         match = re.search(r'(?:create|new|add|generate)\s+skill\s+["\']?(\w+)["\']?', query, re.I)
         if not match:
@@ -91,9 +98,9 @@ class SkillCreatorSkill(SkillBase):
         description = context.get("description", f"Custom skill: {skill_name}") if context else f"Custom skill: {skill_name}"
         triggers = context.get("triggers", [skill_name]) if context else [skill_name]
         
-        return self.create_skill(skill_name, description, triggers)
+        return self._create_skill(skill_name, description, triggers)
     
-    def create_skill(self, name: str, description: str, triggers: list) -> dict:
+    def _create_skill(self, name: str, description: str, triggers: list) -> dict:
         """Create a new skill with the given parameters."""
         skill_dir = self.skills_dir / name
         
