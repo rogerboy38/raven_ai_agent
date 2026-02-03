@@ -22,10 +22,11 @@ dev = [
 requires = ["flit_core>=3.4"]
 build-backend = "flit_core.buildapi"
 
-[tool.bench]
-title = "Raven AI Agent"
-category = "Other"
-description = "AI Agent for ERPNext with Raymond-Lucy Protocol"
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
 
-[tool.bench.frappe-dependencies]
-frappe = ">=15.0.0,<17.0.0"
+[[tool.uv.index]]
+url = "http://mirrors.cloud.aliyuncs.com/pypi/simple"
+default = true
