@@ -3,16 +3,29 @@ Formulation Reader - Core Data Access Module
 ============================================
 
 This module provides read-only access to ERPNext doctypes for formulation analysis:
-- Batch AMB: Batch management with containers, serials, and analytical data
-- COA AMB2: Internal Certificate of Analysis with lab parameters
-- Item: Product specifications with TDS ranges
+- Item: Product specifications with golden number embedded in item_code
+- Batch: Batch management with expiry dates
+- Bin: Stock levels per warehouse
+- COA AMB: Certificate of Analysis with quality parameters (uses 'specification' field)
 - Sales Order: Customer orders with TDS links
+
+Golden Number Format: ITEM_[product(4)][folio(3)][year(2)][plant(1)]
+Example: ITEM_0617027231 → product=0617, folio=027, year=23(2023), plant=1
+
+FEFO Key = year * 1000 + folio (lower = older = ship first)
+
+Key Doctypes (from spec):
+- Item: item_code (ITEM_XXXXXXXXXX), custom_foxpro_golden_number, custom_product_key
+- Batch: name (LOTExxxx), batch_id, item, batch_qty, manufacturing_date, expiry_date
+- Bin: item_code, warehouse ('FG to Sell Warehouse - AMB-W'), actual_qty
+- COA AMB: name, customer, item_code, lot_number, child table 'COA Quality Test Parameter'
+  - Child fields: specification (param name!), result (value), numeric, min_value, max_value, status
 
 All operations are READ-ONLY. No data modifications are allowed.
 """
 
 import frappe
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -123,18 +136,246 @@ class BlendSimulationResult:
 # Formulation Reader Class
 # ===========================================
 
+# ===========================================
+# Golden Number Parsing (from spec section 4.1)
+# ===========================================
+
+def parse_golden_number(item_code: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse golden number components from item code.
+    
+    Format: ITEM_[product(4)][folio(3)][year(2)][plant(1)]
+    Example: ITEM_0617027231
+        - Product Code: 0617
+        - Folio: 027 (production sequence number)
+        - Year: 23 -> 2023
+        - Plant: 1 (Mix=1, Dry=2, Juice=3, Lab=4, Formulated=5)
+    
+    Args:
+        item_code: Item code string (e.g., 'ITEM_0617027231')
+        
+    Returns:
+        Dict with product, folio, year, full_year, plant, fefo_key, or None if invalid.
+    """
+    if not item_code or not item_code.startswith('ITEM_'):
+        return None
+    
+    code = item_code[5:]  # Remove 'ITEM_' prefix
+    if len(code) != 10:
+        return None
+    
+    try:
+        product = code[0:4]      # First 4 chars
+        folio = int(code[4:7])   # Next 3 chars
+        year = int(code[7:9])    # Next 2 chars
+        plant = code[9]          # Last char
+        
+        fefo_key = year * 1000 + folio
+        full_year = 2000 + year
+        
+        return {
+            'product': product,
+            'folio': folio,
+            'year': year,
+            'full_year': full_year,
+            'plant': plant,
+            'fefo_key': fefo_key
+        }
+    except (ValueError, IndexError):
+        return None
+
+
+# ===========================================
+# Standalone Functions (from spec section 4)
+# ===========================================
+
+def get_available_batches(
+    product_code: Optional[str] = None,
+    warehouse: str = 'FG to Sell Warehouse - AMB-W'
+) -> List[Dict[str, Any]]:
+    """
+    Get all batches with available stock, sorted by FEFO.
+    
+    Queries the Bin doctype for actual stock levels and sorts by FEFO key.
+    Lower FEFO key = Older batch = Ship first.
+    
+    Args:
+        product_code: Optional 4-digit product code to filter (e.g., '0612')
+        warehouse: Warehouse to query (default: 'FG to Sell Warehouse - AMB-W')
+        
+    Returns:
+        List of batch dicts sorted by FEFO key (oldest first), each containing:
+        - item_code, batch_name, warehouse, qty, product, folio, year, fefo_key
+    """
+    # Build filters for Bin query
+    filters = {'actual_qty': ['>', 0]}
+    if warehouse:
+        filters['warehouse'] = warehouse
+    
+    # Get bins with stock
+    bins = frappe.get_all('Bin',
+        filters=filters,
+        fields=['item_code', 'warehouse', 'actual_qty']
+    )
+    
+    results = []
+    for bin_record in bins:
+        parsed = parse_golden_number(bin_record.item_code)
+        if not parsed:
+            continue
+        
+        # Filter by product code if specified
+        if product_code and parsed['product'] != product_code:
+            continue
+        
+        # Get batch info for this item
+        batches = frappe.get_all('Batch',
+            filters={'item': bin_record.item_code},
+            fields=['name', 'batch_qty', 'expiry_date'],
+            limit=1
+        )
+        
+        batch_name = batches[0].name if batches else None
+        
+        results.append({
+            'item_code': bin_record.item_code,
+            'batch_name': batch_name,
+            'warehouse': bin_record.warehouse,
+            'qty': bin_record.actual_qty,
+            'product': parsed['product'],
+            'folio': parsed['folio'],
+            'year': parsed['full_year'],
+            'fefo_key': parsed['fefo_key']
+        })
+    
+    # Sort by FEFO key (oldest first)
+    results.sort(key=lambda x: x['fefo_key'])
+    
+    return results
+
+
+def get_batch_coa_parameters(batch_name: str) -> Optional[Dict[str, Dict[str, Any]]]:
+    """
+    Get COA quality parameters for a batch.
+    
+    Uses the 'specification' field as parameter name (per spec).
+    
+    Args:
+        batch_name: Batch name/lot number (e.g., 'LOTE040')
+        
+    Returns:
+        Dict mapping parameter name to {value, min, max, status}, or None if not found.
+    """
+    # Find COA for this batch by lot_number
+    coas = frappe.get_all('COA AMB',
+        filters={'lot_number': batch_name},
+        fields=['name'],
+        limit=1
+    )
+    
+    if not coas:
+        return None
+    
+    # Get quality parameters from child table
+    # Note: Uses 'specification' field as parameter name (per spec)
+    params = frappe.get_all('COA Quality Test Parameter',
+        filters={
+            'parent': coas[0].name,
+            'numeric': 1  # Only numeric parameters for calculations
+        },
+        fields=['specification', 'result', 'min_value', 'max_value', 'status']
+    )
+    
+    return {
+        p.specification: {
+            'value': float(p.result) if p.result else None,
+            'min': p.min_value,
+            'max': p.max_value,
+            'status': p.status
+        }
+        for p in params if p.specification
+    }
+
+
+def check_tds_compliance(
+    batch_params: Dict[str, Dict[str, Any]],
+    tds_spec: Dict[str, Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Check if batch parameters comply with TDS specifications.
+    
+    Args:
+        batch_params: Dict from get_batch_coa_parameters
+        tds_spec: Dict mapping parameter name to {min, max}
+        
+    Returns:
+        Dict with:
+        - all_pass: bool indicating if all parameters pass
+        - parameters: Dict mapping param name to {status, value, min, max}
+    """
+    results = {}
+    all_pass = True
+    
+    for param_name, spec in tds_spec.items():
+        if param_name not in batch_params:
+            results[param_name] = {
+                'status': 'MISSING',
+                'value': None,
+                'min': spec.get('min'),
+                'max': spec.get('max')
+            }
+            all_pass = False
+            continue
+        
+        value = batch_params[param_name]['value']
+        min_val = spec.get('min')
+        max_val = spec.get('max')
+        
+        if value is None:
+            status = 'NO_VALUE'
+            all_pass = False
+        elif min_val is not None and value < min_val:
+            status = 'BELOW_MIN'
+            all_pass = False
+        elif max_val is not None and value > max_val:
+            status = 'ABOVE_MAX'
+            all_pass = False
+        else:
+            status = 'PASS'
+        
+        results[param_name] = {
+            'status': status,
+            'value': value,
+            'min': min_val,
+            'max': max_val
+        }
+    
+    return {'all_pass': all_pass, 'parameters': results}
+
+
+# ===========================================
+# Formulation Reader Class (Extended)
+# ===========================================
+
 class FormulationReader:
     """
     Read-only data reader for formulation analysis.
     
     Provides access to:
-    - Batch AMB records
-    - COA AMB2 parameters
+    - Available batches with FEFO sorting (via Bin doctype)
+    - COA AMB parameters (using 'specification' field)
     - TDS specifications
     - Sales Order data
+    - Batch AMB records (legacy)
     
     All methods are read-only and do not modify ERPNext data.
     """
+    
+    # Expose module-level functions as static methods
+    parse_golden_number = staticmethod(parse_golden_number)
+    get_available_batches = staticmethod(get_available_batches)
+    get_batch_coa_parameters = staticmethod(get_batch_coa_parameters)
+    check_tds_compliance = staticmethod(check_tds_compliance)
     
     def __init__(self):
         """Initialize the reader."""

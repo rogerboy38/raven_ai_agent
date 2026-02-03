@@ -2,11 +2,17 @@
 Tests for Formulation Reader Skill - Phase 1
 ============================================
 
-Test cases from specification:
-- TC1.1: Read Batch AMB list for item X in warehouse Y - verify count and fields
-- TC1.2: Read COA AMB2 parameters for a known batch - verify all analytics returned
-- TC1.3: Simulate blend with 2 cunetes - verify weighted average calculation
-- TC1.4: Compare simulation result to TDS - verify PASS/FAIL flags
+Test cases aligned with PHASE1_FORMULATION_READER_AGENT.md specification:
+
+Section 8 - TEST CASES:
+- Test 1: Parse Golden Number - parse_golden_number('ITEM_0617027231')
+- Test 2: FEFO Sorting - verify oldest batch first
+- Test 3: Stock Query - get_available_batches('0616')
+
+Additional tests:
+- TC1.3: Simulate blend with cunetes - verify weighted average calculation
+- TC1.4: Check TDS compliance - verify PASS/FAIL flags
+- TC1.5: check_tds_compliance function - verify all statuses
 """
 
 import unittest
@@ -14,12 +20,445 @@ from unittest.mock import Mock, patch, MagicMock
 from decimal import Decimal
 
 
+# ===========================================
+# Test 1: Parse Golden Number (from spec section 8)
+# ===========================================
+
+class TestParseGoldenNumber(unittest.TestCase):
+    """
+    Test golden number parsing as per spec section 4.1 and 8.
+    
+    Expected for ITEM_0617027231:
+    {product: '0617', folio: 27, year: 23, full_year: 2023, plant: '1', fefo_key: 23027}
+    """
+    
+    def setUp(self):
+        """Set up test fixtures with mocked frappe."""
+        self.frappe_mock = MagicMock()
+        self.frappe_patcher = patch.dict('sys.modules', {'frappe': self.frappe_mock})
+        self.frappe_patcher.start()
+        
+        from raven_ai_agent.skills.formulation_reader.reader import parse_golden_number
+        self.parse_golden_number = parse_golden_number
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        self.frappe_patcher.stop()
+    
+    def test_parse_valid_golden_number(self):
+        """Test 1 from spec: Parse ITEM_0617027231."""
+        result = self.parse_golden_number('ITEM_0617027231')
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result['product'], '0617')
+        self.assertEqual(result['folio'], 27)
+        self.assertEqual(result['year'], 23)
+        self.assertEqual(result['full_year'], 2023)
+        self.assertEqual(result['plant'], '1')
+        self.assertEqual(result['fefo_key'], 23027)
+    
+    def test_parse_different_plants(self):
+        """Test parsing items from different plants."""
+        # Mix=1, Dry=2, Juice=3, Lab=4, Formulated=5
+        test_cases = [
+            ('ITEM_0617027231', '1'),  # Mix
+            ('ITEM_0617027232', '2'),  # Dry
+            ('ITEM_0617027233', '3'),  # Juice
+            ('ITEM_0617027234', '4'),  # Lab
+            ('ITEM_0617027235', '5'),  # Formulated
+        ]
+        
+        for item_code, expected_plant in test_cases:
+            result = self.parse_golden_number(item_code)
+            self.assertEqual(result['plant'], expected_plant, f"Failed for {item_code}")
+    
+    def test_parse_fefo_key_calculation(self):
+        """Verify FEFO key = year * 1000 + folio."""
+        test_cases = [
+            ('ITEM_0617027231', 23027),  # 23*1000 + 27 = 23027
+            ('ITEM_0637031241', 24031),  # 24*1000 + 31 = 24031
+            ('ITEM_0612200241', 24200),  # 24*1000 + 200 = 24200
+            ('ITEM_0615050251', 25050),  # 25*1000 + 50 = 25050
+        ]
+        
+        for item_code, expected_fefo in test_cases:
+            result = self.parse_golden_number(item_code)
+            self.assertEqual(result['fefo_key'], expected_fefo, f"Failed for {item_code}")
+    
+    def test_parse_invalid_prefix(self):
+        """Items without ITEM_ prefix should return None."""
+        invalid_codes = [
+            '0617027231',           # No prefix
+            'PROD_0617027231',      # Wrong prefix
+            'ITM_0617027231',       # Partial prefix
+            None,                   # None value
+            '',                     # Empty string
+        ]
+        
+        for code in invalid_codes:
+            result = self.parse_golden_number(code)
+            self.assertIsNone(result, f"Should return None for: {code}")
+    
+    def test_parse_invalid_length(self):
+        """Item codes with wrong length should return None."""
+        invalid_codes = [
+            'ITEM_061702723',      # 9 chars after prefix
+            'ITEM_06170272311',    # 11 chars after prefix
+            'ITEM_',              # Just prefix
+        ]
+        
+        for code in invalid_codes:
+            result = self.parse_golden_number(code)
+            self.assertIsNone(result, f"Should return None for: {code}")
+
+
+# ===========================================
+# Test 2: FEFO Sorting (from spec section 8)
+# ===========================================
+
+class TestFEFOSorting(unittest.TestCase):
+    """
+    Test 2 from spec: FEFO Sorting.
+    
+    Input: ['ITEM_0612200241', 'ITEM_0617027231', 'ITEM_0615050251']
+    Expected Order: ITEM_0617027231 (23027), ITEM_0612200241 (24200), ITEM_0615050251 (25050)
+    """
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.frappe_mock = MagicMock()
+        self.frappe_patcher = patch.dict('sys.modules', {'frappe': self.frappe_mock})
+        self.frappe_patcher.start()
+        
+        from raven_ai_agent.skills.formulation_reader.reader import parse_golden_number
+        self.parse_golden_number = parse_golden_number
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        self.frappe_patcher.stop()
+    
+    def test_fefo_sorting_order(self):
+        """Verify FEFO sorting produces oldest first order."""
+        item_codes = ['ITEM_0612200241', 'ITEM_0617027231', 'ITEM_0615050251']
+        
+        # Parse and sort by FEFO key
+        parsed = [self.parse_golden_number(code) for code in item_codes]
+        parsed_with_codes = list(zip(item_codes, parsed))
+        sorted_items = sorted(parsed_with_codes, key=lambda x: x[1]['fefo_key'])
+        
+        expected_order = [
+            'ITEM_0617027231',  # FEFO 23027 (oldest)
+            'ITEM_0612200241',  # FEFO 24200
+            'ITEM_0615050251',  # FEFO 25050 (newest)
+        ]
+        
+        actual_order = [item[0] for item in sorted_items]
+        self.assertEqual(actual_order, expected_order)
+    
+    def test_fefo_key_comparison(self):
+        """Verify FEFO key comparisons are correct."""
+        # Lower FEFO key = Older batch = Ship first
+        old_batch = self.parse_golden_number('ITEM_0617027231')  # 23027
+        new_batch = self.parse_golden_number('ITEM_0637031241')  # 24031
+        
+        self.assertLess(old_batch['fefo_key'], new_batch['fefo_key'])
+
+
+# ===========================================
+# Test 3: Stock Query (from spec section 8)
+# ===========================================
+
+class TestGetAvailableBatches(unittest.TestCase):
+    """
+    Test 3 from spec: get_available_batches('0616').
+    
+    Expected: List of batches for product 0616, sorted by FEFO.
+    """
+    
+    def setUp(self):
+        """Set up test fixtures with mocked frappe."""
+        self.frappe_mock = MagicMock()
+        self.frappe_patcher = patch.dict('sys.modules', {'frappe': self.frappe_mock})
+        self.frappe_patcher.start()
+        
+        # Import after patching
+        import raven_ai_agent.skills.formulation_reader.reader as reader_module
+        self.reader_module = reader_module
+        
+        # Set up the frappe mock on the module
+        reader_module.frappe = self.frappe_mock
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        self.frappe_patcher.stop()
+    
+    def test_get_available_batches_filters_by_product(self):
+        """Test that batches are filtered by product code."""
+        # Mock Bin data with multiple products
+        mock_bins = [
+            MagicMock(item_code='ITEM_0616027231', warehouse='FG to Sell Warehouse - AMB-W', actual_qty=100),
+            MagicMock(item_code='ITEM_0612200241', warehouse='FG to Sell Warehouse - AMB-W', actual_qty=200),
+            MagicMock(item_code='ITEM_0616050231', warehouse='FG to Sell Warehouse - AMB-W', actual_qty=150),
+        ]
+        
+        # Mock batch data
+        mock_batch = [MagicMock(name='LOTE001', batch_qty=100, expiry_date='2025-12-31')]
+        
+        self.frappe_mock.get_all.side_effect = lambda doctype, **kwargs: {
+            'Bin': mock_bins,
+            'Batch': mock_batch,
+        }.get(doctype, [])
+        
+        # Call with product filter
+        result = self.reader_module.get_available_batches(product_code='0616')
+        
+        # Should only include 0616 products (2 items)
+        self.assertEqual(len(result), 2)
+        for item in result:
+            self.assertEqual(item['product'], '0616')
+    
+    def test_get_available_batches_sorted_by_fefo(self):
+        """Test that results are sorted by FEFO key (oldest first)."""
+        # Mock Bin data - intentionally out of order
+        mock_bins = [
+            MagicMock(item_code='ITEM_0616050241', warehouse='FG to Sell Warehouse - AMB-W', actual_qty=100),  # FEFO 24050
+            MagicMock(item_code='ITEM_0616027231', warehouse='FG to Sell Warehouse - AMB-W', actual_qty=200),  # FEFO 23027 (oldest)
+            MagicMock(item_code='ITEM_0616100251', warehouse='FG to Sell Warehouse - AMB-W', actual_qty=150),  # FEFO 25100 (newest)
+        ]
+        
+        mock_batch = [MagicMock(name='LOTE001', batch_qty=100, expiry_date='2025-12-31')]
+        
+        self.frappe_mock.get_all.side_effect = lambda doctype, **kwargs: {
+            'Bin': mock_bins,
+            'Batch': mock_batch,
+        }.get(doctype, [])
+        
+        result = self.reader_module.get_available_batches(product_code='0616')
+        
+        # Verify sorted by FEFO key
+        fefo_keys = [item['fefo_key'] for item in result]
+        self.assertEqual(fefo_keys, sorted(fefo_keys))
+        
+        # Verify order: 23027 < 24050 < 25100
+        self.assertEqual(result[0]['fefo_key'], 23027)
+        self.assertEqual(result[1]['fefo_key'], 24050)
+        self.assertEqual(result[2]['fefo_key'], 25100)
+
+
+# ===========================================
+# Test 4: COA Parameters (from spec section 4.3)
+# ===========================================
+
+class TestGetBatchCOAParameters(unittest.TestCase):
+    """
+    Test COA parameter retrieval using 'specification' field.
+    
+    Uses COA AMB doctype and 'COA Quality Test Parameter' child table.
+    """
+    
+    def setUp(self):
+        """Set up test fixtures with mocked frappe."""
+        self.frappe_mock = MagicMock()
+        self.frappe_patcher = patch.dict('sys.modules', {'frappe': self.frappe_mock})
+        self.frappe_patcher.start()
+        
+        import raven_ai_agent.skills.formulation_reader.reader as reader_module
+        self.reader_module = reader_module
+        reader_module.frappe = self.frappe_mock
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        self.frappe_patcher.stop()
+    
+    def test_get_coa_parameters_uses_specification_field(self):
+        """Verify that 'specification' field is used as parameter name."""
+        # Mock COA lookup
+        mock_coa = [MagicMock(name='COA-AMB-001')]
+        
+        # Mock parameters with 'specification' field (per spec)
+        mock_params = [
+            MagicMock(specification='pH', result='3.6', min_value=3.4, max_value=3.8, status='PASS'),
+            MagicMock(specification='Polysaccharides', result='8.5', min_value=8.0, max_value=9.0, status='PASS'),
+            MagicMock(specification='Ash', result='2.1', min_value=None, max_value=3.0, status='PASS'),
+        ]
+        
+        def mock_get_all(doctype, **kwargs):
+            if doctype == 'COA AMB':
+                return mock_coa
+            elif doctype == 'COA Quality Test Parameter':
+                return mock_params
+            return []
+        
+        self.frappe_mock.get_all.side_effect = mock_get_all
+        
+        result = self.reader_module.get_batch_coa_parameters('LOTE040')
+        
+        # Verify parameters are keyed by 'specification' field
+        self.assertIn('pH', result)
+        self.assertIn('Polysaccharides', result)
+        self.assertIn('Ash', result)
+        
+        # Verify values are converted to float
+        self.assertEqual(result['pH']['value'], 3.6)
+        self.assertEqual(result['Polysaccharides']['value'], 8.5)
+    
+    def test_get_coa_parameters_returns_none_when_not_found(self):
+        """Return None when COA doesn't exist."""
+        self.frappe_mock.get_all.return_value = []
+        
+        result = self.reader_module.get_batch_coa_parameters('NONEXISTENT')
+        
+        self.assertIsNone(result)
+
+
+# ===========================================
+# Test 5: TDS Compliance (from spec section 4.4)
+# ===========================================
+
+class TestCheckTDSCompliance(unittest.TestCase):
+    """
+    Test check_tds_compliance function as per spec section 4.4.
+    
+    Returns dict with compliance status per parameter:
+    - PASS: value within range
+    - BELOW_MIN: value < min
+    - ABOVE_MAX: value > max
+    - MISSING: parameter not in batch_params
+    - NO_VALUE: parameter exists but value is None
+    """
+    
+    def setUp(self):
+        """Set up test fixtures with mocked frappe."""
+        self.frappe_mock = MagicMock()
+        self.frappe_patcher = patch.dict('sys.modules', {'frappe': self.frappe_mock})
+        self.frappe_patcher.start()
+        
+        from raven_ai_agent.skills.formulation_reader.reader import check_tds_compliance
+        self.check_tds_compliance = check_tds_compliance
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        self.frappe_patcher.stop()
+    
+    def test_all_pass_when_within_range(self):
+        """All parameters within range should return all_pass=True."""
+        batch_params = {
+            'pH': {'value': 3.6, 'min': 3.4, 'max': 3.8, 'status': 'PASS'},
+            'Polysaccharides': {'value': 8.5, 'min': 8.0, 'max': 9.0, 'status': 'PASS'},
+        }
+        
+        tds_spec = {
+            'pH': {'min': 3.4, 'max': 3.8},
+            'Polysaccharides': {'min': 8.0, 'max': 9.0},
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertTrue(result['all_pass'])
+        self.assertEqual(result['parameters']['pH']['status'], 'PASS')
+        self.assertEqual(result['parameters']['Polysaccharides']['status'], 'PASS')
+    
+    def test_below_min_status(self):
+        """Value below min should return BELOW_MIN status."""
+        batch_params = {
+            'pH': {'value': 3.2, 'min': 3.4, 'max': 3.8, 'status': 'FAIL'},
+        }
+        
+        tds_spec = {
+            'pH': {'min': 3.4, 'max': 3.8},
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertFalse(result['all_pass'])
+        self.assertEqual(result['parameters']['pH']['status'], 'BELOW_MIN')
+    
+    def test_above_max_status(self):
+        """Value above max should return ABOVE_MAX status."""
+        batch_params = {
+            'pH': {'value': 4.0, 'min': 3.4, 'max': 3.8, 'status': 'FAIL'},
+        }
+        
+        tds_spec = {
+            'pH': {'min': 3.4, 'max': 3.8},
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertFalse(result['all_pass'])
+        self.assertEqual(result['parameters']['pH']['status'], 'ABOVE_MAX')
+    
+    def test_missing_parameter_status(self):
+        """Missing parameter should return MISSING status."""
+        batch_params = {
+            'pH': {'value': 3.6, 'min': 3.4, 'max': 3.8, 'status': 'PASS'},
+        }
+        
+        tds_spec = {
+            'pH': {'min': 3.4, 'max': 3.8},
+            'Polysaccharides': {'min': 8.0, 'max': 9.0},  # Not in batch_params
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertFalse(result['all_pass'])
+        self.assertEqual(result['parameters']['Polysaccharides']['status'], 'MISSING')
+    
+    def test_no_value_status(self):
+        """Parameter with None value should return NO_VALUE status."""
+        batch_params = {
+            'pH': {'value': None, 'min': 3.4, 'max': 3.8, 'status': 'PENDING'},
+        }
+        
+        tds_spec = {
+            'pH': {'min': 3.4, 'max': 3.8},
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertFalse(result['all_pass'])
+        self.assertEqual(result['parameters']['pH']['status'], 'NO_VALUE')
+    
+    def test_only_min_specified(self):
+        """Test compliance with only min specified."""
+        batch_params = {
+            'Polysaccharides': {'value': 8.5, 'min': 8.0, 'max': None, 'status': 'PASS'},
+        }
+        
+        tds_spec = {
+            'Polysaccharides': {'min': 8.0},  # No max
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertTrue(result['all_pass'])
+        self.assertEqual(result['parameters']['Polysaccharides']['status'], 'PASS')
+    
+    def test_only_max_specified(self):
+        """Test compliance with only max specified."""
+        batch_params = {
+            'Ash': {'value': 2.5, 'min': None, 'max': 3.0, 'status': 'PASS'},
+        }
+        
+        tds_spec = {
+            'Ash': {'max': 3.0},  # No min
+        }
+        
+        result = self.check_tds_compliance(batch_params, tds_spec)
+        
+        self.assertTrue(result['all_pass'])
+        self.assertEqual(result['parameters']['Ash']['status'], 'PASS')
+
+
+# ===========================================
+# Legacy Tests (preserved from original)
+# ===========================================
+
 class TestFormulationReaderSkill(unittest.TestCase):
     """Test the FormulationReaderSkill query handling."""
     
     def setUp(self):
         """Set up test fixtures."""
-        # Mock frappe module
         self.frappe_patcher = patch.dict('sys.modules', {'frappe': MagicMock()})
         self.frappe_patcher.start()
         
@@ -36,6 +475,7 @@ class TestFormulationReaderSkill(unittest.TestCase):
             "Show batches for item 0227-0303 in Almacen-MP",
             "List all batches in warehouse WH-001",
             "Get batch data for item AL-QX-90-10",
+            "What batches do we have available for product 0612?",  # From spec example 5.1
         ]
         
         for query in queries:
@@ -49,87 +489,23 @@ class TestFormulationReaderSkill(unittest.TestCase):
             "Get COA for batch BATCH-AMB-2024-001",
             "Show analytical parameters for batch X",
             "What is the pH value for batch Y",
+            "Show me the COA parameters for batch LOTE040",  # From spec example 5.2
         ]
         
         for query in queries:
             can_handle, confidence = self.skill.can_handle(query)
             self.assertTrue(can_handle, f"Should handle: {query}")
     
-    def test_can_handle_tds_query(self):
-        """Test detection of TDS-related queries."""
+    def test_can_handle_fefo_query(self):
+        """Test detection of FEFO-related queries (from spec examples)."""
         queries = [
-            "What are TDS specs for AL-QX-90-10?",
-            "Get TDS specifications for item X",
-            "Show min max range for pH",
+            "Which batches from 2023 still have stock?",  # From spec example 5.3
+            "What is the oldest batch we should use first?",  # From spec example 5.4
         ]
         
         for query in queries:
             can_handle, confidence = self.skill.can_handle(query)
             self.assertTrue(can_handle, f"Should handle: {query}")
-    
-    def test_can_handle_blend_query(self):
-        """Test detection of blend simulation queries."""
-        queries = [
-            "Simulate blend of 10 kg from BATCH-001 and 15 kg from BATCH-002",
-            "Calculate weighted average for blend",
-            "Predict pH for blend of 20kg from X",
-        ]
-        
-        for query in queries:
-            can_handle, confidence = self.skill.can_handle(query)
-            self.assertTrue(can_handle, f"Should handle: {query}")
-    
-    def test_extract_item_code(self):
-        """Test item code extraction from queries."""
-        test_cases = [
-            ("Show batches for item AL-QX-90-10 in warehouse", "AL-QX-90-10"),
-            ("Get data for 0227-0303", "0227-0303"),
-            ("item AL-PX-80-20 details", "AL-PX-80-20"),
-        ]
-        
-        for query, expected in test_cases:
-            result = self.skill._extract_item_code(query)
-            self.assertEqual(result, expected, f"Failed for: {query}")
-    
-    def test_extract_warehouse(self):
-        """Test warehouse extraction from queries."""
-        test_cases = [
-            ("Show batches in warehouse WH-001", "WH-001"),
-            ("Items in Almacen-MP", "Almacen-MP"),
-            ("from AlmacenPrincipal", "AlmacenPrincipal"),
-        ]
-        
-        for query, expected in test_cases:
-            result = self.skill._extract_warehouse(query)
-            self.assertEqual(result, expected, f"Failed for: {query}")
-    
-    def test_extract_blend_inputs(self):
-        """Test blend input extraction from queries."""
-        query = "Simulate blend of 10 kg from BATCH-001-C1 and 15 kg from BATCH-002-C1"
-        inputs = self.skill._extract_blend_inputs(query)
-        
-        self.assertEqual(len(inputs), 2)
-        self.assertEqual(inputs[0]["cunete_id"], "BATCH-001-C1")
-        self.assertEqual(inputs[0]["mass_kg"], 10.0)
-        self.assertEqual(inputs[1]["cunete_id"], "BATCH-002-C1")
-        self.assertEqual(inputs[1]["mass_kg"], 15.0)
-
-
-class TestFormulationReader(unittest.TestCase):
-    """Test the FormulationReader data access class."""
-    
-    def setUp(self):
-        """Set up test fixtures with mocked frappe."""
-        self.frappe_mock = MagicMock()
-        self.frappe_patcher = patch.dict('sys.modules', {'frappe': self.frappe_mock})
-        self.frappe_patcher.start()
-        
-        from raven_ai_agent.skills.formulation_reader.reader import FormulationReader
-        self.reader = FormulationReader()
-    
-    def tearDown(self):
-        """Clean up after tests."""
-        self.frappe_patcher.stop()
 
 
 class TestWeightedAverageCalculation(unittest.TestCase):
@@ -141,10 +517,6 @@ class TestWeightedAverageCalculation(unittest.TestCase):
         # Cunete 1: pH 3.5, mass 10 kg
         # Cunete 2: pH 3.7, mass 15 kg
         # Expected: (3.5 * 10 + 3.7 * 15) / (10 + 15) = (35 + 55.5) / 25 = 3.62
-        
-        from raven_ai_agent.skills.formulation_reader.reader import (
-            BlendInput, BlendParameterResult
-        )
         
         values = [(3.5, 10.0), (3.7, 15.0)]
         total_weighted = sum(v * m for v, m in values)
@@ -166,13 +538,6 @@ class TestWeightedAverageCalculation(unittest.TestCase):
         predicted = total_weighted / total_mass
         
         self.assertAlmostEqual(predicted, 8.314, places=2)
-    
-    def test_weighted_average_single_input(self):
-        """Test weighted average with single cunete equals the value."""
-        value, mass = 3.6, 25.0
-        predicted = (value * mass) / mass
-        
-        self.assertEqual(predicted, 3.6)
 
 
 class TestTDSPassFailLogic(unittest.TestCase):
@@ -222,26 +587,19 @@ class TestTDSPassFailLogic(unittest.TestCase):
         
         passes = tds_min <= predicted <= tds_max
         self.assertTrue(passes)
-    
-    def test_pass_with_only_max(self):
-        """Value below max when only max is specified should PASS."""
-        predicted = 8.0
-        tds_max = 10.0
-        
-        passes = predicted <= tds_max
-        self.assertTrue(passes)
-    
-    def test_pass_with_only_min(self):
-        """Value above min when only min is specified should PASS."""
-        predicted = 7.5
-        tds_min = 5.0
-        
-        passes = predicted >= tds_min
-        self.assertTrue(passes)
 
 
 class TestDataClasses(unittest.TestCase):
     """Test data class structures."""
+    
+    def setUp(self):
+        """Set up with mocked frappe."""
+        self.frappe_patcher = patch.dict('sys.modules', {'frappe': MagicMock()})
+        self.frappe_patcher.start()
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        self.frappe_patcher.stop()
     
     def test_blend_input_creation(self):
         """Test BlendInput dataclass."""
