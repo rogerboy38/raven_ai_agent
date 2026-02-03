@@ -258,40 +258,81 @@ def get_batch_coa_parameters(batch_name: str) -> Optional[Dict[str, Dict[str, An
     """
     Get COA quality parameters for a batch.
     
+    Supports BOTH COA AMB (external) and COA AMB2 (internal) with fallback logic.
     Uses the 'specification' field as parameter name (per spec).
+    
+    Priority:
+    1. COA AMB (external COA for customers)
+    2. COA AMB2 (internal COA from lab results)
     
     Args:
         batch_name: Batch name/lot number (e.g., 'LOTE040')
         
     Returns:
-        Dict mapping parameter name to {value, min, max, status}, or None if not found.
+        Dict mapping parameter name to {value, min, max, status, source}, or None if not found.
     """
-    # Find COA for this batch by lot_number
+    # Try COA AMB first (external COA)
+    coa_name = None
+    coa_source = None
+    
     coas = frappe.get_all('COA AMB',
         filters={'lot_number': batch_name},
         fields=['name'],
         limit=1
     )
     
-    if not coas:
+    if coas:
+        coa_name = coas[0].name
+        coa_source = 'COA AMB'
+    else:
+        # Fallback to COA AMB2 (internal COA)
+        coas2 = frappe.get_all('COA AMB2',
+            filters={'lot_number': batch_name},
+            fields=['name'],
+            limit=1
+        )
+        
+        if coas2:
+            coa_name = coas2[0].name
+            coa_source = 'COA AMB2'
+    
+    if not coa_name:
         return None
     
     # Get quality parameters from child table
     # Note: Uses 'specification' field as parameter name (per spec)
-    params = frappe.get_all('COA Quality Test Parameter',
-        filters={
-            'parent': coas[0].name,
-            'numeric': 1  # Only numeric parameters for calculations
-        },
-        fields=['specification', 'result', 'min_value', 'max_value', 'status']
-    )
+    # Different doctypes may have different child table names
+    child_table = 'COA Quality Test Parameter' if coa_source == 'COA AMB' else 'COA Quality Test Parameter'
+    
+    try:
+        params = frappe.get_all(child_table,
+            filters={
+                'parent': coa_name,
+                'numeric': 1  # Only numeric parameters for calculations
+            },
+            fields=['specification', 'result', 'min_value', 'max_value', 'status']
+        )
+    except Exception:
+        # If child table query fails, try alternative approach
+        try:
+            coa_doc = frappe.get_doc(coa_source, coa_name)
+            params = []
+            for child_name in ['quality_parameters', 'parameters', 'coa_quality_test_parameter']:
+                child_data = coa_doc.get(child_name, [])
+                if child_data:
+                    params = [p for p in child_data if getattr(p, 'numeric', False) or getattr(p, 'is_numeric', False)]
+                    break
+        except Exception as e:
+            frappe.log_error(f"Error reading COA {coa_name}: {e}", "get_batch_coa_parameters")
+            return None
     
     return {
         p.specification: {
             'value': float(p.result) if p.result else None,
             'min': p.min_value,
             'max': p.max_value,
-            'status': p.status
+            'status': p.status,
+            'source': coa_source
         }
         for p in params if p.specification
     }

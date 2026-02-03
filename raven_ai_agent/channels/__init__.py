@@ -6,6 +6,7 @@ from .base import ChannelAdapter, IncomingMessage, OutgoingMessage
 from .whatsapp import WhatsAppAdapter
 from .telegram import TelegramAdapter
 from .slack import SlackAdapter
+from .raven_channel import RavenOrchestrator, get_orchestrator
 
 
 def get_channel_adapter(channel: str, config: dict) -> ChannelAdapter:
@@ -30,5 +31,7 @@ __all__ = [
     "WhatsAppAdapter",
     "TelegramAdapter",
     "SlackAdapter",
-    "get_channel_adapter"
+    "RavenOrchestrator",
+    "get_channel_adapter",
+    "get_orchestrator"
 ]
