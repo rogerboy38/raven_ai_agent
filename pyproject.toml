@@ -21,3 +21,11 @@ dev = [
 [build-system]
 requires = ["flit_core>=3.4"]
 build-backend = "flit_core.buildapi"
+
+[tool.bench]
+title = "Raven AI Agent"
+category = "Other"
+description = "AI Agent for ERPNext with Raymond-Lucy Protocol"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0,<17.0.0"
