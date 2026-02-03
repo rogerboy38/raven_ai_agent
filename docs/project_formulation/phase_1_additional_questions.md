@@ -225,3 +225,25 @@ This agent will:
 ---
 
 *Awaiting implementation team response to close Phase 1.*
+
+Summary
+Phase 1 Additional Questions (Answered)
+Question	Answer
+Q1: Bin vs Batch AMB	✅ Use Bin doctype for stock queries
+Q2: COA AMB vs COA AMB2	✅ Support BOTH with fallback logic
+Q3: Integration Tests	✅ Create separate tests_integration.py
+Raven Channel Communication Proposal
+The spec proposes using Raven channels for real-time communication between agents:
+
+Create #formulation-orchestration private channel
+Create orchestrator-ai bot user
+Implement RavenOrchestrator class in channels/raven_channel.py
+Let me now implement:
+
+1.
+Update reader.py with dual COA support
+2.
+Create RavenOrchestrator channel class
+3.
+Continue the orchestrator agents using Raven channel communication
+
