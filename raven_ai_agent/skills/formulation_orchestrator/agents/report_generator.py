@@ -37,6 +37,10 @@ class ReportGenerator(BaseSubAgent):
             "compliance_report": self._compliance_report,
             "cost_report": self._cost_report,
             "format_for_raven": self._format_for_raven,
+            "production_order_report": self._production_order_report,
+            "format_as_ascii": self._format_as_ascii,
+            "save_to_erpnext": self._save_to_erpnext,
+            "email_report": self._email_report,
         }
         
         handler = actions.get(action)
@@ -136,6 +140,213 @@ class ReportGenerator(BaseSubAgent):
             "markdown": markdown,
             "channel_message": markdown
         }
+    
+    def _production_order_report(self, payload: Dict, message: AgentMessage) -> Dict:
+        """
+        Generate a production order report with material requirements.
+        
+        Args (in payload):
+            workflow_state: Complete workflow state
+            order_number: Production order number
+            
+        Returns:
+            Dict with production order details and material requirements
+        """
+        workflow_state = payload.get('workflow_state', {})
+        order_number = payload.get('order_number', 'PO-DRAFT')
+        
+        self._log(f"Generating production order report for {order_number}")
+        self.send_status("generating", {"order_number": order_number})
+        
+        request = workflow_state.get('request', {})
+        phases = workflow_state.get('phases', {})
+        batch_selection = phases.get('batch_selection', {})
+        costs = phases.get('costs', {})
+        
+        # Build production order structure
+        production_order = {
+            "order_number": order_number,
+            "generated_at": datetime.now().isoformat(),
+            "product": {
+                "item_code": request.get('item_code'),
+                "quantity": request.get('quantity_required'),
+                "warehouse": request.get('warehouse'),
+                "production_date": request.get('production_date'),
+            },
+            "materials": [],
+            "costs": {
+                "total": costs.get('total_cost', 0),
+                "per_unit": costs.get('cost_per_unit', 0),
+                "currency": costs.get('currency', 'MXN')
+            },
+            "status": "draft"
+        }
+        
+        # Add selected batches as material requirements
+        for batch in batch_selection.get('selected_batches', []):
+            production_order["materials"].append({
+                "batch_name": batch.get('batch_name'),
+                "item_code": batch.get('item_code'),
+                "quantity": batch.get('qty_available', batch.get('qty')),
+                "warehouse": batch.get('warehouse'),
+                "fefo_key": batch.get('fefo_key'),
+                "year": batch.get('year')
+            })
+        
+        self.send_status("completed", {"order_number": order_number})
+        
+        return production_order
+    
+    def _format_as_ascii(self, payload: Dict, message: AgentMessage) -> Dict:
+        """
+        Format report as ASCII text for terminal display or plain text files.
+        
+        Args (in payload):
+            report: Report dictionary to format
+            report_type: Type of report (production_order, cost, compliance)
+            
+        Returns:
+            Dict with ASCII formatted text
+        """
+        report = payload.get('report', {})
+        report_type = payload.get('report_type', 'general')
+        
+        self._log(f"Formatting {report_type} report as ASCII")
+        
+        if report_type == 'production_order':
+            ascii_text = self._format_production_order_ascii(report)
+        elif report_type == 'cost':
+            ascii_text = self._format_cost_ascii(report)
+        elif report_type == 'compliance':
+            ascii_text = self._format_compliance_ascii(report)
+        else:
+            # Use general text summary
+            ascii_text = self._generate_text_summary(report)
+        
+        return {
+            "format": "ascii",
+            "text": ascii_text
+        }
+    
+    def _save_to_erpnext(self, payload: Dict, message: AgentMessage) -> Dict:
+        """
+        Save report or production order to ERPNext.
+        
+        Args (in payload):
+            report: Report or production order dictionary
+            doctype: ERPNext doctype (e.g., 'Production Order', 'Work Order')
+            
+        Returns:
+            Dict with save status and document name
+        """
+        report = payload.get('report', {})
+        doctype = payload.get('doctype', 'Production Order')
+        
+        self._log(f"Saving to ERPNext: {doctype}")
+        self.send_status("saving", {"doctype": doctype})
+        
+        try:
+            # Create ERPNext document
+            doc = frappe.get_doc({
+                "doctype": doctype,
+                "title": report.get('order_number', 'Draft Report'),
+                "production_item": report.get('product', {}).get('item_code'),
+                "qty": report.get('product', {}).get('quantity'),
+                "wip_warehouse": report.get('product', {}).get('warehouse'),
+                "planned_start_date": report.get('product', {}).get('production_date'),
+                "status": "Draft"
+            })
+            
+            # Add material requirements as child table entries
+            for material in report.get('materials', []):
+                doc.append('required_items', {
+                    'item_code': material.get('item_code'),
+                    'required_qty': material.get('quantity'),
+                    'source_warehouse': material.get('warehouse'),
+                    'batch_no': material.get('batch_name')
+                })
+            
+            doc.insert()
+            
+            self.send_status("completed", {
+                "doctype": doctype,
+                "name": doc.name
+            })
+            
+            return {
+                "success": True,
+                "doctype": doctype,
+                "name": doc.name,
+                "message": f"{doctype} created successfully"
+            }
+            
+        except Exception as e:
+            self._log(f"Failed to save to ERPNext: {str(e)}", level="error")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to create {doctype}"
+            }
+    
+    def _email_report(self, payload: Dict, message: AgentMessage) -> Dict:
+        """
+        Email report to specified recipients.
+        
+        Args (in payload):
+            report: Report dictionary
+            recipients: List of email addresses
+            subject: Email subject line
+            format: Report format (markdown, ascii, html)
+            
+        Returns:
+            Dict with email status
+        """
+        report = payload.get('report', {})
+        recipients = payload.get('recipients', [])
+        subject = payload.get('subject', 'Formulation Workflow Report')
+        format_type = payload.get('format', 'markdown')
+        
+        if not recipients:
+            return {
+                "success": False,
+                "error": "No recipients specified"
+            }
+        
+        self._log(f"Emailing report to {len(recipients)} recipient(s)")
+        self.send_status("sending", {"recipients": len(recipients)})
+        
+        try:
+            # Format report content
+            if format_type == 'ascii':
+                content = self._generate_text_summary(report)
+                content_type = 'text/plain'
+            else:  # markdown or html
+                content = self._report_to_markdown(report)
+                content_type = 'text/html' if format_type == 'html' else 'text/plain'
+            
+            # Send email using Frappe's email API
+            frappe.sendmail(
+                recipients=recipients,
+                subject=subject,
+                message=content,
+                now=True
+            )
+            
+            self.send_status("completed", {"recipients": len(recipients)})
+            
+            return {
+                "success": True,
+                "recipients": recipients,
+                "message": f"Report emailed to {len(recipients)} recipient(s)"
+            }
+            
+        except Exception as e:
+            self._log(f"Failed to email report: {str(e)}", level="error")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Failed to send email"
+            }
     
     def _format_request_summary(self, request: Dict) -> Dict:
         """Format the initial request summary."""
@@ -340,6 +551,132 @@ class ReportGenerator(BaseSubAgent):
             for rec in recommendations:
                 lines.append(f"- {rec}")
             lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _format_production_order_ascii(self, production_order: Dict) -> str:
+        """
+        Format production order as ASCII text.
+        
+        Args:
+            production_order: Production order dictionary
+            
+        Returns:
+            ASCII formatted string
+        """
+        lines = []
+        
+        lines.append("=" * 60)
+        lines.append("PRODUCTION ORDER")
+        lines.append(f"Order Number: {production_order.get('order_number')}")
+        lines.append(f"Generated: {production_order.get('generated_at')}")
+        lines.append("=" * 60)
+        
+        # Product details
+        product = production_order.get('product', {})
+        lines.append("\nPRODUCT:")
+        lines.append(f"  Item Code: {product.get('item_code')}")
+        lines.append(f"  Quantity: {product.get('quantity')}")
+        lines.append(f"  Warehouse: {product.get('warehouse')}")
+        lines.append(f"  Production Date: {product.get('production_date')}")
+        
+        # Material requirements
+        materials = production_order.get('materials', [])
+        lines.append(f"\nMATERIAL REQUIREMENTS ({len(materials)} batches):")
+        lines.append("-" * 60)
+        for i, material in enumerate(materials, 1):
+            lines.append(f"\n{i}. {material.get('batch_name')}")
+            lines.append(f"   Item: {material.get('item_code')}")
+            lines.append(f"   Qty: {material.get('quantity')}")
+            lines.append(f"   Warehouse: {material.get('warehouse')}")
+            lines.append(f"   FEFO Key: {material.get('fefo_key')}")
+        
+        # Costs
+        costs = production_order.get('costs', {})
+        lines.append("\nCOSTS:")
+        lines.append(f"  Total: {costs.get('currency', 'MXN')} {costs.get('total', 0):,.2f}")
+        lines.append(f"  Per Unit: {costs.get('currency', 'MXN')} {costs.get('per_unit', 0):,.2f}")
+        
+        lines.append("\n" + "=" * 60)
+        lines.append(f"Status: {production_order.get('status', 'draft').upper()}")
+        lines.append("=" * 60)
+        
+        return "\n".join(lines)
+    
+    def _format_cost_ascii(self, report: Dict) -> str:
+        """
+        Format cost report as ASCII text.
+        
+        Args:
+            report: Cost report dictionary
+            
+        Returns:
+            ASCII formatted string
+        """
+        lines = []
+        costs = report.get('costs', {})
+        request = report.get('request_summary', {})
+        
+        lines.append("=" * 50)
+        lines.append("COST ANALYSIS REPORT")
+        lines.append(f"Generated: {report.get('generated_at')}")
+        lines.append("=" * 50)
+        
+        lines.append("\nITEM:")
+        lines.append(f"  {request.get('item_code')} - Qty: {request.get('quantity_required')}")
+        
+        currency = costs.get('currency', 'MXN')
+        lines.append("\nCOST BREAKDOWN:")
+        lines.append(f"  Raw Materials: {currency} {costs.get('raw_material_cost', 0):,.2f}")
+        lines.append(f"  Overhead: {currency} {costs.get('overhead_cost', 0):,.2f}")
+        lines.append(f"  " + "-" * 40)
+        lines.append(f"  TOTAL COST: {currency} {costs.get('total_cost', 0):,.2f}")
+        lines.append(f"\n  Cost Per Unit: {currency} {costs.get('cost_per_unit', 0):,.2f}")
+        
+        lines.append("\n" + "=" * 50)
+        
+        return "\n".join(lines)
+    
+    def _format_compliance_ascii(self, report: Dict) -> str:
+        """
+        Format compliance report as ASCII text.
+        
+        Args:
+            report: Compliance report dictionary
+            
+        Returns:
+            ASCII formatted string
+        """
+        lines = []
+        compliance = report.get('compliance', {})
+        request = report.get('request_summary', {})
+        
+        lines.append("=" * 50)
+        lines.append("COMPLIANCE REPORT")
+        lines.append(f"Generated: {report.get('generated_at')}")
+        lines.append("=" * 50)
+        
+        lines.append("\nITEM:")
+        lines.append(f"  {request.get('item_code')}")
+        
+        status = "PASSED" if compliance.get('passed') else "FAILED"
+        status_symbol = "[+]" if compliance.get('passed') else "[X]"
+        
+        lines.append(f"\nSTATUS: {status_symbol} {status}")
+        lines.append(f"  Compliant Batches: {compliance.get('compliant_count', 0)}")
+        lines.append(f"  Non-Compliant Batches: {compliance.get('non_compliant_count', 0)}")
+        lines.append(f"  Compliance Rate: {compliance.get('compliance_rate', 0):.1f}%")
+        
+        # List failing batches
+        failing = compliance.get('failing_batches', [])
+        if failing:
+            lines.append("\nFAILING BATCHES:")
+            for batch in failing:
+                lines.append(f"\n  - {batch.get('batch_name')}")
+                for param in batch.get('failing_parameters', []):
+                    lines.append(f"    * {param}")
+        
+        lines.append("\n" + "=" * 50)
         
         return "\n".join(lines)
 
