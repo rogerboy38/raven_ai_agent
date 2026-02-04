@@ -178,5 +178,78 @@ class TestComplianceValidation(unittest.TestCase):
         self.assertEqual(result['parameter_results']['Aloin']['status'], 'FAIL')
 
 
+
+
+# ============================================================================
+# PHASE 3: Universal Golden Number Format Tests (XX-YYYY-###)
+# ============================================================================
+
+class TestUniversalGoldenNumberFormat(unittest.TestCase):
+    """Test cases for Phase 3 universal golden number format XX-YYYY-###."""
+    
+    def test_full_format_parsing(self):
+        """Test parsing full XX-YYYY-### format."""
+        result = parse_golden_number_universal('01-2025-001')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['company_code'], '01')
+        self.assertEqual(result['year'], '2025')
+        self.assertEqual(result['sequence'], '001')
+        self.assertEqual(result['format'], 'XX-YYYY-###')
+    
+    def test_partial_year_sequence(self):
+        """Test parsing YYYY-### format with default company."""
+        result = parse_golden_number_universal('2025-001')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['year'], '2025')
+        self.assertEqual(result['sequence'], '001')
+    
+    def test_sequence_only(self):
+        """Test parsing ### format with defaults."""
+        result = parse_golden_number_universal('001')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['sequence'], '001')
+    
+    def test_invalid_format(self):
+        """Test invalid formats return None or error."""
+        result = parse_golden_number_universal('invalid')
+        # Should handle gracefully
+        self.assertTrue(result is None or 'error' in result or not result.get('valid', True))
+    
+    def test_confidence_levels(self):
+        """Test confidence levels for different input types."""
+        full = parse_golden_number_universal('01-2025-001')
+        partial = parse_golden_number_universal('2025-001')
+        
+        if full and partial:
+            self.assertGreaterEqual(full.get('confidence', 1.0), partial.get('confidence', 0.9))
+
+
+class TestPhase3BatchSelection(unittest.TestCase):
+    """Test Phase 3 batch selection functionality."""
+    
+    def test_golden_number_sort_key(self):
+        """Golden numbers should generate correct sort keys."""
+        # Earlier batch should sort before later batch
+        batch1 = {'batch_id': '01-2025-001'}
+        batch2 = {'batch_id': '01-2025-002'}
+        
+        key1 = get_batch_sort_key(batch1)
+        key2 = get_batch_sort_key(batch2)
+        
+        self.assertLess(key1, key2)
+    
+    def test_fefo_with_golden_numbers(self):
+        """FEFO sorting should work with golden number batches."""
+        batches = [
+            {'batch_id': '01-2025-003', 'item_code': 'PROD-A'},
+            {'batch_id': '01-2025-001', 'item_code': 'PROD-B'},
+            {'batch_id': '01-2025-002', 'item_code': 'PROD-C'},
+        ]
+        sorted_batches = sort_batches_fefo(batches)
+        
+        # Should be sorted by golden number (earliest first)
+        self.assertEqual(sorted_batches[0]['batch_id'], '01-2025-001')
+        self.assertEqual(sorted_batches[1]['batch_id'], '01-2025-002')
+        self.assertEqual(sorted_batches[2]['batch_id'], '01-2025-003')
 if __name__ == '__main__':
     unittest.main()
