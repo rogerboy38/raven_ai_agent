@@ -3118,5 +3118,869 @@ class TestOptimizationMetrics(unittest.TestCase):
                     self.assertIsNotNone(metrics[metric])
 
 
+# ============================================================================
+# NEW TESTS: Phase 6 Report Generator Enhancements
+# Added: February 4, 2026
+# Test IDs: RPT-001 through RPT-010
+# ============================================================================
+
+class TestProductionOrderReport(unittest.TestCase):
+    """Tests for production_order_report action (RPT-001, RPT-002)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_001_production_order_basic(self, mock_frappe):
+        """RPT-001: Basic production order report generation.
+        
+        Should generate a picking list with batch sequence, warehouse,
+        quantities, and FEFO keys for manufacturing.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="optimization_engine",
+            target_agent="report_generator",
+            action="production_order_report",
+            payload={
+                'workflow_id': 'WF-2026-001',
+                'finished_item': {
+                    'item_code': 'FIN-ALOE-GEL-001',
+                    'item_name': 'Aloe Vera Gel 200X',
+                    'target_qty': 100,
+                    'uom': 'Kg'
+                },
+                'selected_batches': [
+                    {
+                        'batch_no': 'LOTE-2026-001',
+                        'batch_id': 'BATCH-ALO-001',
+                        'item_code': 'ALO-LEAF-GEL-RAW',
+                        'warehouse': 'RM Warehouse - AMB',
+                        'allocated_qty': 50,
+                        'expiry_date': '2027-06-15',
+                        'fefo_key': 27165
+                    },
+                    {
+                        'batch_no': 'LOTE-2026-002',
+                        'batch_id': 'BATCH-ALO-002',
+                        'item_code': 'ALO-LEAF-GEL-RAW',
+                        'warehouse': 'RM Warehouse - AMB',
+                        'allocated_qty': 30,
+                        'expiry_date': '2027-08-20',
+                        'fefo_key': 27232
+                    }
+                ],
+                'production_date': '2026-02-05'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success, f"Report failed: {response.error}")
+        result = response.result
+        
+        # Verify report structure
+        self.assertIn('report_type', result)
+        self.assertEqual(result['report_type'], 'production_order')
+        
+        # Verify picking list
+        self.assertIn('picking_list', result)
+        picking_list = result['picking_list']
+        self.assertEqual(len(picking_list), 2)
+        
+        # Verify sequence numbers assigned
+        for i, item in enumerate(picking_list):
+            self.assertIn('sequence', item)
+            self.assertEqual(item['sequence'], i + 1)
+            self.assertIn('batch_id', item)
+            self.assertIn('warehouse', item)
+            self.assertIn('pick_qty', item)
+        
+        # Verify totals
+        self.assertIn('total_picked', result)
+        self.assertEqual(result['total_picked'], 80)  # 50 + 30
+        
+        # Verify status
+        self.assertIn('ready_for_production', result)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_002_production_order_fefo_sequence(self, mock_frappe):
+        """RPT-002: Verify FEFO key ordering in picking list.
+        
+        Batches should be sequenced by FEFO key (earliest expiry first).
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        # Batches intentionally out of FEFO order
+        message = AgentMessage(
+            source_agent="optimization_engine",
+            target_agent="report_generator",
+            action="production_order_report",
+            payload={
+                'workflow_id': 'WF-2026-002',
+                'finished_item': {
+                    'item_code': 'FIN-001',
+                    'target_qty': 100,
+                    'uom': 'Kg'
+                },
+                'selected_batches': [
+                    {'batch_no': 'LATE', 'batch_id': 'B3', 'item_code': 'RM-001',
+                     'warehouse': 'WH1', 'allocated_qty': 30, 
+                     'expiry_date': '2027-12-01', 'fefo_key': 27335},
+                    {'batch_no': 'EARLY', 'batch_id': 'B1', 'item_code': 'RM-001',
+                     'warehouse': 'WH1', 'allocated_qty': 40,
+                     'expiry_date': '2026-06-15', 'fefo_key': 26166},
+                    {'batch_no': 'MIDDLE', 'batch_id': 'B2', 'item_code': 'RM-001',
+                     'warehouse': 'WH1', 'allocated_qty': 30,
+                     'expiry_date': '2027-03-01', 'fefo_key': 27060}
+                ],
+                'production_date': '2026-02-05'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        picking_list = response.result['picking_list']
+        
+        # Verify FEFO ordering (earliest expiry should be sequence 1)
+        self.assertEqual(picking_list[0]['batch_no'], 'EARLY')  # 2026-06-15
+        self.assertEqual(picking_list[1]['batch_no'], 'MIDDLE')  # 2027-03-01
+        self.assertEqual(picking_list[2]['batch_no'], 'LATE')  # 2027-12-01
+        
+        # Verify sequence numbers
+        self.assertEqual(picking_list[0]['sequence'], 1)
+        self.assertEqual(picking_list[1]['sequence'], 2)
+        self.assertEqual(picking_list[2]['sequence'], 3)
+
+
+class TestASCIIFormatting(unittest.TestCase):
+    """Tests for ASCII formatting actions (RPT-003, RPT-004)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_003_format_production_order_ascii(self, mock_frappe):
+        """RPT-003: Format production order as ASCII table.
+        
+        Should convert picking list to fixed-width ASCII table format
+        suitable for terminal display or plain-text documents.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="format_as_ascii",
+            payload={
+                'report_type': 'production_order',
+                'report_data': {
+                    'workflow_id': 'WF-2026-001',
+                    'finished_item': {
+                        'item_code': 'FIN-001',
+                        'item_name': 'Finished Product',
+                        'target_qty': 100
+                    },
+                    'picking_list': [
+                        {'sequence': 1, 'batch_id': 'B001', 'batch_no': 'LOTE001',
+                         'warehouse': 'WH-RM', 'pick_qty': 50, 'expiry_date': '2027-06-15',
+                         'fefo_key': 27165},
+                        {'sequence': 2, 'batch_id': 'B002', 'batch_no': 'LOTE002',
+                         'warehouse': 'WH-RM', 'pick_qty': 30, 'expiry_date': '2027-08-20',
+                         'fefo_key': 27232}
+                    ],
+                    'total_picked': 80,
+                    'ready_for_production': True
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify ASCII output exists
+        self.assertIn('ascii_output', result)
+        ascii_output = result['ascii_output']
+        
+        # Verify it's a string
+        self.assertIsInstance(ascii_output, str)
+        
+        # Verify table structure (should have headers and separators)
+        self.assertIn('Seq', ascii_output.upper() or ascii_output)
+        self.assertIn('LOTE001', ascii_output)
+        self.assertIn('LOTE002', ascii_output)
+        
+        # Verify table borders/separators
+        self.assertTrue(
+            '+' in ascii_output or '-' in ascii_output or '|' in ascii_output,
+            "ASCII table should have separators"
+        )
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_004_format_cost_ascii(self, mock_frappe):
+        """RPT-004: Format cost breakdown as ASCII table.
+        
+        Should convert cost data to readable ASCII format with
+        proper alignment and currency formatting.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="format_as_ascii",
+            payload={
+                'report_type': 'cost',
+                'report_data': {
+                    'cost_breakdown': [
+                        {
+                            'item_code': 'RM-001',
+                            'item_name': 'Raw Material 1',
+                            'total_qty': 100,
+                            'uom': 'Kg',
+                            'item_total_cost': 1500.00,
+                            'batch_costs': [
+                                {'batch_no': 'L1', 'qty': 60, 'unit_price': 15.00, 'batch_cost': 900.00},
+                                {'batch_no': 'L2', 'qty': 40, 'unit_price': 15.00, 'batch_cost': 600.00}
+                            ]
+                        }
+                    ],
+                    'summary': {
+                        'total_material_cost': 1500.00,
+                        'currency': 'MXN',
+                        'cost_per_unit': 15.00
+                    }
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify ASCII output
+        self.assertIn('ascii_output', result)
+        ascii_output = result['ascii_output']
+        
+        # Verify cost data is present
+        self.assertIn('RM-001', ascii_output)
+        self.assertIn('1500', ascii_output)  # Total cost
+        
+        # Verify currency symbol or code
+        self.assertTrue(
+            'MXN' in ascii_output or '$' in ascii_output,
+            "Should include currency indicator"
+        )
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_format_compliance_ascii(self, mock_frappe):
+        """Test ASCII formatting for compliance reports."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="format_as_ascii",
+            payload={
+                'report_type': 'compliance',
+                'report_data': {
+                    'compliant_batches': [
+                        {'batch_name': 'LOTE001', 'status': 'COMPLIANT', 'parameters': {}}
+                    ],
+                    'non_compliant_batches': [
+                        {'batch_name': 'LOTE002', 'status': 'NON_COMPLIANT',
+                         'failing_parameters': [{'parameter': 'pH', 'value': 2.5, 'spec': '3.5-4.5'}]}
+                    ],
+                    'summary': {'total_batches': 2, 'compliant_count': 1, 'non_compliant_count': 1}
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        ascii_output = response.result.get('ascii_output', '')
+        
+        # Should include batch names
+        self.assertIn('LOTE001', ascii_output)
+        self.assertIn('LOTE002', ascii_output)
+        
+        # Should indicate compliance status
+        self.assertTrue(
+            'COMPLIANT' in ascii_output.upper() or 'PASS' in ascii_output.upper() or
+            '✓' in ascii_output or 'OK' in ascii_output.upper(),
+            "Should show compliance indicators"
+        )
+
+
+class TestERPNextIntegration(unittest.TestCase):
+    """Tests for ERPNext integration (RPT-005, RPT-006)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.report_generator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_005_save_to_erpnext(self, mock_base_frappe, mock_frappe):
+        """RPT-005: Save report as Note document in ERPNext.
+        
+        Should create a Note document with markdown content
+        and return the document link.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_base_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        # Mock Note document creation
+        mock_note = MagicMock()
+        mock_note.name = 'NOTE-2026-00001'
+        mock_frappe.get_doc.return_value = mock_note
+        mock_frappe.utils.get_url_to_form.return_value = 'https://erp.example.com/app/note/NOTE-2026-00001'
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="save_to_erpnext",
+            payload={
+                'report_type': 'production_order',
+                'report_data': {
+                    'workflow_id': 'WF-2026-001',
+                    'finished_item': {'item_code': 'FIN-001', 'target_qty': 100},
+                    'picking_list': [
+                        {'sequence': 1, 'batch_no': 'LOTE001', 'pick_qty': 50}
+                    ],
+                    'total_picked': 50
+                },
+                'title': 'Production Order Report - WF-2026-001',
+                'public': False
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success, f"Save failed: {response.error}")
+        result = response.result
+        
+        # Verify document creation
+        self.assertIn('document_name', result)
+        self.assertIn('document_link', result)
+        
+        # Verify Note was created with correct doctype
+        mock_frappe.get_doc.assert_called()
+        call_args = mock_frappe.get_doc.call_args
+        if call_args:
+            doc_dict = call_args[0][0] if call_args[0] else call_args[1]
+            if isinstance(doc_dict, dict):
+                self.assertEqual(doc_dict.get('doctype'), 'Note')
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.report_generator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_006_save_with_public_flag(self, mock_base_frappe, mock_frappe):
+        """RPT-006: Save report with public/private setting.
+        
+        Should respect the 'public' flag when creating Note document.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_base_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        mock_note = MagicMock()
+        mock_note.name = 'NOTE-2026-00002'
+        mock_frappe.get_doc.return_value = mock_note
+        mock_frappe.utils.get_url_to_form.return_value = 'https://erp.example.com/app/note/NOTE-2026-00002'
+        
+        agent = ReportGenerator()
+        
+        # Test with public=True
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="save_to_erpnext",
+            payload={
+                'report_type': 'summary',
+                'report_data': {'workflow_id': 'WF-2026-002', 'status': 'COMPLETED'},
+                'title': 'Workflow Summary - Public',
+                'public': True
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        
+        # Verify public flag was set
+        mock_frappe.get_doc.assert_called()
+        call_args = mock_frappe.get_doc.call_args
+        if call_args and call_args[0]:
+            doc_dict = call_args[0][0]
+            if isinstance(doc_dict, dict):
+                self.assertEqual(doc_dict.get('public'), 1)
+
+
+class TestEmailReport(unittest.TestCase):
+    """Tests for email_report action (RPT-007, RPT-008)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.report_generator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_007_email_report_basic(self, mock_base_frappe, mock_frappe):
+        """RPT-007: Send report via email.
+        
+        Should send HTML email with report content using frappe.sendmail.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_base_frappe.utils.now_datetime.return_value = datetime.now()
+        mock_frappe.sendmail = MagicMock()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="email_report",
+            payload={
+                'report_type': 'production_order',
+                'report_data': {
+                    'workflow_id': 'WF-2026-001',
+                    'finished_item': {'item_code': 'FIN-001', 'item_name': 'Aloe Gel', 'target_qty': 100},
+                    'picking_list': [
+                        {'sequence': 1, 'batch_no': 'LOTE001', 'pick_qty': 50, 'warehouse': 'WH-RM'}
+                    ],
+                    'total_picked': 50,
+                    'ready_for_production': True
+                },
+                'recipients': ['production@example.com'],
+                'subject': 'Production Order Ready - WF-2026-001'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success, f"Email failed: {response.error}")
+        result = response.result
+        
+        # Verify email was sent
+        self.assertIn('email_sent', result)
+        self.assertTrue(result['email_sent'])
+        
+        # Verify sendmail was called
+        mock_frappe.sendmail.assert_called_once()
+        
+        # Verify recipients
+        call_kwargs = mock_frappe.sendmail.call_args[1]
+        self.assertIn('production@example.com', call_kwargs.get('recipients', []))
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.report_generator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_008_email_report_with_cc(self, mock_base_frappe, mock_frappe):
+        """RPT-008: Send report via email with CC recipients.
+        
+        Should support CC field for additional recipients.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_base_frappe.utils.now_datetime.return_value = datetime.now()
+        mock_frappe.sendmail = MagicMock()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="email_report",
+            payload={
+                'report_type': 'cost',
+                'report_data': {
+                    'cost_breakdown': [{'item_code': 'RM-001', 'item_total_cost': 1500}],
+                    'summary': {'total_material_cost': 1500, 'currency': 'MXN'}
+                },
+                'recipients': ['manager@example.com'],
+                'cc': ['accounting@example.com', 'audit@example.com'],
+                'subject': 'Cost Report - WF-2026-001'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        
+        # Verify CC was included
+        call_kwargs = mock_frappe.sendmail.call_args[1]
+        cc_list = call_kwargs.get('cc', [])
+        self.assertIn('accounting@example.com', cc_list)
+        self.assertIn('audit@example.com', cc_list)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.report_generator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_email_report_html_conversion(self, mock_base_frappe, mock_frappe):
+        """Test that markdown content is converted to HTML for email."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_base_frappe.utils.now_datetime.return_value = datetime.now()
+        mock_frappe.sendmail = MagicMock()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="email_report",
+            payload={
+                'report_type': 'summary',
+                'report_data': {
+                    'workflow_id': 'WF-2026-001',
+                    'status': 'COMPLETED',
+                    'phases': {
+                        'batch_selection': {'status': 'completed'},
+                        'compliance': {'status': 'completed'},
+                        'cost': {'status': 'completed'}
+                    }
+                },
+                'recipients': ['team@example.com'],
+                'subject': 'Workflow Complete'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        
+        # Verify message content contains HTML
+        call_kwargs = mock_frappe.sendmail.call_args[1]
+        message_content = call_kwargs.get('message', '')
+        
+        # Should be HTML (has tags or entities)
+        self.assertTrue(
+            '<' in message_content or '&' in message_content or
+            call_kwargs.get('content', ''),
+            "Email content should be HTML formatted"
+        )
+
+
+class TestReportGeneratorEdgeCases(unittest.TestCase):
+    """Edge case tests for Report Generator (RPT-009, RPT-010)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_009_empty_picking_list(self, mock_frappe):
+        """RPT-009: Handle empty picking list gracefully.
+        
+        Should return report with empty list and appropriate status.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="optimization_engine",
+            target_agent="report_generator",
+            action="production_order_report",
+            payload={
+                'workflow_id': 'WF-2026-EMPTY',
+                'finished_item': {'item_code': 'FIN-001', 'target_qty': 100, 'uom': 'Kg'},
+                'selected_batches': [],  # Empty
+                'production_date': '2026-02-05'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        # Should succeed but indicate no batches
+        self.assertTrue(response.success)
+        result = response.result
+        
+        self.assertEqual(len(result.get('picking_list', [])), 0)
+        self.assertEqual(result.get('total_picked', 0), 0)
+        self.assertFalse(result.get('ready_for_production', True))
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_rpt_010_missing_optional_fields(self, mock_frappe):
+        """RPT-010: Handle missing optional fields.
+        
+        Should use defaults for missing optional fields like fefo_key, expiry_date.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        # Minimal batch data (missing fefo_key, expiry_date)
+        message = AgentMessage(
+            source_agent="optimization_engine",
+            target_agent="report_generator",
+            action="production_order_report",
+            payload={
+                'workflow_id': 'WF-2026-MINIMAL',
+                'finished_item': {'item_code': 'FIN-001', 'target_qty': 100},
+                'selected_batches': [
+                    {
+                        'batch_no': 'LOTE001',
+                        'item_code': 'RM-001',
+                        'warehouse': 'WH-RM',
+                        'allocated_qty': 100
+                        # Missing: batch_id, expiry_date, fefo_key
+                    }
+                ],
+                'production_date': '2026-02-05'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        # Should succeed despite missing optional fields
+        self.assertTrue(response.success, f"Failed: {response.error}")
+        result = response.result
+        
+        # Should have picking list with defaults
+        self.assertEqual(len(result.get('picking_list', [])), 1)
+        
+        # Verify required fields are present
+        pick_item = result['picking_list'][0]
+        self.assertIn('sequence', pick_item)
+        self.assertIn('batch_no', pick_item)
+        self.assertIn('pick_qty', pick_item)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_invalid_report_type(self, mock_frappe):
+        """Test handling of invalid report type."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="format_as_ascii",
+            payload={
+                'report_type': 'INVALID_TYPE',
+                'report_data': {'some': 'data'}
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        # Should either fail gracefully or use default formatting
+        if not response.success:
+            self.assertIn('report_type', response.error.lower() or response.error_code.lower())
+        else:
+            # If it succeeded, should have some output
+            self.assertIn('ascii_output', response.result)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.report_generator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_email_missing_recipients(self, mock_base_frappe, mock_frappe):
+        """Test that email fails gracefully when recipients missing."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_base_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="email_report",
+            payload={
+                'report_type': 'summary',
+                'report_data': {'status': 'COMPLETED'},
+                'subject': 'Test',
+                'recipients': []  # Empty recipients
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        # Should fail or warn about missing recipients
+        if not response.success:
+            self.assertIn('recipient', response.error.lower())
+        else:
+            # If succeeded, should have warning
+            self.assertIn('warning', str(response.result).lower())
+
+
+class TestPhase6Integration(unittest.TestCase):
+    """Integration tests for Phase 6 with previous phases."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_phase5_to_phase6_handoff(self, mock_frappe):
+        """Test Phase 5 optimization output to Phase 6 report generation.
+        
+        Verifies that Phase 5 selected_batches format is compatible
+        with Phase 6 production_order_report input.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        # Simulate Phase 5 output format
+        phase5_output = {
+            'selected_batches': [
+                {
+                    'batch_no': 'LOTE-ALO-001',
+                    'batch_id': 'BATCH-001',
+                    'item_code': 'ALO-LEAF-GEL-RAW',
+                    'allocated_qty': 300,
+                    'warehouse': 'RM Warehouse - AMB',
+                    'expiry_date': '2027-06-15',
+                    'fefo_key': 27165,
+                    'unit_cost': 15.50
+                },
+                {
+                    'batch_no': 'LOTE-ALO-002',
+                    'batch_id': 'BATCH-002',
+                    'item_code': 'ALO-LEAF-GEL-RAW',
+                    'allocated_qty': 200,
+                    'warehouse': 'RM Warehouse - AMB',
+                    'expiry_date': '2027-08-20',
+                    'fefo_key': 27232,
+                    'unit_cost': 15.50
+                }
+            ],
+            'total_cost': 7750.00,
+            'strategy_used': 'FEFO_COST_BALANCED',
+            'fefo_compliant': True
+        }
+        
+        message = AgentMessage(
+            source_agent="optimization_engine",
+            target_agent="report_generator",
+            action="production_order_report",
+            payload={
+                'workflow_id': 'WF-2026-INTEGRATION',
+                'finished_item': {
+                    'item_code': 'FIN-ALOE-GEL-001',
+                    'item_name': 'Aloe Vera Gel 200X',
+                    'target_qty': 100,
+                    'uom': 'Kg'
+                },
+                'selected_batches': phase5_output['selected_batches'],
+                'optimization_summary': {
+                    'strategy': phase5_output['strategy_used'],
+                    'total_cost': phase5_output['total_cost'],
+                    'fefo_compliant': phase5_output['fefo_compliant']
+                },
+                'production_date': '2026-02-05'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success, f"Integration failed: {response.error}")
+        result = response.result
+        
+        # Verify report contains all phase data
+        self.assertEqual(result['report_type'], 'production_order')
+        self.assertEqual(len(result['picking_list']), 2)
+        self.assertEqual(result['total_picked'], 500)  # 300 + 200
+        
+        # Verify FEFO ordering in picking list
+        self.assertEqual(result['picking_list'][0]['batch_no'], 'LOTE-ALO-001')  # Earlier FEFO
+        self.assertEqual(result['picking_list'][1]['batch_no'], 'LOTE-ALO-002')  # Later FEFO
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_full_workflow_report(self, mock_frappe):
+        """Test generating a complete workflow summary report.
+        
+        Should include data from all phases (batch selection, compliance,
+        costs, optimization).
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import ReportGenerator
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        mock_frappe.utils.now_datetime.return_value = datetime.now()
+        
+        agent = ReportGenerator()
+        
+        message = AgentMessage(
+            source_agent="orchestrator",
+            target_agent="report_generator",
+            action="generate_report",
+            payload={
+                'workflow_state': {
+                    'workflow_id': 'WF-2026-FULL',
+                    'request': {
+                        'item_code': 'FIN-ALOE-001',
+                        'quantity': 100,
+                        'production_date': '2026-02-05'
+                    },
+                    'phases': {
+                        'batch_selection': {
+                            'status': 'completed',
+                            'selected_batches': 3,
+                            'total_qty': 500
+                        },
+                        'compliance': {
+                            'status': 'completed',
+                            'all_compliant': True,
+                            'batches_checked': 3
+                        },
+                        'costs': {
+                            'status': 'completed',
+                            'total_cost': 7500.00,
+                            'currency': 'MXN'
+                        },
+                        'optimization': {
+                            'status': 'completed',
+                            'strategy': 'FEFO_COST_BALANCED',
+                            'fefo_compliant': True
+                        }
+                    }
+                },
+                'report_type': 'summary'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify summary includes all phase information
+        self.assertIn('report_type', result)
+        self.assertEqual(result['report_type'], 'summary')
+        
+        # Should have workflow ID and timestamp
+        self.assertIn('workflow_id', result)
+        self.assertIn('generated_at', result)
+
 if __name__ == '__main__':
     unittest.main()
