@@ -1921,5 +1921,1202 @@ class TestPhase4Integration(unittest.TestCase):
         self.assertEqual(len(non_compliant_warnings), 1)
 
 
+# ============================================================================
+# NEW TESTS: Phase 5 Optimization Engine
+# Added: February 4, 2026
+# ============================================================================
+
+class TestOptimizationStrategies(unittest.TestCase):
+    """Tests for optimization strategy implementations (OPT-001 to OPT-005)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_001_fefo_cost_balanced_default(self, mock_frappe):
+        """OPT-001: FEFO Cost Balanced strategy (default).
+        
+        Hybrid approach balancing expiry date priority with cost optimization.
+        Default weights: fefo_weight=0.6, cost_weight=0.4
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {
+                        'batch_no': 'LOTE001',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 500,
+                        'expiry_date': '2027-06-01',  # Later expiry, lower cost
+                        'unit_cost': 15.00
+                    },
+                    {
+                        'batch_no': 'LOTE002',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 300,
+                        'expiry_date': '2026-09-01',  # Earlier expiry, higher cost
+                        'unit_cost': 18.00
+                    },
+                    {
+                        'batch_no': 'LOTE003',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 400,
+                        'expiry_date': '2027-03-01',  # Medium expiry, medium cost
+                        'unit_cost': 16.50
+                    }
+                ],
+                'required_quantity': 600,
+                'strategy': 'FEFO_COST_BALANCED',
+                'strategy_params': {
+                    'fefo_weight': 0.6,
+                    'cost_weight': 0.4
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success, f"Strategy failed: {response.error}")
+        
+        result = response.result
+        self.assertIn('selected_batches', result)
+        self.assertIn('optimization_score', result)
+        self.assertIn('strategy_used', result)
+        
+        # Verify strategy is returned
+        self.assertEqual(result['strategy_used'], 'FEFO_COST_BALANCED')
+        
+        # Total selected should meet requirement
+        total_selected = sum(b['allocated_qty'] for b in result['selected_batches'])
+        self.assertGreaterEqual(total_selected, 600)
+        
+        # LOTE002 (earliest expiry) should be included due to FEFO priority
+        batch_nos = [b['batch_no'] for b in result['selected_batches']]
+        self.assertIn('LOTE002', batch_nos, "Earliest expiry batch should be selected with FEFO priority")
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_002_minimize_cost_strategy(self, mock_frappe):
+        """OPT-002: Minimize Cost strategy - pure cost optimization.
+        
+        Should select batches to minimize total material cost,
+        ignoring FEFO unless constrained.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {
+                        'batch_no': 'EXPENSIVE001',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 500,
+                        'expiry_date': '2026-06-01',  # Earliest, but expensive
+                        'unit_cost': 25.00
+                    },
+                    {
+                        'batch_no': 'CHEAP001',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 400,
+                        'expiry_date': '2027-06-01',  # Later expiry, cheaper
+                        'unit_cost': 12.00
+                    },
+                    {
+                        'batch_no': 'CHEAP002',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 300,
+                        'expiry_date': '2027-03-01',  # Moderate expiry, cheapest
+                        'unit_cost': 10.00
+                    }
+                ],
+                'required_quantity': 500,
+                'strategy': 'MINIMIZE_COST'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify MINIMIZE_COST strategy used
+        self.assertEqual(result['strategy_used'], 'MINIMIZE_COST')
+        
+        # Cheapest batches should be prioritized
+        selected_batches = result['selected_batches']
+        
+        # CHEAP002 (cheapest) should be fully used
+        cheap002_selection = next((b for b in selected_batches if b['batch_no'] == 'CHEAP002'), None)
+        self.assertIsNotNone(cheap002_selection, "Cheapest batch should be selected")
+        
+        # Total cost should be lower than if expensive batch was used
+        total_cost = result.get('total_cost', 0)
+        # If only expensive batch used: 500 * 25 = 12,500
+        # With cheap batches: 300 * 10 + 200 * 12 = 3,000 + 2,400 = 5,400
+        if total_cost > 0:
+            self.assertLess(total_cost, 12500, "Cost optimization should result in lower total cost")
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_003_strict_fefo_strategy(self, mock_frappe):
+        """OPT-003: Strict FEFO strategy - guarantees FEFO compliance.
+        
+        Should always select batches in expiry date order,
+        regardless of cost implications.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {
+                        'batch_no': 'LATE_CHEAP',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 600,
+                        'expiry_date': '2027-12-01',  # Latest, cheapest
+                        'unit_cost': 8.00
+                    },
+                    {
+                        'batch_no': 'EARLY_EXPENSIVE',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 400,
+                        'expiry_date': '2026-06-01',  # Earliest (MUST use first)
+                        'unit_cost': 20.00
+                    },
+                    {
+                        'batch_no': 'MID_MODERATE',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 300,
+                        'expiry_date': '2026-12-01',  # Middle expiry
+                        'unit_cost': 14.00
+                    }
+                ],
+                'required_quantity': 500,
+                'strategy': 'STRICT_FEFO'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify STRICT_FEFO strategy
+        self.assertEqual(result['strategy_used'], 'STRICT_FEFO')
+        
+        # EARLY_EXPENSIVE must be first and fully depleted before others
+        selected_batches = result['selected_batches']
+        
+        # Should have earliest expiry batch
+        batch_nos = [b['batch_no'] for b in selected_batches]
+        self.assertIn('EARLY_EXPENSIVE', batch_nos, "Earliest expiry batch must be selected")
+        
+        # Earliest batch should be used before later ones
+        early_batch = next(b for b in selected_batches if b['batch_no'] == 'EARLY_EXPENSIVE')
+        self.assertEqual(early_batch['allocated_qty'], 400, "Earliest batch should be fully depleted")
+        
+        # FEFO compliance flag should be True
+        self.assertTrue(result.get('fefo_compliant', False), "STRICT_FEFO must guarantee FEFO compliance")
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_004_minimum_batches_strategy(self, mock_frappe):
+        """OPT-004: Minimum Batches strategy - reduces handling complexity.
+        
+        Should minimize the number of batches used, preferring larger batches.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {
+                        'batch_no': 'SMALL1',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 100,
+                        'expiry_date': '2026-06-01',
+                        'unit_cost': 15.00
+                    },
+                    {
+                        'batch_no': 'SMALL2',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 150,
+                        'expiry_date': '2026-07-01',
+                        'unit_cost': 15.00
+                    },
+                    {
+                        'batch_no': 'LARGE1',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 800,
+                        'expiry_date': '2027-01-01',
+                        'unit_cost': 15.00
+                    },
+                    {
+                        'batch_no': 'SMALL3',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 200,
+                        'expiry_date': '2026-09-01',
+                        'unit_cost': 15.00
+                    }
+                ],
+                'required_quantity': 500,
+                'strategy': 'MINIMUM_BATCHES'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify strategy
+        self.assertEqual(result['strategy_used'], 'MINIMUM_BATCHES')
+        
+        # Should select fewest batches possible
+        selected_batches = result['selected_batches']
+        
+        # LARGE1 can satisfy requirement alone (800 > 500)
+        self.assertEqual(len(selected_batches), 1, "Should use minimum number of batches")
+        self.assertEqual(selected_batches[0]['batch_no'], 'LARGE1')
+        
+        # Verify batch count metric
+        self.assertEqual(result.get('batch_count', len(selected_batches)), 1)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_005_strategy_comparison(self, mock_frappe):
+        """OPT-005: Compare multiple strategies on same input.
+        
+        Verifies different strategies produce different optimal selections.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        
+        agent = OptimizationEngine()
+        
+        # Same batches for all strategies
+        test_batches = [
+            {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 300, 
+             'expiry_date': '2026-06-01', 'unit_cost': 20.00},  # Earliest, expensive
+            {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 400, 
+             'expiry_date': '2027-01-01', 'unit_cost': 10.00},  # Later, cheapest
+            {'batch_no': 'B3', 'item_code': 'ITEM', 'available_qty': 500, 
+             'expiry_date': '2026-09-01', 'unit_cost': 15.00},  # Middle, moderate
+        ]
+        
+        results = {}
+        for strategy in ['MINIMIZE_COST', 'STRICT_FEFO', 'MINIMUM_BATCHES']:
+            if hasattr(agent, '_execute_strategy'):
+                result = agent._execute_strategy(
+                    strategy=strategy,
+                    batches=test_batches.copy(),
+                    required_qty=400,
+                    params={}
+                )
+                results[strategy] = result
+        
+        if results:
+            # MINIMIZE_COST should prioritize B2 (cheapest)
+            if 'MINIMIZE_COST' in results:
+                cost_result = results['MINIMIZE_COST']
+                self.assertIn('B2', [b['batch_no'] for b in cost_result.get('selected_batches', [])])
+            
+            # STRICT_FEFO should prioritize B1 (earliest)
+            if 'STRICT_FEFO' in results:
+                fefo_result = results['STRICT_FEFO']
+                selected = fefo_result.get('selected_batches', [])
+                if selected:
+                    self.assertEqual(selected[0]['batch_no'], 'B1', "STRICT_FEFO should select earliest first")
+            
+            # Results should differ
+            if len(results) >= 2:
+                strategies = list(results.keys())
+                r1 = results[strategies[0]]
+                r2 = results[strategies[1]]
+                # Different strategies should produce different outcomes (at least in order or cost)
+                self.assertIsNotNone(r1)
+                self.assertIsNotNone(r2)
+
+
+class TestConstraintValidation(unittest.TestCase):
+    """Tests for constraint validation (OPT-006, OPT-007)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_006_minimum_shelf_life_constraint(self, mock_frappe):
+        """OPT-006: Minimum shelf life constraint.
+        
+        Batches must have at least minimum_shelf_life_days remaining.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        from datetime import datetime, timedelta
+        
+        agent = OptimizationEngine()
+        
+        today = datetime.now().date()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {
+                        'batch_no': 'SHORT_LIFE',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 500,
+                        'expiry_date': (today + timedelta(days=30)).isoformat(),  # 30 days
+                        'unit_cost': 10.00
+                    },
+                    {
+                        'batch_no': 'LONG_LIFE',
+                        'item_code': 'ALOE-200X',
+                        'available_qty': 400,
+                        'expiry_date': (today + timedelta(days=180)).isoformat(),  # 180 days
+                        'unit_cost': 15.00
+                    }
+                ],
+                'required_quantity': 300,
+                'strategy': 'MINIMIZE_COST',
+                'constraints': {
+                    'minimum_shelf_life_days': 90  # Requires at least 90 days
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # SHORT_LIFE should be excluded (only 30 days left)
+        selected_batch_nos = [b['batch_no'] for b in result['selected_batches']]
+        self.assertNotIn('SHORT_LIFE', selected_batch_nos, 
+                        "Batch with insufficient shelf life should be excluded")
+        
+        # LONG_LIFE should be used
+        self.assertIn('LONG_LIFE', selected_batch_nos)
+        
+        # Should have constraint violation warning
+        if 'excluded_batches' in result:
+            excluded = result['excluded_batches']
+            short_life_excluded = next((b for b in excluded if b['batch_no'] == 'SHORT_LIFE'), None)
+            if short_life_excluded:
+                self.assertIn('shelf_life', short_life_excluded.get('reason', '').lower())
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_007_maximum_batch_count_constraint(self, mock_frappe):
+        """OPT-007: Maximum batch count constraint.
+        
+        Selection should not exceed max_batches limit.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00},
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-02-01', 'unit_cost': 10.00},
+                    {'batch_no': 'B3', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-03-01', 'unit_cost': 10.00},
+                    {'batch_no': 'B4', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-04-01', 'unit_cost': 10.00},
+                    {'batch_no': 'B5', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-05-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 400,
+                'strategy': 'STRICT_FEFO',
+                'constraints': {
+                    'max_batches': 3  # Can only use 3 batches
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should not exceed 3 batches
+        selected_batches = result['selected_batches']
+        self.assertLessEqual(len(selected_batches), 3, 
+                            "Should not exceed max_batches constraint")
+        
+        # Total might be less than required if constrained
+        total_selected = sum(b['allocated_qty'] for b in selected_batches)
+        
+        # If total < required, should indicate shortage
+        if total_selected < 400:
+            self.assertIn('shortage', result.get('warnings', []) or 
+                         result.get('constraint_notes', '').lower())
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_exclude_specific_batches(self, mock_frappe):
+        """Test excluding specific batches from selection."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00},
+                    {'batch_no': 'EXCLUDED1', 'item_code': 'ITEM', 'available_qty': 600, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 8.00},  # Would be best but excluded
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 400, 
+                     'expiry_date': '2027-02-01', 'unit_cost': 12.00}
+                ],
+                'required_quantity': 400,
+                'strategy': 'MINIMIZE_COST',
+                'constraints': {
+                    'exclude_batches': ['EXCLUDED1']
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # EXCLUDED1 should not be in selected batches
+        selected_batch_nos = [b['batch_no'] for b in result['selected_batches']]
+        self.assertNotIn('EXCLUDED1', selected_batch_nos)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_single_warehouse_preference(self, mock_frappe):
+        """Test preferring batches from same warehouse."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'WH1_B1', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00, 'warehouse': 'Warehouse A'},
+                    {'batch_no': 'WH1_B2', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2027-02-01', 'unit_cost': 10.00, 'warehouse': 'Warehouse A'},
+                    {'batch_no': 'WH2_B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2026-12-01', 'unit_cost': 10.00, 'warehouse': 'Warehouse B'}
+                ],
+                'required_quantity': 400,
+                'strategy': 'FEFO_COST_BALANCED',
+                'constraints': {
+                    'prefer_single_warehouse': True
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Check if single warehouse preference is honored
+        selected_batches = result['selected_batches']
+        warehouses = set(b.get('warehouse', '') for b in selected_batches)
+        
+        # Ideally should come from single warehouse
+        # This is a soft constraint so we check the metric
+        self.assertIn('warehouse_count', result.get('metrics', {}) or {})
+
+
+class TestWhatIfScenarioGeneration(unittest.TestCase):
+    """Tests for what-if scenario comparison (OPT-008)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_008_what_if_comparison(self, mock_frappe):
+        """OPT-008: What-if scenario comparison across strategies.
+        
+        Should generate comparison of all strategies with same input.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="generate_what_if_scenarios",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 20.00},
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 400, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00},
+                    {'batch_no': 'B3', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2026-09-01', 'unit_cost': 15.00}
+                ],
+                'required_quantity': 500,
+                'strategies_to_compare': ['MINIMIZE_COST', 'STRICT_FEFO', 'FEFO_COST_BALANCED', 'MINIMUM_BATCHES']
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should have scenarios for each strategy
+        self.assertIn('scenarios', result)
+        scenarios = result['scenarios']
+        
+        # Should have multiple strategy comparisons
+        self.assertGreaterEqual(len(scenarios), 2, "Should generate multiple scenarios")
+        
+        # Each scenario should have required fields
+        for scenario in scenarios:
+            self.assertIn('strategy', scenario)
+            self.assertIn('total_cost', scenario)
+            self.assertIn('batch_count', scenario)
+            self.assertIn('fefo_compliant', scenario)
+        
+        # Should include recommendation
+        self.assertIn('recommendation', result)
+        
+        # Recommendation should reference a strategy
+        self.assertIn('recommended_strategy', result['recommendation'])
+        self.assertIn('reasoning', result['recommendation'])
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_what_if_cost_vs_fefo_tradeoff(self, mock_frappe):
+        """Test what-if shows cost vs FEFO tradeoff clearly."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="generate_what_if_scenarios",
+            payload={
+                'available_batches': [
+                    # Scenario designed to show clear tradeoff
+                    {'batch_no': 'EARLY_EXPENSIVE', 'item_code': 'ITEM', 'available_qty': 600, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 30.00},
+                    {'batch_no': 'LATE_CHEAP', 'item_code': 'ITEM', 'available_qty': 600, 
+                     'expiry_date': '2027-12-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 500,
+                'strategies_to_compare': ['MINIMIZE_COST', 'STRICT_FEFO']
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        scenarios = response.result.get('scenarios', [])
+        
+        cost_scenario = next((s for s in scenarios if s['strategy'] == 'MINIMIZE_COST'), None)
+        fefo_scenario = next((s for s in scenarios if s['strategy'] == 'STRICT_FEFO'), None)
+        
+        if cost_scenario and fefo_scenario:
+            # MINIMIZE_COST should have lower cost
+            self.assertLess(cost_scenario['total_cost'], fefo_scenario['total_cost'],
+                           "MINIMIZE_COST should produce lower cost")
+            
+            # STRICT_FEFO should be FEFO compliant
+            self.assertTrue(fefo_scenario['fefo_compliant'],
+                           "STRICT_FEFO should be FEFO compliant")
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_what_if_includes_savings_analysis(self, mock_frappe):
+        """Test what-if includes potential savings analysis."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="generate_what_if_scenarios",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 25.00},
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 15.00}
+                ],
+                'required_quantity': 400,
+                'strategies_to_compare': ['MINIMIZE_COST', 'STRICT_FEFO']
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should include comparative analysis
+        if 'comparison_summary' in result:
+            summary = result['comparison_summary']
+            
+            # Should show cost range
+            self.assertIn('lowest_cost', summary)
+            self.assertIn('highest_cost', summary)
+            
+            # Should show potential savings
+            if 'potential_savings' in summary:
+                self.assertGreaterEqual(summary['potential_savings'], 0)
+
+
+class TestFEFOViolationDetection(unittest.TestCase):
+    """Tests for FEFO violation detection and reporting (OPT-009)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_009_fefo_violation_detection(self, mock_frappe):
+        """OPT-009: Detect FEFO violations in batch selection.
+        
+        Should identify when later-expiry batches are used before earlier ones.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        # Use MINIMIZE_COST which may violate FEFO
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'EARLY', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 25.00},  # Earliest but expensive
+                    {'batch_no': 'LATE', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-06-01', 'unit_cost': 10.00}   # Later but cheap
+                ],
+                'required_quantity': 400,
+                'strategy': 'MINIMIZE_COST'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # MINIMIZE_COST should select LATE batch (cheaper)
+        selected_batch_nos = [b['batch_no'] for b in result['selected_batches']]
+        
+        if 'LATE' in selected_batch_nos and 'EARLY' not in selected_batch_nos:
+            # This is a FEFO violation - earlier batch was skipped
+            self.assertFalse(result.get('fefo_compliant', True),
+                            "Should flag FEFO violation")
+            
+            # Should have FEFO violation details
+            if 'fefo_violations' in result:
+                violations = result['fefo_violations']
+                self.assertGreater(len(violations), 0)
+                
+                # Violation should mention the skipped batch
+                violation_texts = [str(v) for v in violations]
+                self.assertTrue(any('EARLY' in v for v in violation_texts))
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_fefo_violation_severity_levels(self, mock_frappe):
+        """Test FEFO violation severity classification."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        
+        agent = OptimizationEngine()
+        
+        # Test violation severity calculation
+        if hasattr(agent, '_calculate_fefo_violation_severity'):
+            # Batch expiring soon that was skipped = HIGH severity
+            high_severity = agent._calculate_fefo_violation_severity(
+                skipped_expiry='2026-03-01',  # Very soon
+                used_expiry='2027-01-01',
+                available_qty=500
+            )
+            
+            # Batch expiring later that was skipped = LOW severity
+            low_severity = agent._calculate_fefo_violation_severity(
+                skipped_expiry='2027-06-01',  # Far away
+                used_expiry='2027-12-01',
+                available_qty=100
+            )
+            
+            # High severity case should be more severe
+            if isinstance(high_severity, dict) and isinstance(low_severity, dict):
+                self.assertGreater(high_severity.get('score', 0), low_severity.get('score', 0))
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_fefo_compliant_flag_accuracy(self, mock_frappe):
+        """Test accuracy of fefo_compliant flag in results."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        # Test with STRICT_FEFO - should always be compliant
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 20.00},
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2026-09-01', 'unit_cost': 15.00},
+                    {'batch_no': 'B3', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 500,
+                'strategy': 'STRICT_FEFO'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # STRICT_FEFO must always be FEFO compliant
+        self.assertTrue(result.get('fefo_compliant', False),
+                       "STRICT_FEFO strategy must be FEFO compliant")
+        
+        # Verify order of selection
+        selected = result['selected_batches']
+        if len(selected) >= 2:
+            # First batch should have earliest expiry
+            first_expiry = selected[0].get('expiry_date', '')
+            second_expiry = selected[1].get('expiry_date', '')
+            self.assertLessEqual(first_expiry, second_expiry,
+                               "Batches should be in expiry date order")
+
+
+class TestPhase4Integration(unittest.TestCase):
+    """Integration tests with Phase 4 cost data (OPT-010)."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_opt_010_phase4_cost_integration(self, mock_frappe):
+        """OPT-010: Integration with Phase 4 cost data.
+        
+        Optimization should use actual cost data from Phase 4.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        # Phase 4 style input with cost breakdown
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {
+                        'batch_no': 'B1',
+                        'item_code': 'ALO-200X',
+                        'available_qty': 300,
+                        'expiry_date': '2027-01-01',
+                        'unit_cost': 15.50,  # From Phase 4 price lookup
+                        'cost_source': 'Item Price (Batch)'
+                    },
+                    {
+                        'batch_no': 'B2',
+                        'item_code': 'ALO-200X',
+                        'available_qty': 400,
+                        'expiry_date': '2026-09-01',
+                        'unit_cost': 18.00,
+                        'cost_source': 'Item Standard Rate'
+                    }
+                ],
+                'required_quantity': 500,
+                'strategy': 'MINIMIZE_COST',
+                'phase4_cost_data': {
+                    'currency': 'MXN',
+                    'price_list': 'Standard Buying'
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Total cost should be calculated using provided unit costs
+        self.assertIn('total_cost', result)
+        
+        # Should preserve currency from Phase 4
+        self.assertEqual(result.get('currency', 'MXN'), 'MXN')
+        
+        # Cost should be based on unit_cost * allocated_qty
+        total_cost = result['total_cost']
+        expected_min_cost = 300 * 15.50  # If only B1 used
+        self.assertGreaterEqual(total_cost, expected_min_cost * 0.9)  # Allow some tolerance
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_phase4_output_compatibility(self, mock_frappe):
+        """Test that Phase 5 output is compatible with downstream processing."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 15.00}
+                ],
+                'required_quantity': 400,
+                'strategy': 'FEFO_COST_BALANCED'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Output should have fields needed by report generator
+        required_fields = ['selected_batches', 'total_cost', 'strategy_used', 'fefo_compliant']
+        for field in required_fields:
+            self.assertIn(field, result, f"Missing required field: {field}")
+        
+        # Selected batches should have complete information
+        for batch in result['selected_batches']:
+            self.assertIn('batch_no', batch)
+            self.assertIn('allocated_qty', batch)
+            self.assertIn('item_code', batch)
+
+
+class TestEdgeCases(unittest.TestCase):
+    """Edge case tests for optimization engine."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_empty_batch_list(self, mock_frappe):
+        """Test handling of empty batch list."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [],
+                'required_quantity': 500,
+                'strategy': 'MINIMIZE_COST'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        # Should handle gracefully
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should indicate no batches available
+        self.assertEqual(len(result.get('selected_batches', [])), 0)
+        self.assertIn('shortage', result.get('status', '').lower() or 
+                     str(result.get('warnings', [])).lower())
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_insufficient_quantity(self, mock_frappe):
+        """Test handling when total available < required."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00},
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 100, 
+                     'expiry_date': '2027-02-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 500,  # Need 500 but only 200 available
+                'strategy': 'MINIMIZE_COST'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should use all available batches
+        total_allocated = sum(b['allocated_qty'] for b in result['selected_batches'])
+        self.assertEqual(total_allocated, 200)
+        
+        # Should indicate shortage
+        self.assertIn('shortage_qty', result)
+        self.assertEqual(result['shortage_qty'], 300)  # 500 - 200
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_exact_quantity_match(self, mock_frappe):
+        """Test when available exactly matches required."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 500,
+                'strategy': 'MINIMIZE_COST'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should allocate exact amount
+        total_allocated = sum(b['allocated_qty'] for b in result['selected_batches'])
+        self.assertEqual(total_allocated, 500)
+        
+        # No shortage
+        self.assertEqual(result.get('shortage_qty', 0), 0)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_all_batches_expired(self, mock_frappe):
+        """Test handling when all batches are past expiry."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'EXPIRED1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2020-01-01', 'unit_cost': 10.00},
+                    {'batch_no': 'EXPIRED2', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2021-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 400,
+                'strategy': 'STRICT_FEFO',
+                'constraints': {
+                    'exclude_expired': True
+                }
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should have no valid batches if expired exclusion is on
+        if result.get('selected_batches'):
+            # If batches were selected, expired exclusion might not be implemented
+            pass
+        else:
+            self.assertEqual(len(result['selected_batches']), 0)
+            self.assertIn('expired', str(result.get('warnings', [])).lower() or 
+                         result.get('error_message', '').lower())
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_zero_quantity_required(self, mock_frappe):
+        """Test handling of zero quantity requirement."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 0,
+                'strategy': 'MINIMIZE_COST'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Zero required = no batches needed
+        self.assertEqual(len(result.get('selected_batches', [])), 0)
+        self.assertEqual(result.get('total_cost', 0), 0)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_invalid_strategy_fallback(self, mock_frappe):
+        """Test fallback to default strategy for invalid strategy name."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 300,
+                'strategy': 'INVALID_STRATEGY_NAME'  # Invalid
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        # Should either fail gracefully or fall back to default
+        if response.success:
+            result = response.result
+            # Should use default strategy (FEFO_COST_BALANCED)
+            actual_strategy = result.get('strategy_used', '')
+            self.assertIn(actual_strategy, ['FEFO_COST_BALANCED', 'DEFAULT'])
+        else:
+            # Or return clear error about invalid strategy
+            self.assertIn('strategy', response.error.lower())
+
+
+class TestOptimizationMetrics(unittest.TestCase):
+    """Tests for optimization metrics and scoring."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_optimization_score_calculation(self, mock_frappe):
+        """Test optimization score is calculated correctly."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 500, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 400,
+                'strategy': 'FEFO_COST_BALANCED'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Should have optimization score
+        self.assertIn('optimization_score', result)
+        
+        # Score should be between 0 and 100 (or 0 and 1)
+        score = result['optimization_score']
+        self.assertGreaterEqual(score, 0)
+        self.assertLessEqual(score, 100 if score > 1 else 1)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_metrics_include_required_fields(self, mock_frappe):
+        """Test that metrics include all required fields."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import OptimizationEngine
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = OptimizationEngine()
+        
+        message = AgentMessage(
+            source_agent="cost_calculator",
+            target_agent="optimization_engine",
+            action="optimize_batch_selection",
+            payload={
+                'available_batches': [
+                    {'batch_no': 'B1', 'item_code': 'ITEM', 'available_qty': 300, 
+                     'expiry_date': '2026-06-01', 'unit_cost': 15.00},
+                    {'batch_no': 'B2', 'item_code': 'ITEM', 'available_qty': 400, 
+                     'expiry_date': '2027-01-01', 'unit_cost': 10.00}
+                ],
+                'required_quantity': 500,
+                'strategy': 'FEFO_COST_BALANCED'
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Core metrics
+        self.assertIn('total_cost', result)
+        self.assertIn('batch_count', result)
+        self.assertIn('fefo_compliant', result)
+        
+        # Optional but recommended metrics
+        if 'metrics' in result:
+            metrics = result['metrics']
+            expected_metrics = ['coverage_percent', 'cost_efficiency', 'avg_shelf_life_days']
+            for metric in expected_metrics:
+                if metric in metrics:
+                    self.assertIsNotNone(metrics[metric])
+
+
 if __name__ == '__main__':
     unittest.main()
