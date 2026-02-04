@@ -163,6 +163,49 @@ raven_ai_agent/
     └── cost_monitor.py
 ```
 
+## Formulation Orchestrator (NEW)
+
+Intelligent batch selection and formulation optimization for perishable inventory management in manufacturing environments.
+
+### Overview
+
+The Formulation Orchestrator is a multi-agent system designed to optimize batch selection for production orders, balancing FEFO (First Expiry, First Out) compliance with cost efficiency.
+
+### Agent Architecture
+
+| Phase | Agent | Purpose |
+|-------|-------|----------|
+| 1 | **Formulation Reader** | Parse and validate formulation data from ERPNext BOMs |
+| 2 | **Batch Selector** | Query and filter available inventory batches |
+| 3 | **TDS Compliance Checker** | Verify Technical Data Sheet requirements |
+| 4 | **Cost Calculator** | Analyze batch costs and valuation methods |
+| 5 | **Optimization Engine** | Multi-strategy batch selection optimization |
+| 6 | **Report Generator** | Production-ready output formatting |
+
+### Optimization Strategies
+
+- **FEFO Cost Balanced** (Default): Hybrid approach balancing expiry dates with cost optimization
+- **Minimize Cost**: Pure cost optimization for budget-conscious selections
+- **Strict FEFO**: Guarantees full FEFO compliance
+- **Minimum Batches**: Reduces picking complexity by minimizing batch count
+
+### Key Features
+
+- **What-If Scenarios**: Compare all strategies before committing to a selection
+- **Constraint Satisfaction**: Shelf life requirements, warehouse filters, batch exclusions
+- **Cost Integration**: Leverages Phase 4 cost trends for intelligent weighting
+- **FEFO Violation Detection**: Automatic tracking and reporting
+
+### Documentation
+
+Complete project documentation is available in `docs/project_formulation/`:
+- Phase implementation reports
+- Technical specifications
+- Agent communication protocols
+- Unit test specifications
+
+---
+
 ## License
 
 MIT
