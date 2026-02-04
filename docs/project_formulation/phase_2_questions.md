@@ -7,7 +7,7 @@ Questions from the Implementation Team (AI Agent) to the Orchestrator/Parallel T
 **From:** Implementation Team (AI Agent)
 **To:** Orchestrator/Parallel Team
 **Date:** 2026-02-04
-**Status:** 🟡 AWAITING RESPONSES
+**Status:** ✅ ANSWERED
 
 ---
 
@@ -165,4 +165,212 @@ Based on the answers, we will:
 
 ---
 
-*Awaiting parallel team responses to proceed with implementation.*
+*All questions answered - ready to proceed with implementation.*
+
+---
+
+## ANSWERS FROM ORCHESTRATOR TEAM
+
+**Date:** 2026-02-04
+**Answered by:** Orchestrator/Parallel Team
+
+---
+
+### Answer 1: Golden Number Pattern Clarification
+
+**Support BOTH patterns with auto-detection.**
+
+The system has two item code formats:
+1. **Legacy Format (Phase 1):** `ITEM_PPPPFFYYPS` - Product + Folio + Year + Plant + Sequence
+2. **New Format (Phase 2):** `ITEM-NAME-YYWWDS` - Year + Week + Day + Sequence
+
+Implementation approach:
+```python
+def parse_golden_number_universal(item_code):
+    """Parse golden number supporting both formats."""
+    # Try new format first (YYWWDS at end)
+    match_new = re.search(r'(\d{2})(\d{2})(\d)(\d)$', item_code)
+    if match_new:
+        year, week, day, seq = map(int, match_new.groups())
+        if 1 <= week <= 52 and 1 <= day <= 7:
+            return {'format': 'YYWWDS', 'year': year, 'week': week, 'day': day, 'sequence': seq}
+    
+    # Try legacy format (PPPPFFYYPS)
+    match_legacy = re.search(r'(\d{4})(\d{2})(\d{2})(\d)(\d?)$', item_code)
+    if match_legacy:
+        product, folio, year, plant, seq = match_legacy.groups()
+        return {'format': 'PPPPFFYYPS', 'product': product, 'folio': int(folio), 
+                'year': int(year), 'plant': plant, 'sequence': int(seq or 1)}
+    
+    return None  # Unable to parse
+```
+
+---
+
+### Answer 2: Architecture - Standalone vs Orchestrator Integration
+
+**Option C - Both approaches.**
+
+1. Create standalone `skills/batch_selector/` with core logic
+2. The orchestrator's sub-agent (`formulation_orchestrator/agents/batch_selector.py`) calls/wraps the standalone skill
+3. This allows:
+   - Direct API calls to batch_selector skill
+   - Orchestrated calls through formulation_orchestrator
+   - Reusability across different contexts
+
+---
+
+### Answer 3: Cost Data Source
+
+**Use Stock Ledger Entry with fallbacks.**
+
+Priority order:
+1. `Stock Ledger Entry.valuation_rate` for specific batch
+2. `Item.valuation_rate` as fallback
+3. Return 0 with `cost_unknown: True` flag if no cost found
+
+```python
+def get_batch_cost(batch_id, item_code):
+    sle_rate = frappe.db.get_value('Stock Ledger Entry',
+        {'batch_no': batch_id, 'item_code': item_code, 'actual_qty': ['>', 0]},
+        'valuation_rate', order_by='posting_date desc')
+    if sle_rate:
+        return flt(sle_rate)
+    
+    item_rate = frappe.db.get_value('Item', item_code, 'valuation_rate')
+    return flt(item_rate) if item_rate else 0
+```
+
+---
+
+### Answer 4: Default Warehouse
+
+**Query all warehouses by default, use `FG to Sell Warehouse - AMB-W` as suggested default.**
+
+- If `warehouse=None`: Query all warehouses
+- If user needs specific warehouse: Pass explicitly
+- Default constant for convenience: `DEFAULT_WAREHOUSE = 'FG to Sell Warehouse - AMB-W'`
+
+---
+
+### Answer 5: TDS Specification Source
+
+**TDS specs come from COA AMB / COA AMB2 doctypes.**
+
+The `tds_specs` parameter should contain the target specification ranges. These can be:
+1. Passed from Phase 1 based on the finished product's specification
+2. Queried from a `Quality Inspection Template` linked to the item
+3. Provided by the user/caller
+
+For Phase 2, assume `tds_specs` is passed as input (from orchestrator or API call).
+
+---
+
+### Answer 6: Raven Channel Integration
+
+**Option B - Standard frappe whitelist function.**
+
+The standalone skill should be a pure function (frappe whitelist). The orchestrator handles Raven channel communication at a higher level.
+
+---
+
+### Answer 7: Expired Batch Handling
+
+**Option C - Configurable with sensible defaults.**
+
+```python
+def select_optimal_batches(
+    ...
+    include_expired: bool = False,
+    near_expiry_days: int = 30
+):
+    # Filter expired batches unless explicitly included
+    if not include_expired:
+        batches = [b for b in batches if not is_expired(b)]
+    
+    # Flag batches near expiry
+    for batch in selected:
+        if is_near_expiry(batch, near_expiry_days):
+            batch['warnings'].append(f'Expires within {near_expiry_days} days')
+```
+
+---
+
+### Answer 8: Reserved Quantity Handling
+
+**DO NOT update reserved_qty during selection - this is read-only.**
+
+- Batch selection is a QUERY operation, not a TRANSACTION
+- Reservation should happen when a Work Order or Stock Entry is created
+- Concurrent request handling is managed by ERPNext's transactional system
+- Return `available_qty = actual_qty - reserved_qty` as read-only value
+
+---
+
+### Answer 9: Integration with formulation_reader
+
+**Support both patterns with universal parser.**
+
+Update the standalone `batch_selector` skill to include a universal parser that handles both formats. Keep Phase 1's parser as-is for backward compatibility.
+
+The batch_selector will have its own `parse_golden_number_universal()` that supports both formats.
+
+---
+
+### Answer 10: Weighted Average Calculation
+
+**Yes, use the formula: `sum(param_value * qty) / total_qty`**
+
+```python
+def calculate_weighted_average(batches_with_params):
+    """
+    Calculate weighted average for blend compliance.
+    
+    batches_with_params: List of {quantity: float, coa_params: {param: {value: float}}}
+    """
+    total_qty = sum(b['quantity'] for b in batches_with_params)
+    if total_qty == 0:
+        return {}
+    
+    all_params = set()
+    for b in batches_with_params:
+        all_params.update(b['coa_params'].keys())
+    
+    weighted_avgs = {}
+    for param in all_params:
+        weighted_sum = sum(
+            b['coa_params'].get(param, {}).get('value', 0) * b['quantity']
+            for b in batches_with_params
+        )
+        weighted_avgs[param] = flt(weighted_sum / total_qty, 4)
+    
+    return weighted_avgs
+```
+
+---
+
+## Implementation Ready
+
+All questions have been answered. The Implementation Team can now proceed with Phase 2 development:
+
+| Step | Task | Status |
+|------|------|--------|
+| 1 | Create `skills/batch_selector/` folder structure | ⏳ PENDING |
+| 2 | Implement `selector.py` with core functions | ⏳ PENDING |
+| 3 | Implement `optimizer.py` for FEFO/cost modes | ⏳ PENDING |
+| 4 | Write unit tests in `tests.py` | ⏳ PENDING |
+| 5 | Create `SKILL.md` documentation | ⏳ PENDING |
+| 6 | Integration test with Phase 1 | ⏳ PENDING |
+
+---
+
+## Communication Log
+
+| Date | From | To | Message |
+|------|------|-----|----------|
+| 2026-02-04 | Impl Team | Orchestrator | Created Phase 2 questions document |
+| 2026-02-04 | Orchestrator | Impl Team | Answered all 10 questions |
+
+---
+
+*Ready to proceed with Phase 2 implementation.*
