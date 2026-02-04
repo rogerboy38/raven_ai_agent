@@ -1163,5 +1163,763 @@ class TestPhaseIntegration(unittest.TestCase):
         self.assertIn('failing_parameters', response.result['non_compliant_batches'][0])
 
 
+# ============================================================================
+# NEW TESTS: Phase 4 Cost Calculator Enhancements
+# Added: February 4, 2026
+# ============================================================================
+
+class TestPhase4InputTransformation(unittest.TestCase):
+    """Tests for Phase 3 to Phase 4 input transformation."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_transform_phase3_input(self, mock_frappe):
+        """Test transformation of Phase 3 compliance_results format.
+        
+        Phase 3 outputs: {compliance_results: [{item_code, batches_checked: [{batch_id, batch_no, allocated_qty, tds_status}]}]}
+        Phase 4 expects internally: List of {batch_name, batch_id, item_code, qty, warehouse}
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        
+        agent = CostCalculatorAgent()
+        
+        # Phase 3 output format
+        phase3_output = {
+            'compliance_results': [
+                {
+                    'item_code': 'ALO-LEAF-GEL-RAW',
+                    'batches_checked': [
+                        {
+                            'batch_id': 'BATCH-001',
+                            'batch_no': 'LOTE001',
+                            'allocated_qty': 300,
+                            'tds_status': 'COMPLIANT',
+                            'warehouse': 'FG Warehouse'
+                        },
+                        {
+                            'batch_id': 'BATCH-002',
+                            'batch_no': 'LOTE002',
+                            'allocated_qty': 200,
+                            'tds_status': 'COMPLIANT',
+                            'warehouse': 'FG Warehouse'
+                        }
+                    ],
+                    'item_compliance_status': 'ALL_COMPLIANT'
+                }
+            ],
+            'formulation_request': {
+                'finished_item_code': 'FIN-ALOE-001',
+                'target_quantity_kg': 100
+            }
+        }
+        
+        batches, formulation_request, warnings = agent._transform_phase3_input(phase3_output)
+        
+        # Verify batches list
+        self.assertIsInstance(batches, list)
+        self.assertEqual(len(batches), 2)
+        
+        # Verify batch structure
+        for batch in batches:
+            self.assertIn('batch_name', batch)
+            self.assertIn('batch_id', batch)
+            self.assertIn('item_code', batch)
+            self.assertIn('qty', batch)
+        
+        # Verify item_code is propagated
+        self.assertEqual(batches[0]['item_code'], 'ALO-LEAF-GEL-RAW')
+        self.assertEqual(batches[1]['item_code'], 'ALO-LEAF-GEL-RAW')
+        
+        # Verify batch_name uses batch_no
+        self.assertEqual(batches[0]['batch_name'], 'LOTE001')
+        self.assertEqual(batches[1]['batch_name'], 'LOTE002')
+        
+        # Verify quantities
+        self.assertEqual(batches[0]['qty'], 300)
+        self.assertEqual(batches[1]['qty'], 200)
+        
+        # Verify formulation_request is returned
+        self.assertEqual(formulation_request['target_quantity_kg'], 100)
+        
+        # No warnings for fully compliant input
+        self.assertEqual(len(warnings), 0)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_compliant_batch_filtering(self, mock_frappe):
+        """Test that only COMPLIANT batches are processed.
+        
+        Non-compliant batches should be skipped and generate warnings.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        
+        agent = CostCalculatorAgent()
+        
+        # Phase 3 output with mixed compliance
+        phase3_output = {
+            'compliance_results': [
+                {
+                    'item_code': 'ALO-LEAF-GEL-RAW',
+                    'batches_checked': [
+                        {
+                            'batch_id': 'BATCH-001',
+                            'batch_no': 'LOTE001',
+                            'allocated_qty': 300,
+                            'tds_status': 'COMPLIANT'
+                        },
+                        {
+                            'batch_id': 'BATCH-002',
+                            'batch_no': 'LOTE002',
+                            'allocated_qty': 200,
+                            'tds_status': 'NON_COMPLIANT'  # Should be skipped
+                        },
+                        {
+                            'batch_id': 'BATCH-003',
+                            'batch_no': 'LOTE003',
+                            'allocated_qty': 150,
+                            'tds_status': 'COMPLIANT'
+                        }
+                    ],
+                    'item_compliance_status': 'PARTIAL_COMPLIANT'
+                }
+            ],
+            'formulation_request': {'target_quantity_kg': 100}
+        }
+        
+        batches, formulation_request, warnings = agent._transform_phase3_input(phase3_output)
+        
+        # Only 2 compliant batches should be included
+        self.assertEqual(len(batches), 2)
+        
+        # Verify correct batches are included
+        batch_names = [b['batch_name'] for b in batches]
+        self.assertIn('LOTE001', batch_names)
+        self.assertIn('LOTE003', batch_names)
+        self.assertNotIn('LOTE002', batch_names)
+        
+        # Should have warnings for non-compliant batch and partial compliance
+        self.assertGreaterEqual(len(warnings), 1)
+        
+        # Check for NON_COMPLIANT_BATCH warning
+        non_compliant_warnings = [w for w in warnings if w.get('warning') == 'NON_COMPLIANT_BATCH']
+        self.assertEqual(len(non_compliant_warnings), 1)
+        self.assertIn('LOTE002', non_compliant_warnings[0]['message'])
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_partial_compliance_warning(self, mock_frappe):
+        """Test that PARTIAL_COMPLIANCE items generate warnings."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        
+        agent = CostCalculatorAgent()
+        
+        phase3_output = {
+            'compliance_results': [
+                {
+                    'item_code': 'ALO-LEAF-GEL-RAW',
+                    'batches_checked': [
+                        {'batch_id': 'B1', 'batch_no': 'L1', 'allocated_qty': 100, 'tds_status': 'COMPLIANT'}
+                    ],
+                    'item_compliance_status': 'PARTIAL_COMPLIANT'  # Not ALL_COMPLIANT
+                }
+            ],
+            'formulation_request': {}
+        }
+        
+        batches, formulation_request, warnings = agent._transform_phase3_input(phase3_output)
+        
+        # Should have PARTIAL_COMPLIANCE warning
+        partial_warnings = [w for w in warnings if w.get('warning') == 'PARTIAL_COMPLIANCE']
+        self.assertEqual(len(partial_warnings), 1)
+        self.assertEqual(partial_warnings[0]['item_code'], 'ALO-LEAF-GEL-RAW')
+
+
+class TestPhase4PriceLookup(unittest.TestCase):
+    """Tests for price lookup priority logic."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_price_lookup_batch_specific(self, mock_base_frappe, mock_frappe):
+        """Test batch-specific pricing is used first (Priority 1)."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from datetime import date
+        
+        agent = CostCalculatorAgent()
+        
+        # Mock batch-specific price exists
+        mock_frappe.get_all.return_value = [
+            {
+                'price_list_rate': 25.50,
+                'currency': 'MXN',
+                'uom': 'Kg',
+                'valid_from': date(2026, 1, 1),
+                'valid_upto': date(2026, 12, 31)
+            }
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        result = agent._get_item_price(
+            item_code='ITEM-001',
+            price_list='Standard Buying',
+            batch_no='LOTE001',
+            qty=100
+        )
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result['price'], 25.50)
+        self.assertEqual(result['source'], 'Item Price (Batch)')
+        self.assertEqual(result['price_list'], 'Standard Buying')
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_price_lookup_date_validity(self, mock_base_frappe, mock_frappe):
+        """Test that date validity filtering works (Priority 2)."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from datetime import date
+        
+        agent = CostCalculatorAgent()
+        
+        # First call (batch) returns empty, second call (date filter) returns price
+        mock_frappe.get_all.side_effect = [
+            [],  # No batch-specific price
+            [    # Valid date price exists
+                {
+                    'price_list_rate': 20.00,
+                    'currency': 'MXN',
+                    'uom': 'Kg',
+                    'valid_from': date(2026, 1, 1),
+                    'valid_upto': date(2026, 12, 31),
+                    'min_qty': 0
+                }
+            ]
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        result = agent._get_item_price(
+            item_code='ITEM-001',
+            price_list='Standard Buying',
+            qty=100
+        )
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result['price'], 20.00)
+        self.assertEqual(result['source'], 'Item Price')
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_price_lookup_fallback_chain(self, mock_base_frappe, mock_frappe):
+        """Test fallback to Item document rates (Priority 4-6)."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        
+        agent = CostCalculatorAgent()
+        
+        # All Item Price lookups return empty
+        mock_frappe.get_all.return_value = []
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        # Mock Item document with standard_rate
+        mock_item = Mock()
+        mock_item.standard_rate = 18.75
+        mock_item.last_purchase_rate = 17.50
+        mock_item.valuation_rate = 16.00
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        result = agent._get_item_price(
+            item_code='ITEM-001',
+            price_list='Standard Buying',
+            qty=100
+        )
+        
+        self.assertIsNotNone(result)
+        # Should use standard_rate first (Priority 4)
+        self.assertEqual(result['price'], 18.75)
+        self.assertEqual(result['source'], 'Item Standard Rate')
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_price_lookup_last_purchase_rate(self, mock_base_frappe, mock_frappe):
+        """Test fallback to last_purchase_rate when standard_rate is missing."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        
+        agent = CostCalculatorAgent()
+        
+        mock_frappe.get_all.return_value = []
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        # Item with no standard_rate but has last_purchase_rate
+        mock_item = Mock()
+        mock_item.standard_rate = 0  # No standard rate
+        mock_item.last_purchase_rate = 17.50
+        mock_item.valuation_rate = 16.00
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        result = agent._get_item_price(
+            item_code='ITEM-001',
+            price_list='Standard Buying',
+            qty=100
+        )
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result['price'], 17.50)
+        self.assertEqual(result['source'], 'Last Purchase Rate')
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_price_lookup_no_price_found(self, mock_base_frappe, mock_frappe):
+        """Test that None is returned when no price is found."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        
+        agent = CostCalculatorAgent()
+        
+        mock_frappe.get_all.return_value = []
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        # Item with no rates
+        mock_item = Mock()
+        mock_item.standard_rate = 0
+        mock_item.last_purchase_rate = 0
+        mock_item.valuation_rate = 0
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        result = agent._get_item_price(
+            item_code='ITEM-001',
+            price_list='Standard Buying',
+            qty=100
+        )
+        
+        self.assertIsNone(result)
+
+
+class TestPhase4OutputFormat(unittest.TestCase):
+    """Tests for Phase 4 output format compliance."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_output_format_compliance(self, mock_base_frappe, mock_frappe):
+        """Test that output matches the contract specification.
+        
+        Expected output format:
+        {
+            'cost_breakdown': [...],
+            'summary': {...},
+            'pricing_sources': [...],
+            'warnings': []
+        }
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = CostCalculatorAgent()
+        
+        # Mock price lookup
+        mock_frappe.get_all.return_value = [
+            {'price_list_rate': 20.00, 'currency': 'MXN', 'uom': 'Kg', 
+             'valid_from': None, 'valid_upto': None, 'min_qty': 0}
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        # Mock Item document
+        mock_item = Mock()
+        mock_item.item_name = 'Aloe Vera Gel'
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        message = AgentMessage(
+            source_agent="tds_compliance",
+            target_agent="cost_calculator",
+            action="calculate_formulation_cost",
+            payload={
+                'compliance_results': [
+                    {
+                        'item_code': 'ALO-GEL-001',
+                        'batches_checked': [
+                            {'batch_id': 'B1', 'batch_no': 'L1', 'allocated_qty': 100, 'tds_status': 'COMPLIANT'}
+                        ],
+                        'item_compliance_status': 'ALL_COMPLIANT'
+                    }
+                ],
+                'formulation_request': {'target_quantity_kg': 50, 'uom': 'Kg'}
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Verify top-level structure
+        self.assertIn('cost_breakdown', result)
+        self.assertIn('summary', result)
+        self.assertIn('pricing_sources', result)
+        self.assertIn('warnings', result)
+        
+        # Verify cost_breakdown structure
+        self.assertIsInstance(result['cost_breakdown'], list)
+        if result['cost_breakdown']:
+            item = result['cost_breakdown'][0]
+            self.assertIn('item_code', item)
+            self.assertIn('item_name', item)
+            self.assertIn('total_qty', item)
+            self.assertIn('uom', item)
+            self.assertIn('batch_costs', item)
+            self.assertIn('item_total_cost', item)
+        
+        # Verify summary structure
+        summary = result['summary']
+        self.assertIn('total_material_cost', summary)
+        self.assertIn('currency', summary)
+        self.assertIn('finished_qty', summary)
+        self.assertIn('finished_uom', summary)
+        self.assertIn('cost_per_unit', summary)
+        self.assertIn('items_costed', summary)
+        self.assertIn('batches_costed', summary)
+        
+        # Verify pricing_sources structure
+        self.assertIsInstance(result['pricing_sources'], list)
+        if result['pricing_sources']:
+            source = result['pricing_sources'][0]
+            self.assertIn('item_code', source)
+            self.assertIn('source', source)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_warnings_no_price(self, mock_base_frappe, mock_frappe):
+        """Test that warnings are generated for missing prices."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = CostCalculatorAgent()
+        
+        # All price lookups return empty
+        mock_frappe.get_all.return_value = []
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        # Item with no rates
+        mock_item = Mock()
+        mock_item.item_name = 'No Price Item'
+        mock_item.stock_uom = 'Kg'
+        mock_item.standard_rate = 0
+        mock_item.last_purchase_rate = 0
+        mock_item.valuation_rate = 0
+        mock_frappe.get_doc.return_value = mock_item
+        
+        message = AgentMessage(
+            source_agent="tds_compliance",
+            target_agent="cost_calculator",
+            action="calculate_formulation_cost",
+            payload={
+                'compliance_results': [
+                    {
+                        'item_code': 'NO-PRICE-ITEM',
+                        'batches_checked': [
+                            {'batch_id': 'B1', 'batch_no': 'L1', 'allocated_qty': 100, 'tds_status': 'COMPLIANT'}
+                        ],
+                        'item_compliance_status': 'ALL_COMPLIANT'
+                    }
+                ],
+                'formulation_request': {'target_quantity_kg': 50}
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        
+        # Should have NO_PRICE warning
+        warnings = response.result.get('warnings', [])
+        no_price_warnings = [w for w in warnings if w.get('error') == 'NO_PRICE']
+        self.assertGreater(len(no_price_warnings), 0)
+        self.assertEqual(no_price_warnings[0]['item_code'], 'NO-PRICE-ITEM')
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_cost_calculation_accuracy(self, mock_base_frappe, mock_frappe):
+        """Test that cost calculations are accurate (qty * unit_price)."""
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = CostCalculatorAgent()
+        
+        # Price: 15.00 MXN per Kg
+        mock_frappe.get_all.return_value = [
+            {'price_list_rate': 15.00, 'currency': 'MXN', 'uom': 'Kg',
+             'valid_from': None, 'valid_upto': None, 'min_qty': 0}
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        mock_item = Mock()
+        mock_item.item_name = 'Test Item'
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        message = AgentMessage(
+            source_agent="tds_compliance",
+            target_agent="cost_calculator",
+            action="calculate_formulation_cost",
+            payload={
+                'compliance_results': [
+                    {
+                        'item_code': 'ITEM-001',
+                        'batches_checked': [
+                            {'batch_id': 'B1', 'batch_no': 'L1', 'allocated_qty': 100, 'tds_status': 'COMPLIANT'},
+                            {'batch_id': 'B2', 'batch_no': 'L2', 'allocated_qty': 50, 'tds_status': 'COMPLIANT'}
+                        ],
+                        'item_compliance_status': 'ALL_COMPLIANT'
+                    }
+                ],
+                'formulation_request': {'target_quantity_kg': 50, 'uom': 'Kg'}
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        
+        # Verify calculations
+        # Batch 1: 100 * 15.00 = 1500.00
+        # Batch 2: 50 * 15.00 = 750.00
+        # Total: 2250.00
+        summary = response.result['summary']
+        self.assertEqual(summary['total_material_cost'], 2250.00)
+        
+        # Cost per unit: 2250.00 / 50 = 45.00
+        self.assertEqual(summary['cost_per_unit'], 45.00)
+        
+        # Verify batch-level costs
+        cost_breakdown = response.result['cost_breakdown']
+        self.assertEqual(len(cost_breakdown), 1)  # One item
+        
+        batch_costs = cost_breakdown[0]['batch_costs']
+        self.assertEqual(len(batch_costs), 2)  # Two batches
+        
+        self.assertEqual(batch_costs[0]['batch_cost'], 1500.00)
+        self.assertEqual(batch_costs[1]['batch_cost'], 750.00)
+
+
+class TestPhase4Integration(unittest.TestCase):
+    """Integration tests for Phase 4 Cost Calculator with other phases."""
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_phase3_to_phase4_flow(self, mock_base_frappe, mock_frappe):
+        """Test end-to-end flow from Phase 3 output to Phase 4 processing.
+        
+        Verifies that Phase 3 compliance_results format is correctly
+        processed by Phase 4 calculate_formulation_cost action.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = CostCalculatorAgent()
+        
+        mock_frappe.get_all.return_value = [
+            {'price_list_rate': 10.00, 'currency': 'MXN', 'uom': 'Kg',
+             'valid_from': None, 'valid_upto': None, 'min_qty': 0}
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        mock_item = Mock()
+        mock_item.item_name = 'Aloe Raw'
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        # Realistic Phase 3 output
+        phase3_output = {
+            'compliance_results': [
+                {
+                    'item_code': 'ALO-LEAF-GEL-RAW',
+                    'batches_checked': [
+                        {
+                            'batch_id': 'BATCH-ALO-001',
+                            'batch_no': 'ALO-2026-001',
+                            'allocated_qty': 300,
+                            'tds_status': 'COMPLIANT',
+                            'warehouse': 'FG Warehouse',
+                            'parameters_checked': {
+                                'pH': {'value': 4.2, 'status': 'PASS'},
+                                'Aloin': {'value': 1.5, 'status': 'PASS'}
+                            }
+                        }
+                    ],
+                    'item_compliance_status': 'ALL_COMPLIANT'
+                },
+                {
+                    'item_code': 'ALO-200X-PWD',
+                    'batches_checked': [
+                        {
+                            'batch_id': 'BATCH-PWD-001',
+                            'batch_no': 'PWD-2026-001',
+                            'allocated_qty': 50,
+                            'tds_status': 'COMPLIANT',
+                            'warehouse': 'RM Warehouse'
+                        }
+                    ],
+                    'item_compliance_status': 'ALL_COMPLIANT'
+                }
+            ],
+            'formulation_request': {
+                'finished_item_code': 'FIN-ALOE-GEL-001',
+                'target_quantity_kg': 100,
+                'uom': 'Kg'
+            }
+        }
+        
+        message = AgentMessage(
+            source_agent="tds_compliance",
+            target_agent="cost_calculator",
+            action="calculate_formulation_cost",
+            payload=phase3_output
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success, f"Failed: {response.error}")
+        
+        # Verify all items were processed
+        cost_breakdown = response.result['cost_breakdown']
+        self.assertEqual(len(cost_breakdown), 2)
+        
+        item_codes = [item['item_code'] for item in cost_breakdown]
+        self.assertIn('ALO-LEAF-GEL-RAW', item_codes)
+        self.assertIn('ALO-200X-PWD', item_codes)
+        
+        # Verify summary
+        summary = response.result['summary']
+        self.assertEqual(summary['items_costed'], 2)
+        self.assertEqual(summary['batches_costed'], 2)
+        self.assertEqual(summary['finished_qty'], 100)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_phase4_to_phase5_handoff(self, mock_base_frappe, mock_frappe):
+        """Test that Phase 4 output is compatible with Phase 5.
+        
+        Phase 5 (Report Generator) expects cost data that can be included
+        in final formulation reports.
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = CostCalculatorAgent()
+        
+        mock_frappe.get_all.return_value = [
+            {'price_list_rate': 12.00, 'currency': 'MXN', 'uom': 'Kg',
+             'valid_from': None, 'valid_upto': None, 'min_qty': 0}
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        mock_item = Mock()
+        mock_item.item_name = 'Test Material'
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        message = AgentMessage(
+            source_agent="tds_compliance",
+            target_agent="cost_calculator",
+            action="calculate_formulation_cost",
+            payload={
+                'compliance_results': [
+                    {
+                        'item_code': 'MAT-001',
+                        'batches_checked': [
+                            {'batch_id': 'B1', 'batch_no': 'L1', 'allocated_qty': 200, 'tds_status': 'COMPLIANT'}
+                        ],
+                        'item_compliance_status': 'ALL_COMPLIANT'
+                    }
+                ],
+                'formulation_request': {'target_quantity_kg': 100}
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        result = response.result
+        
+        # Phase 5 report needs these fields for cost summary section
+        self.assertIn('summary', result)
+        self.assertIn('total_material_cost', result['summary'])
+        self.assertIn('cost_per_unit', result['summary'])
+        self.assertIn('currency', result['summary'])
+        
+        # Phase 5 report needs per-item breakdown
+        self.assertIn('cost_breakdown', result)
+        for item in result['cost_breakdown']:
+            self.assertIn('item_code', item)
+            self.assertIn('item_name', item)
+            self.assertIn('item_total_cost', item)
+        
+        # Phase 5 needs pricing source for audit trail
+        self.assertIn('pricing_sources', result)
+    
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.cost_calculator.frappe')
+    @patch('raven_ai_agent.skills.formulation_orchestrator.agents.base.frappe')
+    def test_mixed_compliance_handling(self, mock_base_frappe, mock_frappe):
+        """Test handling of mixed compliant and non-compliant input.
+        
+        Verifies that:
+        1. Only compliant batches are costed
+        2. Non-compliant batches generate warnings
+        3. Totals reflect only compliant batch quantities
+        """
+        from raven_ai_agent.skills.formulation_orchestrator.agents import CostCalculatorAgent
+        from raven_ai_agent.skills.formulation_orchestrator.messages import AgentMessage
+        
+        agent = CostCalculatorAgent()
+        
+        mock_frappe.get_all.return_value = [
+            {'price_list_rate': 10.00, 'currency': 'MXN', 'uom': 'Kg',
+             'valid_from': None, 'valid_upto': None, 'min_qty': 0}
+        ]
+        mock_frappe.defaults.get_global_default.return_value = 'MXN'
+        
+        mock_item = Mock()
+        mock_item.item_name = 'Mixed Item'
+        mock_item.stock_uom = 'Kg'
+        mock_frappe.get_doc.return_value = mock_item
+        
+        # Input with mixed compliance
+        message = AgentMessage(
+            source_agent="tds_compliance",
+            target_agent="cost_calculator",
+            action="calculate_formulation_cost",
+            payload={
+                'compliance_results': [
+                    {
+                        'item_code': 'MIX-001',
+                        'batches_checked': [
+                            {'batch_id': 'B1', 'batch_no': 'L1', 'allocated_qty': 100, 'tds_status': 'COMPLIANT'},
+                            {'batch_id': 'B2', 'batch_no': 'L2', 'allocated_qty': 50, 'tds_status': 'NON_COMPLIANT'},  # Skipped
+                            {'batch_id': 'B3', 'batch_no': 'L3', 'allocated_qty': 75, 'tds_status': 'COMPLIANT'}
+                        ],
+                        'item_compliance_status': 'PARTIAL_COMPLIANT'
+                    }
+                ],
+                'formulation_request': {'target_quantity_kg': 100}
+            }
+        )
+        
+        response = agent.handle_message(message)
+        
+        self.assertTrue(response.success)
+        
+        # Only 2 compliant batches should be costed
+        cost_breakdown = response.result['cost_breakdown']
+        self.assertEqual(len(cost_breakdown), 1)  # One item
+        
+        batch_costs = cost_breakdown[0]['batch_costs']
+        self.assertEqual(len(batch_costs), 2)  # Two compliant batches
+        
+        # Total should be (100 + 75) * 10.00 = 1750.00
+        self.assertEqual(response.result['summary']['total_material_cost'], 1750.00)
+        
+        # Should have warnings for skipped batch and partial compliance
+        warnings = response.result['warnings']
+        self.assertGreater(len(warnings), 0)
+        
+        non_compliant_warnings = [w for w in warnings if w.get('warning') == 'NON_COMPLIANT_BATCH']
+        self.assertEqual(len(non_compliant_warnings), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
