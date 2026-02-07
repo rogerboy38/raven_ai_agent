@@ -2,11 +2,11 @@
 name = "raven_ai_agent"
 version = "0.1.0"
 description = "AI Agent for ERPNext with Raymond-Lucy Protocol"
-requires-python = ">=3.10"  # v15: 3.10+, v16: 3.14+
+requires-python = ">=3.10"  # v15: 3.10+, v16+: 3.11+/3.12+ depending on bench
 dependencies = [
-    "openai>=1.0.0",
-    "tiktoken>=0.5.0",
-    "numpy>=1.24.0",
+  "openai>=1.0.0",
+  "tiktoken>=0.5.0",
+  "numpy>=1.24.0",
 ]
 
 [project.urls]
@@ -14,8 +14,8 @@ Repository = "https://github.com/rogerboy38/raven_ai_agent"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
 ]
 
 [build-system]
@@ -24,9 +24,14 @@ build-backend = "flit_core.buildapi"
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.2",
+  "pytest>=9.0.2",
 ]
 
 [[tool.uv.index]]
 url = "http://mirrors.cloud.aliyuncs.com/pypi/simple"
 default = true
+
+# Tell bench / Frappe Cloud which Frappe versions this app supports
+[tool.bench.frappe-dependencies]
+# For Frappe v16+ benches (including v17), this is a safe range:
+frappe = ">=16.0.0,<18.0.0"
