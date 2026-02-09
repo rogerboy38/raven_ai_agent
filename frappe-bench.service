@@ -6,9 +6,10 @@ After=network.target redis.service
 Type=simple
 User=frappe
 WorkingDirectory=/home/frappe/frappe-bench
-ExecStart=/home/frappe/frappe-bench/env/bin/bench serve --port 8000
+ExecStart=/home/frappe/.local/bin/bench serve --port 8000
 Restart=always
 RestartSec=5
+Environment=PATH=/home/frappe/.local/bin:/usr/local/bin:/usr/bin:/bin
 
 [Install]
 WantedBy=multi-user.target
