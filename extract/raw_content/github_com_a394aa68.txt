@@ -1,0 +1,598 @@
+# Source URL: https://github.com/frappe/frappe/issues/33371
+# Content Length: 11952 characters
+# Extracted at: 2026-02-09 23:22:39
+#============================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Socket IO is not working · Issue #33371 · frappe/frappe · GitHub
+
+
+
+
+
+
+
+
+
+
+
+
+[Skip to content](#start-of-content)
+
+
+
+
+Navigation Menu
+---------------
+
+Toggle navigation
+
+ 
+
+
+
+
+
+
+[Sign in](/login?return_to=https%3A%2F%2Fgithub.com%2Ffrappe%2Ffrappe%2Fissues%2F33371)
+ 
+
+
+Appearance settings
+
+
+
+
+
+
+
+* Platform
+  + AI CODE CREATION
+    - [GitHub CopilotWrite better code with AI](https://github.com/features/copilot)
+    - [GitHub SparkBuild and deploy intelligent apps](https://github.com/features/spark)
+    - [GitHub ModelsManage and compare prompts](https://github.com/features/models)
+    - [MCP RegistryNewIntegrate external tools](https://github.com/mcp)
+  + DEVELOPER WORKFLOWS
+    - [ActionsAutomate any workflow](https://github.com/features/actions)
+    - [CodespacesInstant dev environments](https://github.com/features/codespaces)
+    - [IssuesPlan and track work](https://github.com/features/issues)
+    - [Code ReviewManage code changes](https://github.com/features/code-review)
+  + APPLICATION SECURITY
+    - [GitHub Advanced SecurityFind and fix vulnerabilities](https://github.com/security/advanced-security)
+    - [Code securitySecure your code as you build](https://github.com/security/advanced-security/code-security)
+    - [Secret protectionStop leaks before they start](https://github.com/security/advanced-security/secret-protection)
+  + EXPLORE
+    - [Why GitHub](https://github.com/why-github)
+    - [Documentation](https://docs.github.com)
+    - [Blog](https://github.blog)
+    - [Changelog](https://github.blog/changelog)
+    - [Marketplace](https://github.com/marketplace)[View all features](https://github.com/features)
+* Solutions
+  + BY COMPANY SIZE
+    - [Enterprises](https://github.com/enterprise)
+    - [Small and medium teams](https://github.com/team)
+    - [Startups](https://github.com/enterprise/startups)
+    - [Nonprofits](https://github.com/solutions/industry/nonprofits)
+  + BY USE CASE
+    - [App Modernization](https://github.com/solutions/use-case/app-modernization)
+    - [DevSecOps](https://github.com/solutions/use-case/devsecops)
+    - [DevOps](https://github.com/solutions/use-case/devops)
+    - [CI/CD](https://github.com/solutions/use-case/ci-cd)
+    - [View all use cases](https://github.com/solutions/use-case)
+  + BY INDUSTRY
+    - [Healthcare](https://github.com/solutions/industry/healthcare)
+    - [Financial services](https://github.com/solutions/industry/financial-services)
+    - [Manufacturing](https://github.com/solutions/industry/manufacturing)
+    - [Government](https://github.com/solutions/industry/government)
+    - [View all industries](https://github.com/solutions/industry)[View all solutions](https://github.com/solutions)
+* Resources
+  + EXPLORE BY TOPIC
+    - [AI](https://github.com/resources/articles?topic=ai)
+    - [Software Development](https://github.com/resources/articles?topic=software-development)
+    - [DevOps](https://github.com/resources/articles?topic=devops)
+    - [Security](https://github.com/resources/articles?topic=security)
+    - [View all topics](https://github.com/resources/articles)
+  + EXPLORE BY TYPE
+    - [Customer stories](https://github.com/customer-stories)
+    - [Events & webinars](https://github.com/resources/events)
+    - [Ebooks & reports](https://github.com/resources/whitepapers)
+    - [Business insights](https://github.com/solutions/executive-insights)
+    - [GitHub Skills](https://skills.github.com)
+  + SUPPORT & SERVICES
+    - [Documentation](https://docs.github.com)
+    - [Customer support](https://support.github.com)
+    - [Community forum](https://github.com/orgs/community/discussions)
+    - [Trust center](https://github.com/trust-center)
+    - [Partners](https://github.com/partners)
+* Open Source
+  + COMMUNITY
+    - [GitHub SponsorsFund open source developers](https://github.com/sponsors)
+  + PROGRAMS
+    - [Security Lab](https://securitylab.github.com)
+    - [Maintainer Community](https://maintainers.github.com)
+    - [Accelerator](https://github.com/accelerator)
+    - [Archive Program](https://archiveprogram.github.com)
+  + REPOSITORIES
+    - [Topics](https://github.com/topics)
+    - [Trending](https://github.com/trending)
+    - [Collections](https://github.com/collections)
+* Enterprise
+  + ENTERPRISE SOLUTIONS
+    - [Enterprise platformAI-powered developer platform](https://github.com/enterprise)
+  + AVAILABLE ADD-ONS
+    - [GitHub Advanced SecurityEnterprise-grade security features](https://github.com/security/advanced-security)
+    - [Copilot for BusinessEnterprise-grade AI features](https://github.com/features/copilot/copilot-business)
+    - [Premium SupportEnterprise-grade 24/7 support](https://github.com/premium-support)
+* [Pricing](https://github.com/pricing)
+
+
+
+Search or jump to...
+
+
+
+
+Search code, repositories, users, issues, pull requests...
+==========================================================
+
+ 
+Search
+
+
+
+
+Clear
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+[Search syntax tips](https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax) 
+
+
+
+
+
+
+
+Provide feedback
+================
+
+
+
+
+
+ 
+
+We read every piece of feedback, and take your input very seriously.
+
+
+
+Include my email address so I can be contacted
+
+
+  Cancel
+
+ Submit feedback
+
+
+
+Saved searches
+==============
+
+Use saved searches to filter your results more quickly
+------------------------------------------------------
+
+
+
+
+
+ 
+
+Name
+
+
+
+
+Query
+
+To see all available qualifiers, see our [documentation](https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax).
+
+ 
+
+
+
+
+  Cancel
+
+ Create saved search
+
+
+
+
+
+
+[Sign in](/login?return_to=https%3A%2F%2Fgithub.com%2Ffrappe%2Ffrappe%2Fissues%2F33371)
+
+[Sign up](/signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fvoltron%2Fissues_fragments%2Fissue_layout&source=header-repo&source_repo=frappe%2Ffrappe)
+ 
+
+
+Appearance settings
+
+
+
+
+
+Resetting focus
+
+
+
+
+
+You signed in with another tab or window. Reload to refresh your session.
+You signed out in another tab or window. Reload to refresh your session.
+You switched accounts on another tab or window. Reload to refresh your session.
+ 
+
+
+Dismiss alert
+
+
+
+{{ message }}
+
+
+
+
+
+[frappe](/frappe) 
+/
+**[frappe](/frappe/frappe)**
+Public
+
+
+* [Notifications](/login?return_to=%2Ffrappe%2Ffrappe) You must be signed in to change notification settings
+* [Fork
+  4.6k](/login?return_to=%2Ffrappe%2Ffrappe)
+* [Star
+   9.7k](/login?return_to=%2Ffrappe%2Ffrappe)
+
+
+
+* [Code](/frappe/frappe)
+* [Issues
+  2.3k](/frappe/frappe/issues)
+* [Pull requests
+  107](/frappe/frappe/pulls)
+* [Actions](/frappe/frappe/actions)
+* [Projects
+  5](/frappe/frappe/projects)
+* [Wiki](/frappe/frappe/wiki)
+* [Security
+  34](/frappe/frappe/security)
+* [Insights](/frappe/frappe/pulse)
+
+ 
+ 
+
+
+Additional navigation options
+ 
+
+* [Code](/frappe/frappe)
+* [Issues](/frappe/frappe/issues)
+* [Pull requests](/frappe/frappe/pulls)
+* [Actions](/frappe/frappe/actions)
+* [Projects](/frappe/frappe/projects)
+* [Wiki](/frappe/frappe/wiki)
+* [Security](/frappe/frappe/security)
+* [Insights](/frappe/frappe/pulse)
+
+
+ 
+
+
+
+Socket IO is not working #33371
+===============================
+
+[New issue](/login?return_to=https://github.com/frappe/frappe/issues/33371)Copy link[New issue](/login?return_to=https://github.com/frappe/frappe/issues/33371)Copy linkClosed as not plannedClosed as not planned[Socket IO is not working](#top)#33371Copy linkLabels[bug](https://github.com/frappe/frappe/issues?q=state%3Aopen%20label%3A%22bug%22)[![]()](https://github.com/VadymKhvoinytskyi)
+
+Description
+-----------
+
+[![]()](https://github.com/VadymKhvoinytskyi)[VadymKhvoinytskyi](https://github.com/VadymKhvoinytskyi)opened [on Jul 14, 2025](https://github.com/frappe/frappe/issues/33371#issue-3239676833)Issue body actions
+### Information about bug
+
+No matter what I do I am still getting invalid origin while app tries to connect with websocket.  
+
+I added any to origin and added proper origin header handling to nginx, but still getting the same error.
+
+I notice that socket files are owned by root rather than frappe as all other files. And it seems like realtime/index.js has its own cors settings that are not affected by site configs. Maybe the problem lies there.
+
+I have the following configuration:
+
+cat /home/frappe/frappe-bench/sites/mydomain.com/site\_config.json  
+
+{  
+
+"allow\_cors": "<https://mydomain.com>",  
+
+"backup\_encryption\_key": "hidden",  
+
+"db\_name": "hidden",  
+
+"db\_password": "hidden",  
+
+"db\_type": "hidden",  
+
+"db\_user": "hidden",  
+
+"domains": [  
+
+"mydomain.com"  
+
+],  
+
+"encryption\_key": "hidden",  
+
+"maintenance\_mode": 0,  
+
+"pause\_scheduler": false,  
+
+"push\_relay\_server\_url": "<https://fcm.googleapis.com/fcm/send>",  
+
+"socketio\_origin": "\*",  
+
+"socketio\_port": 9000,  
+
+"user\_type\_doctype\_limit": {  
+
+"employee\_self\_service": 40  
+
+},  
+
+"websocket\_url": "wss://mydomain.com"  
+
+}
+
+cat /home/frappe/frappe-bench/sites/common\_site\_config.json  
+
+{  
+
+"allow\_cors": "*",  
+
+"background\_workers": 2,  
+
+"dns\_multitenant": true,  
+
+"file\_watcher\_port": 6787,  
+
+"frappe\_user": "frappe",  
+
+"gunicorn\_workers": 9,  
+
+"live\_reload": true,  
+
+"maintenance\_mode": 1,  
+
+"pause\_scheduler": 1,  
+
+"rebase\_on\_pull": false,  
+
+"redis\_cache": "redis://127.0.0.1:13000",  
+
+"redis\_queue": "redis://127.0.0.1:11000",  
+
+"redis\_socketio": "redis://127.0.0.1:13000",  
+
+"restart\_supervisor\_on\_update": true,  
+
+"restart\_systemd\_on\_update": false,  
+
+"serve\_default\_site": true,  
+
+"server\_script\_enabled": 1,  
+
+"shallow\_clone": true,  
+
+"socketio\_origin": "*",  
+
+"socketio\_port": 9000,  
+
+"use\_redis\_auth": false,  
+
+"webserver\_port": 8000  
+
+}
+
+cat /etc/nginx/sites-enabled/nginx.conf |grep socket -A 18  
+
+location /socket.io/ {  
+
+proxy\_http\_version 1.1;  
+
+proxy\_set\_header Upgrade $http\_upgrade;  
+
+proxy\_set\_header Connection "Upgrade";  
+
+proxy\_set\_header Host $host;  
+
+proxy\_set\_header X-Forwarded-For $proxy\_add\_x\_forwarded\_for;  
+
+#proxy\_set\_header X-Forwarded-Proto https;  
+
+proxy\_set\_header X-Forwarded-Proto $scheme;  
+
+proxy\_cache\_bypass $http\_upgrade;  
+
+proxy\_set\_header X-Real-IP $remote\_addr;  
+
+proxy\_pass <http://127.0.0.1:9000>;  
+
+proxy\_read\_timeout 86400;  
+
+}
+
+### Module
+
+other
+
+### Version
+
+frappe 15.73.0  
+
+erpnext 15.68.0
+
+### Installation method
+
+manual install
+
+### Relevant log output / Stack trace / Full Error Message.
+
+```
+Client network dev tools network tab:
+Get and post requests initiated by polling.js to https:// return 200 OK.
+But get request in preview has the following: 44 / mydomain.com,
+{
+    "message": "Invalid origin"
+}
+websocket connection on wss:// returns 101 Switching Protocols.
+
+Client console logs:
+WebSocket connection to 'wss://mydomain.com/socket.io/EIO=4&transport=websocket&sid=DwOLyK91xkme4We7AAD2' failed: WebSocket is closed before the connection is established.
+Error connecting to socket.io:"Invalid origin".
+```
+Reactions are currently unavailable
+
+Metadata
+--------
+
+Metadata
+--------
+
+### Assignees
+
+No one assigned
+
+### Labels
+
+[bug](https://github.com/frappe/frappe/issues?q=state%3Aopen%20label%3A%22bug%22)
+### Type
+
+No type
+### Projects
+
+No projects
+### Milestone
+
+No milestone
+
+### Relationships
+
+None yet
+### Development
+
+No branches or pull requests
+
+Issue actions
+-------------
+
+
+
+
+
+
+
+
+
+Footer
+------
+
+© 2026 GitHub, Inc.
+
+
+### Footer navigation
+
+* [Terms](https://docs.github.com/site-policy/github-terms/github-terms-of-service)
+* [Privacy](https://docs.github.com/site-policy/privacy-policies/github-privacy-statement)
+* [Security](https://github.com/security)
+* [Status](https://www.githubstatus.com/)
+* [Community](https://github.community/)
+* [Docs](https://docs.github.com/)
+* [Contact](https://support.github.com?tags=dotcom-footer)
+* Manage cookies
+* Do not share my personal information
+
+
+
+
+You can’t perform that action at this time.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
