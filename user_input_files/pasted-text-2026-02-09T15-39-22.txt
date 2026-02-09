@@ -1,0 +1,146 @@
+frappe@srv1345217:~/frappe-bench$ # Check what's running
+ps aux | grep -E 'gunicorn|bench|worker' | grep -v grep
+
+# Check systemd services
+systemctl list-units --type=service | grep -i frappe
+
+# Check the frappe-bench service we created earlier
+cat /etc/systemd/system/frappe-bench.service
+root           4  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-rcu_g]
+root           5  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-rcu_p]
+root           6  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-slub_]
+root           7  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-netns]
+root           9  0.0  0.0      0     0 ?        I<   Feb07   0:08 [kworker/0:0H-kblockd]
+root          12  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-mm_pe]
+root          26  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/1:0H-kblockd]
+root          38  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/3:0H-events_highpri]
+root          44  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/4:0H-kblockd]
+root          50  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/5:0H-kblockd]
+root          56  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/6:0H-events_highpri]
+root          62  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/7:0H-events_highpri]
+root          64  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-inet_]
+root          70  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-write]
+root          74  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-kinte]
+root          75  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-kbloc]
+root          76  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-blkcg]
+root          81  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-tpm_d]
+root          82  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-ata_s]
+root          83  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-md]
+root          84  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-md_bi]
+root          85  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-edac-]
+root          86  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-devfr]
+root          91  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-kthro]
+root          92  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-acpi_]
+root          95  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-scsi_]
+root          97  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-scsi_]
+root          99  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-scsi_]
+root         104  0.0  0.0      0     0 ?        I<   Feb07   0:04 [kworker/5:1H-kblockd]
+root         106  0.0  0.0      0     0 ?        I<   Feb07   0:06 [kworker/1:1H-kblockd]
+root         107  0.0  0.0      0     0 ?        I<   Feb07   0:04 [kworker/4:1H-kblockd]
+root         108  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-mld]
+root         109  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-ipv6_]
+root         116  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-kstrp]
+root         119  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/u17:0]
+root         124  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-crypt]
+root         134  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-charg]
+root         158  0.0  0.0      0     0 ?        I<   Feb07   0:05 [kworker/2:1H-kblockd]
+root         162  0.0  0.0      0     0 ?        I<   Feb07   0:04 [kworker/6:1H-kblockd]
+root         173  0.0  0.0      0     0 ?        I<   Feb07   0:36 [kworker/7:1H-kblockd]
+root         254  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-raid5]
+root         295  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-ext4-]
+root         395  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-kmpat]
+root         396  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-kmpat]
+root         544  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-ext4-]
+root        2446  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/0:2H-kblockd]
+root        2459  0.0  0.0      0     0 ?        I<   Feb07   0:04 [kworker/3:2H-kblockd]
+root        3073  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-tls-s]
+root      103359  0.0  0.0      0     0 ?        I<   Feb07   0:00 [kworker/R-dio/s]
+ubuntu    133337  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133338  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133339  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133340  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133341  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133342  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133343  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+ubuntu    133344  0.0  0.0  10700  2224 ?        S    Feb07   0:00 nginx: worker process
+root      697243  0.0  0.0      0     0 ?        I<   Feb08   0:00 [kworker/2:2H]
+frappe    944965  0.0  0.3 243288 121576 pts/5   Sl+  07:43   0:01 /home/frappe/frappe-bench/env/bin/python -m frappe.utils.bench_helper frappe serve --port 8000
+frappe    944970  0.0  0.0  41904 16256 pts/5    S+   07:43   0:00 /home/frappe/frappe-bench/env/bin/python -c from multiprocessing.resource_tracker import main;main(10)
+frappe    944971 17.1  1.8 3172296 607256 pts/5  Sl+  07:43  81:16 /home/frappe/frappe-bench/env/bin/python -m frappe.utils.bench_helper frappe serve --port 8000
+frappe    944974  0.0  0.0  41904 16256 pts/5    S+   07:44   0:00 /home/frappe/frappe-bench/env/bin/python -c from multiprocessing.resource_tracker import main;main(12)
+root     1121043  0.0  0.0      0     0 ?        I    14:28   0:00 [kworker/u16:0-flush-8:0]
+root     1123267  0.0  0.0      0     0 ?        I    14:34   0:00 [kworker/7:1-cgroup_destroy]
+root     1126139  0.0  0.0      0     0 ?        I    14:41   0:00 [kworker/u16:2-flush-8:0]
+root     1127632  0.0  0.0      0     0 ?        I    14:44   0:00 [kworker/u16:7-writeback]
+root     1130305  0.0  0.0      0     0 ?        I    14:50   0:00 [kworker/2:0-cgroup_destroy]
+frappe   1130955  0.0  0.2 1575960 67012 ?       Ssl  14:52   0:00 /usr/bin/node /home/frappe/frappe-bench/apps/frappe/socketio.js
+root     1132724  0.0  0.0      0     0 ?        I    14:55   0:00 [kworker/0:2-events]
+root     1136312  0.0  0.0      0     0 ?        I    15:01   0:00 [kworker/1:0-cgroup_destroy]
+root     1136482  0.0  0.0      0     0 ?        I    15:01   0:00 [kworker/u16:1-ext4-rsv-conversion]
+root     1136498  0.0  0.0      0     0 ?        I    15:01   0:00 [kworker/5:2-cgroup_destroy]
+root     1138454  0.0  0.0      0     0 ?        I    15:05   0:00 [kworker/7:3-cgroup_destroy]
+root     1139910  0.0  0.0      0     0 ?        I    15:08   0:00 [kworker/4:1-cgroup_destroy]
+root     1141137  0.0  0.0      0     0 ?        I    15:11   0:00 [kworker/u16:5-flush-8:0]
+root     1141378  0.0  0.0      0     0 ?        I    15:12   0:00 [kworker/2:2-events_freezable]
+root     1143756  0.0  0.0      0     0 ?        I    15:16   0:00 [kworker/1:2-cgroup_destroy]
+root     1144749  0.0  0.0      0     0 ?        I    15:18   0:00 [kworker/5:3-events]
+root     1145899  0.0  0.0      0     0 ?        I    15:20   0:00 [kworker/u16:4-ext4-rsv-conversion]
+root     1146120  0.0  0.0      0     0 ?        I    15:21   0:00 [kworker/4:0-cgroup_destroy]
+root     1146597  0.0  0.0      0     0 ?        I    15:22   0:00 [kworker/6:1-events]
+root     1146938  0.0  0.0      0     0 ?        I    15:22   0:00 [kworker/3:1-cgroup_destroy]
+root     1147937  0.0  0.0      0     0 ?        I    15:24   0:00 [kworker/3:2-events]
+root     1148344  0.0  0.0      0     0 ?        I    15:25   0:00 [kworker/u16:3-flush-8:0]
+root     1149112  0.0  0.0      0     0 ?        I    15:27   0:00 [kworker/4:2-cgroup_destroy]
+root     1149254  0.0  0.0      0     0 ?        I    15:27   0:00 [kworker/6:2-cgroup_destroy]
+root     1149562  0.0  0.0      0     0 ?        I    15:27   0:00 [kworker/1:1-events]
+root     1150589  0.0  0.0      0     0 ?        I    15:30   0:00 [kworker/2:1-cgroup_destroy]
+root     1151057  0.0  0.0      0     0 ?        I    15:31   0:00 [kworker/3:0-ipv6_addrconf]
+root     1151712  0.0  0.0      0     0 ?        I    15:32   0:00 [kworker/6:3-cgroup_destroy]
+root     1151990  0.0  0.0      0     0 ?        I    15:33   0:00 [kworker/0:0-cgroup_destroy]
+root     1152021  0.0  0.0      0     0 ?        I    15:33   0:00 [kworker/5:1-cgroup_destroy]
+root     1152239  0.0  0.0      0     0 ?        I    15:33   0:00 [kworker/0:1-events]
+root     1152262  0.0  0.0      0     0 ?        I    15:33   0:00 [kworker/7:2-events]
+root     1152603  0.0  0.0      0     0 ?        I    15:34   0:00 [kworker/4:3-mld]
+root     1152725  0.0  0.0      0     0 ?        I    15:34   0:00 [kworker/1:3-events]
+root     1153314  0.0  0.0      0     0 ?        I    15:35   0:00 [kworker/2:3-cgroup_destroy]
+root     1153440  0.0  0.0      0     0 ?        I    15:35   0:00 [kworker/u16:6-flush-8:0]
+root     1153979  0.0  0.0      0     0 ?        I    15:37   0:00 [kworker/3:3-cgroup_destroy]
+root     1155028  0.0  0.0      0     0 ?        I    15:38   0:00 [kworker/5:0-cgroup_destroy]
+root     1155043  0.0  0.0      0     0 ?        I    15:38   0:00 [kworker/6:0-events]
+root     1155051  0.0  0.0      0     0 ?        I    15:38   0:00 [kworker/7:0-cgroup_destroy]
+ubuntu   1155091 91.8  0.2  93056 72108 ?        Rs   15:38   0:01 /home/frappe/frappe-bench/env/bin/python -m frappe.utils.bench_helper frappe schedule
+root     1155099  0.5  0.0  26736  5568 ?        S    15:39   0:00 (udev-worker)
+root     1155104  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155105  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155106  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155107  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155108  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155109  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155110  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155111  0.0  0.0  26736  5312 ?        S    15:39   0:00 (udev-worker)
+root     1155112  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155113  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155114  0.0  0.0  26736  5312 ?        S    15:39   0:00 (udev-worker)
+root     1155115  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155116  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155117  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+root     1155119  0.0  0.0  26736  5440 ?        S    15:39   0:00 (udev-worker)
+frappe   1155137  283  0.0  22948 14592 ?        Rs   15:39   0:00 /home/frappe/.local/share/pipx/venvs/frappe-bench/bin/python /home/frappe/.local/bin/bench serve --port 8000
+  frappe-bench.service                           loaded active running Frappe Bench Server
+  frappe-socketio.service                        loaded active running Frappe SocketIO Server
+[Unit]
+Description=Frappe Bench Server
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=frappe
+WorkingDirectory=/home/frappe/frappe-bench
+ExecStart=/home/frappe/.local/bin/bench serve --port 8000
+Restart=always
+RestartSec=5
+Environment=PATH=/home/frappe/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
+frappe@srv1345217:~/frappe-bench$ 
