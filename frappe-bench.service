@@ -1,0 +1,14 @@
+[Unit]
+Description=Frappe Bench Server
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=frappe
+WorkingDirectory=/home/frappe/frappe-bench
+ExecStart=/home/frappe/frappe-bench/env/bin/bench serve --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Frappe SocketIO Server
+After=network.target redis.service frappe-bench.service
+
+[Service]
+Type=simple
+User=frappe
+WorkingDirectory=/home/frappe/frappe-bench
+ExecStart=/usr/bin/node /home/frappe/frappe-bench/apps/frappe/socketio.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
