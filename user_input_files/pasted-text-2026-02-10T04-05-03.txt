@@ -1,0 +1,263 @@
+Here’s a concise report you can paste to your dev team.
+
+Raven Realtime – Current Status & Fix Guidelines
+1. Summary
+Backend code for Raven realtime is correct and already fixed:
+
+All AI and user messages now call a shared helper that publishes message_created with the right doctype, docname and payload.
+​
+​
+
+The remaining issues are transport and routing:
+
+On prod: WebSocket / polling stability across Traefik/nginx and the Socket.IO server.
+
+On sandbox: Browser hits /socket.io on ngrok and gets 404, because that path is not forwarded to the Socket.IO port.
+​
+​
+
+If the team fixes routing according to the guidelines below, the “Realtime events are not working” banner should disappear and messages will appear in the UI without refresh.
+
+2. What is already correct in Raven
+From docs_RAVEN_REALTIME_FIX_HANDOUT.md:
+​
+
+Correct event name: message_created.
+
+Correct room targeting:
+
+doctype="Raven Channel", docname=channel_id → room doc:Raven Channel:<channel_id>.
+​
+​
+
+Correct payload:
+
+python
+frappe.publish_realtime(
+    "message_created",
+    {
+        "channel_id": channel_id,
+        "sender": frappe.session.user,
+        "message_id": message_doc.name,
+        "message_details": _get_message_details(message_doc),
+    },
+    doctype="Raven Channel",
+    docname=channel_id,
+    after_commit=True,
+)
+```[1][4]
+
+All message sources (agent, v1 agent, channel handler) now call the shared publish_message_created_event() helper.
+​
+
+Frontend:
+
+Uses useFrappeDocumentEventListener('Raven Channel', channelID, ...) and listens for event.event === "message_created", which matches the backend.
+​
+​
+
+Conclusion: No changes are needed to Raven’s event names, payload, or room logic.
+
+3. Prod environment: routing and stability guidelines
+3.1 Required invariants
+Socket.IO server:
+
+Listens on host at 0.0.0.0:9001 (Frappe’s realtime/index.js → socketio_port).
+​
+
+Public endpoint for clients:
+
+https://v2.sysmayal.cloud/socket.io/ must map to that host port, with:
+
+HTTP/1.1
+
+Upgrade: websocket and Connection: upgrade preserved
+
+Query string preserved (EIO=4, transport=..., sid=...).
+
+3.2 Traefik + nginx recommendation (simplified)
+Option B (with nginx sidecar) – close to current setup
+
+frappe-socketio container runs nginx with:
+
+text
+events { worker_connections 1024; }
+
+http {
+  upstream socketio_backend {
+    server 172.17.0.1:9001;
+  }
+
+  server {
+    listen 80;
+
+    location /socket.io/ {
+      proxy_pass http://socketio_backend;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 86400;
+      proxy_send_timeout 86400;
+      proxy_buffering off;
+    }
+  }
+}
+```[5][6]
+
+Traefik labels for that container:
+
+text
+- "traefik.enable=true"
+- "traefik.http.routers.frappe-socketio.rule=Host(`v2.sysmayal.cloud`) && PathPrefix(`/socket.io`)"
+- "traefik.http.routers.frappe-socketio.entrypoints=websecure"
+- "traefik.http.routers.frappe-socketio.tls.certresolver=myresolver"
+- "traefik.http.services.frappe-socketio.loadbalancer.server.port=80"
+Ensure:
+
+No other router (e.g. frappe web router) claims /socket.io for the same host.
+
+There is only one Socket.IO Node process behind 9001 (or, if you scale, you add @socket.io/redis-adapter and Traefik sticky sessions).
+
+3.3 Validation steps for prod
+Dev team should be able to confirm:
+
+From host:
+
+bash
+curl "http://localhost:9001/socket.io/?EIO=4&transport=polling" -iv
+→ HTTP 200 with handshake JSON.
+​
+
+From outside:
+
+bash
+curl -k "https://v2.sysmayal.cloud/socket.io/?EIO=4&transport=polling" -iv
+→ HTTP 200 and identical Engine.IO JSON (same structure).
+
+In browser DevTools:
+
+https://v2.sysmayal.cloud/socket.io/?EIO=4&transport=polling... returns 200, then WebSocket upgrade to wss://v2.sysmayal.cloud/socket.io/?EIO=4&transport=websocket&sid=... stays open (no immediate close).
+​
+
+If all three are true, realtime transport on prod is healthy.
+
+4. Sandbox environment: ngrok routing guidelines
+Sandbox is simpler: no Docker, just bench + ngrok.
+
+Current state:
+
+Socket.IO on sandbox is listening on localhost:9000 and responds with 200 handshake to curl.
+​
+
+Browser connects to:
+
+text
+https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling...
+and gets 404 (Not Found) repeatedly, which triggers "Realtime events are not working. Please try refreshing the page.".
+​
+
+This means ngrok is not forwarding /socket.io to port 9000.
+
+4.1 Simple fix patterns for sandbox
+Your team can choose one of these:
+
+A. Use nginx as a local multiplexer
+
+Add nginx on sandbox:
+
+text
+server {
+  listen 8005;
+
+  location / {
+    proxy_pass http://127.0.0.1:8000;  # Frappe web
+  }
+
+  location /socket.io/ {
+    proxy_pass http://127.0.0.1:9000;  # Socket.IO
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+  }
+}
+Run ngrok pointing to port 8005:
+
+bash
+ngrok http 8005
+Then https://sysmayal.ngrok.io/socket.io/... will hit port 9000 correctly, and the browser will stop getting 404s.
+
+B. Use two tunnels (web + socket.io)
+
+If separate URLs are acceptable:
+
+Tunnel 1: web (8000)
+
+bash
+ngrok http 8000
+Tunnel 2: socket.io (9000)
+
+bash
+ngrok http 9000
+Configure Raven on sandbox to use the Socket.IO tunnel URL for realtime (for example, a config variable in Raven pointing to https://<socketio-subdomain>.ngrok.io, with path: "/socket.io/").
+
+Option A (single URL, nginx multiplexer) is closer to prod and easier to mirror.
+
+4.2 Sandbox validation steps
+curl "http://localhost:9000/socket.io/?EIO=4&transport=polling" → 200 (already OK).
+​
+
+curl "https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling" → must be 200 after fix (currently 404).
+​
+
+bench console:
+
+python
+frappe.publish_realtime(
+    "message_created",
+    {
+        "channel_id": channel_id,
+        "sender": frappe.session.user,
+        "message_id": "TEST-SANDBOX-1",
+        "message_details": {"text": "Hello from sandbox console", "message_type": "Text"},
+    },
+    doctype="Raven Channel",
+    docname=channel_id,
+    after_commit=True,
+)
+→ The test message should appear in the Raven UI for that channel.
+
+5. Raven frontend expectations (both envs)
+To keep it simple for the devs:
+
+Raven/Frappe frontend should connect like this:
+
+ts
+const socket = io(window.location.origin, {
+  path: "/socket.io/",
+  transports: ["websocket", "polling"],
+  withCredentials: true,
+});
+No hard‑coded localhost:9000 or :9001 in the browser; origin + /socket.io/ should be enough if proxies are correctly configured.
+
+If there are still transient issues, it is reasonable to temporarily prefer WebSocket only:
+
+ts
+transports: ["websocket"],
+once HTTP/WS upgrade paths are confirmed to work.
+
+6. TL;DR for the dev team
+Do not change Raven’s event logic; the message_created events are correct and already centralized.
+​
+
+Prod: ensure Traefik/ nginx route https://v2.sysmayal.cloud/socket.io/ cleanly to the Node Socket.IO server on 9001 with HTTP/1.1 and proper upgrade headers.
+
+Sandbox: fix ngrok so https://sysmayal.ngrok.io/socket.io/ forwards to localhost:9000/socket.io/ (via nginx on 8005 or a dedicated tunnel).
+
+Use the three validation tests (local curl, external curl, bench publish_realtime) as deployment checks for both environments.
+
+If they follow these guidelines, Raven realtime will be stable and consistent across prod and sandbox.
