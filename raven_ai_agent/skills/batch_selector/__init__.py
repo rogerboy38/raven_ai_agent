@@ -1,61 +1,39 @@
-"""BATCH_SELECTOR_AGENT Skill
+"""Batch Selector Skill for Raven AI Agent.
 
-Phase 2 of the Formulation Orchestration Project.
+This skill provides functionality to parse and select batches using
+the golden number format (XX-YYYY-###).
 
-This skill provides intelligent batch selection for raw materials
-using FEFO (First Expired, First Out) logic while respecting
-TDS compliance requirements.
-
-Author: Raven AI Agent
-Date: 2026-02-04
-Version: 1.0.0
+Modules:
+    - parsers: Universal golden number parser with fuzzy matching
+    - selector: Batch selection and Frappe API integration
 """
 
 from .parsers import (
-    parse_golden_number_universal,
-    parse_golden_number_yywwds,
-    parse_golden_number_legacy
+    parse_golden_number,
+    validate_format,
+    extract_components,
+    fuzzy_match,
+    GoldenNumberParser
 )
 
 from .selector import (
-    get_available_batches,
-    select_optimal_batches,
-    select_batches_for_formulation,
-    get_batch_cost,
-    calculate_weighted_average,
-    validate_blend_compliance
+    select_batch,
+    query_frappe_batch,
+    format_response,
+    BatchSelector
 )
 
-from .optimizer import (
-    sort_batches_fefo,
-    sort_batches_cost,
-    get_batch_sort_key,
-    filter_batches_by_expiry
-)
-
+__version__ = "0.1.0"
 __all__ = [
-    # Parsers
-    'parse_golden_number_universal',
-    'parse_golden_number_yywwds',
-    'parse_golden_number_legacy',
-    # Selector
-    'get_available_batches',
-    'select_optimal_batches',
-    'select_batches_for_formulation',
-    'get_batch_cost',
-    'calculate_weighted_average',
-    'validate_blend_compliance',
-    # Optimizer
-    'sort_batches_fefo',
-    'sort_batches_cost',
-    'get_batch_sort_key',
-    'filter_batches_by_expiry',
+    # Parser functions
+    "parse_golden_number",
+    "validate_format",
+    "extract_components",
+    "fuzzy_match",
+    "GoldenNumberParser",
+    # Selector functions
+    "select_batch",
+    "query_frappe_batch",
+    "format_response",
+    "BatchSelector",
 ]
-
-__version__ = '1.0.0'
-__author__ = 'Raven AI Agent'
-
-# Default configuration
-DEFAULT_WAREHOUSE = 'FG to Sell Warehouse - AMB-W'
-DEFAULT_NEAR_EXPIRY_DAYS = 30
-DEFAULT_OPTIMIZATION_MODE = 'fefo'  # 'fefo' or 'cost'

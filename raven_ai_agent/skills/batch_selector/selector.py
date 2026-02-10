@@ -1,166 +1,210 @@
-"""Core Batch Selection Functions for BATCH_SELECTOR_AGENT
+"""Batch Selector for Raven AI Agent.
 
-Main entry point for batch selection operations.
-Provides frappe whitelist functions for direct API access.
+This module provides batch selection functionality that integrates
+with Frappe/ERPNext to retrieve batch information using golden numbers.
 
-Author: Raven AI Agent
-Date: 2026-02-04
+Core Functions:
+    - select_batch: Main selection logic
+    - query_frappe_batch: API call to Frappe
+    - format_response: Structures response for AI agent
 """
 
 import json
-from typing import List, Dict, Any, Optional, Union
+import requests
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, field
+from datetime import datetime
+import logging
 
-try:
-    import frappe
-    from frappe.utils import flt
-    HAS_FRAPPE = True
-except ImportError:
-    HAS_FRAPPE = False
-    def flt(x, precision=None):
-        return float(x) if x else 0.0
-
-from .parsers import parse_golden_number_universal
-from .optimizer import optimize_batches, get_batch_sort_key
-
-# Default configuration
-DEFAULT_WAREHOUSE = 'FG to Sell Warehouse - AMB-W'
-DEFAULT_NEAR_EXPIRY_DAYS = 30
+from .parsers import parse_golden_number, GoldenNumberParser, ParsedGoldenNumber
 
 
-def get_batch_cost(batch_id: str, item_code: str) -> tuple:
-    """Get cost for batch using SLE with fallback to Item."""
-    if not HAS_FRAPPE:
-        return 0.0, True
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BatchInfo:
+    """Structured batch information."""
+    golden_number: str
+    item_code: str = ""
+    item_name: str = ""
+    batch_qty: float = 0.0
+    manufacturing_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    status: str = "Unknown"
+    warehouse: str = ""
+    supplier: str = ""
+    additional_data: Dict[str, Any] = field(default_factory=dict)
     
-    sle_rate = frappe.db.get_value(
-        'Stock Ledger Entry',
-        {'batch_no': batch_id, 'item_code': item_code, 'actual_qty': ['>', 0]},
-        'valuation_rate', order_by='posting_date desc'
-    )
-    if sle_rate:
-        return flt(sle_rate), False
-    
-    item_rate = frappe.db.get_value('Item', item_code, 'valuation_rate')
-    return (flt(item_rate), False) if item_rate else (0.0, True)
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "golden_number": self.golden_number,
+            "item_code": self.item_code,
+            "item_name": self.item_name,
+            "batch_qty": self.batch_qty,
+            "manufacturing_date": self.manufacturing_date,
+            "expiry_date": self.expiry_date,
+            "status": self.status,
+            "warehouse": self.warehouse,
+            "supplier": self.supplier,
+            "additional_data": self.additional_data
+        }
 
 
-def get_available_batches(item_code: str, warehouse: Optional[str] = None) -> List[Dict]:
-    """Get available batches for item with stock > 0."""
-    if not HAS_FRAPPE:
-        return []
+@dataclass
+class SelectionResult:
+    """Result of a batch selection operation."""
+    success: bool
+    batch: Optional[BatchInfo] = None
+    batches: List[BatchInfo] = field(default_factory=list)
+    message: str = ""
+    error_code: Optional[str] = None
+    search_type: str = ""
+    confidence: float = 0.0
     
-    batches = frappe.get_all('Batch', filters={'item': item_code, 'disabled': 0},
-        fields=['name', 'batch_id', 'item', 'manufacturing_date', 'expiry_date', 'stock_uom'])
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result = {
+            "success": self.success,
+            "message": self.message,
+            "search_type": self.search_type,
+            "confidence": self.confidence
+        }
+        if self.batch:
+            result["batch"] = self.batch.to_dict()
+        if self.batches:
+            result["batches"] = [b.to_dict() for b in self.batches]
+        if self.error_code:
+            result["error_code"] = self.error_code
+        return result
+
+
+class BatchSelector:
+    """Main class for batch selection operations."""
     
-    result = []
-    for batch in batches:
-        bin_filters = {'item_code': item_code, 'batch_no': batch.name}
-        if warehouse:
-            bin_filters['warehouse'] = warehouse
+    def __init__(
+        self,
+        frappe_url: str,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        default_company_code: str = "01",
+        cache_enabled: bool = True,
+        cache_ttl: int = 300
+    ):
+        self.frappe_url = frappe_url.rstrip('/')
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.parser = GoldenNumberParser(default_company_code=default_company_code)
+        self.cache_enabled = cache_enabled
+        self.cache_ttl = cache_ttl
+        self._cache: Dict[str, tuple] = {}
+    
+    def _get_headers(self) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if self.api_key and self.api_secret:
+            headers["Authorization"] = f"token {self.api_key}:{self.api_secret}"
+        return headers
+    
+    def select(self, input_string: str) -> SelectionResult:
+        parsed = self.parser.parse(input_string)
+        if not parsed.valid:
+            return SelectionResult(success=False, message=parsed.error_message or "Could not parse input", error_code="PARSE_ERROR")
         
-        for bin_rec in frappe.get_all('Bin', filters=bin_filters,
-                fields=['warehouse', 'actual_qty', 'reserved_qty']):
-            available = (bin_rec.actual_qty or 0) - (bin_rec.reserved_qty or 0)
-            if available > 0:
-                cost, cost_unknown = get_batch_cost(batch.name, item_code)
-                result.append({
-                    'batch_id': batch.name, 'batch_no': batch.batch_id or batch.name,
-                    'item_code': batch.item,
-                    'manufacturing_date': str(batch.manufacturing_date) if batch.manufacturing_date else None,
-                    'expiry_date': str(batch.expiry_date) if batch.expiry_date else None,
-                    'warehouse': bin_rec.warehouse, 'available_qty': available,
-                    'uom': batch.stock_uom, 'cost': cost, 'cost_unknown': cost_unknown, 'warnings': []
-                })
-    return result
-
-
-def select_optimal_batches(item_code: str, required_qty: float, warehouse: Optional[str] = None,
-        optimization_mode: str = 'fefo', include_expired: bool = False,
-        near_expiry_days: int = DEFAULT_NEAR_EXPIRY_DAYS) -> Dict:
-    """Select optimal batches to fulfill required quantity."""
-    batches = get_available_batches(item_code, warehouse)
-    if not batches:
-        return {'item_code': item_code, 'required_qty': required_qty, 'selected_batches': [],
-                'total_allocated': 0, 'shortfall': required_qty, 'fulfillment_status': 'NO_STOCK'}
-    
-    sorted_batches = optimize_batches(batches, mode=optimization_mode,
-        include_expired=include_expired, near_expiry_days=near_expiry_days)
-    
-    allocations, remaining = [], required_qty
-    for rank, batch in enumerate(sorted_batches, start=1):
-        if remaining <= 0:
-            break
-        allocate_qty = min(batch['available_qty'], remaining)
-        gn = parse_golden_number_universal(batch.get('item_code', ''))
-        allocations.append({
-            'batch_id': batch['batch_id'], 'batch_no': batch['batch_no'],
-            'available_qty': batch['available_qty'], 'allocated_qty': allocate_qty,
-            'warehouse': batch['warehouse'],
-            'manufacturing_date': batch.get('manufacturing_date'),
-            'expiry_date': batch.get('expiry_date'),
-            'golden_number': gn, 'fefo_rank': rank, 'tds_status': 'pending_check',
-            'cost': batch.get('cost', 0), 'warnings': batch.get('warnings', [])
-        })
-        remaining -= allocate_qty
-    
-    total = required_qty - max(0, remaining)
-    return {'item_code': item_code, 'required_qty': required_qty, 'selected_batches': allocations,
-            'total_allocated': total, 'shortfall': max(0, remaining),
-            'fulfillment_status': 'COMPLETE' if remaining <= 0 else 'PARTIAL'}
-
-
-def calculate_weighted_average(batches_with_params: List[Dict]) -> Dict[str, float]:
-    """Calculate weighted average: sum(param_value * qty) / total_qty"""
-    total_qty = sum(b.get('quantity', 0) for b in batches_with_params)
-    if total_qty == 0:
-        return {}
-    all_params = set()
-    for b in batches_with_params:
-        all_params.update(b.get('coa_params', {}).keys())
-    return {param: flt(sum(b.get('coa_params', {}).get(param, {}).get('value', 0) * b.get('quantity', 0)
-            for b in batches_with_params) / total_qty, 4) for param in all_params}
-
-
-def validate_blend_compliance(selected_batches: List[Dict], tds_specs: Dict) -> Dict:
-    """Validate if blended parameters meet TDS specifications."""
-    batches_with_params = [{'quantity': b.get('allocated_qty', 0), 'coa_params': b.get('coa_params', {})}
-                           for b in selected_batches]
-    weighted_avgs = calculate_weighted_average(batches_with_params)
-    compliance_results, all_compliant = {}, True
-    for param, spec in tds_specs.items():
-        val = weighted_avgs.get(param)
-        min_v, max_v = spec.get('min'), spec.get('max')
-        if val is None:
-            compliance_results[param] = {'status': 'UNKNOWN'}
-            all_compliant = False
-        elif (min_v and val < min_v) or (max_v and val > max_v):
-            compliance_results[param] = {'status': 'FAIL', 'actual': val, 'min': min_v, 'max': max_v}
-            all_compliant = False
+        if parsed.search_type in ["exact", "partial"]:
+            result = self._search_exact(parsed.golden_number)
+        elif parsed.search_type == "date_range":
+            result = self._search_by_date_range(parsed.components["start_date"], parsed.components["end_date"])
+        elif parsed.search_type == "fuzzy":
+            result = self._search_by_product_name(parsed.components["product_name"])
         else:
-            compliance_results[param] = {'status': 'PASS', 'actual': val}
-    return {'compliant': all_compliant, 'weighted_averages': weighted_avgs, 'parameter_results': compliance_results}
+            result = SelectionResult(success=False, message=f"Unsupported search type: {parsed.search_type}", error_code="UNSUPPORTED_SEARCH")
+        
+        result.search_type = parsed.search_type
+        result.confidence = parsed.confidence
+        return result
+    
+    def _search_exact(self, golden_number: str) -> SelectionResult:
+        try:
+            batch_data = self._query_frappe("Batch", filters={"batch_id": golden_number}, fields=["*"])
+            if not batch_data:
+                return SelectionResult(success=False, message=f"Batch not found: {golden_number}", error_code="NOT_FOUND")
+            batch = self._parse_batch_data(batch_data[0], golden_number)
+            return SelectionResult(success=True, batch=batch, message="Batch found successfully")
+        except Exception as e:
+            logger.error(f"Error searching for batch {golden_number}: {e}")
+            return SelectionResult(success=False, message=f"Error: {str(e)}", error_code="API_ERROR")
+    
+    def _search_by_date_range(self, start_date: str, end_date: str) -> SelectionResult:
+        try:
+            batch_data = self._query_frappe("Batch", filters=[["manufacturing_date", ">=", start_date], ["manufacturing_date", "<=", end_date]], fields=["*"], limit=100)
+            if not batch_data:
+                return SelectionResult(success=False, message=f"No batches found between {start_date} and {end_date}", error_code="NOT_FOUND")
+            batches = [self._parse_batch_data(data, data.get("batch_id", "")) for data in batch_data]
+            return SelectionResult(success=True, batches=batches, message=f"Found {len(batches)} batches")
+        except Exception as e:
+            return SelectionResult(success=False, message=f"Error: {str(e)}", error_code="API_ERROR")
+    
+    def _search_by_product_name(self, product_name: str) -> SelectionResult:
+        try:
+            items = self._query_frappe("Item", filters=[["item_name", "like", f"%{product_name}%"]], fields=["name", "item_name"])
+            if not items:
+                return SelectionResult(success=False, message=f"No items found matching: {product_name}", error_code="NOT_FOUND")
+            item_codes = [item["name"] for item in items]
+            batch_data = self._query_frappe("Batch", filters=[["item", "in", item_codes]], fields=["*"], limit=50)
+            if not batch_data:
+                return SelectionResult(success=False, message=f"No batches found for: {product_name}", error_code="NOT_FOUND")
+            batches = [self._parse_batch_data(data, data.get("batch_id", "")) for data in batch_data]
+            return SelectionResult(success=True, batches=batches, message=f"Found {len(batches)} batches")
+        except Exception as e:
+            return SelectionResult(success=False, message=f"Error: {str(e)}", error_code="API_ERROR")
+    
+    def _query_frappe(self, doctype: str, filters: Any = None, fields: List[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
+        url = f"{self.frappe_url}/api/resource/{doctype}"
+        params = {"limit_page_length": limit}
+        if filters:
+            params["filters"] = json.dumps(filters)
+        if fields:
+            params["fields"] = json.dumps(fields)
+        response = requests.get(url, params=params, headers=self._get_headers(), timeout=30)
+        response.raise_for_status()
+        return response.json().get("data", [])
+    
+    def _parse_batch_data(self, data: Dict[str, Any], golden_number: str) -> BatchInfo:
+        return BatchInfo(
+            golden_number=golden_number,
+            item_code=data.get("item", ""),
+            item_name=data.get("item_name", data.get("item", "")),
+            batch_qty=float(data.get("batch_qty", 0)),
+            manufacturing_date=data.get("manufacturing_date"),
+            expiry_date=data.get("expiry_date"),
+            status="Active" if not data.get("disabled") else "Disabled",
+            warehouse=data.get("warehouse", ""),
+            supplier=data.get("supplier", "")
+        )
 
 
-if HAS_FRAPPE:
-    @frappe.whitelist()
-    def select_batches_for_formulation(required_items, warehouse=None, optimization_mode='fefo',
-            include_expired=False, near_expiry_days=DEFAULT_NEAR_EXPIRY_DAYS):
-        """Raven AI Skill: Select optimal batches for formulation items."""
-        if isinstance(required_items, str):
-            required_items = json.loads(required_items)
-        batch_selections, all_fulfilled = [], True
-        for item in required_items:
-            item_code = item.get('item_code')
-            if not frappe.db.exists('Item', item_code):
-                batch_selections.append({'item_code': item_code, 'fulfillment_status': 'ERROR',
-                    'error': f'Item {item_code} does not exist'})
-                all_fulfilled = False
-                continue
-            selection = select_optimal_batches(item_code, flt(item.get('required_qty', 0)),
-                warehouse, optimization_mode, include_expired, near_expiry_days)
-            selection['item_name'] = item.get('item_name', '')
-            if selection['fulfillment_status'] != 'COMPLETE':
-                all_fulfilled = False
-            batch_selections.append(selection)
-        return {'batch_selections': batch_selections,
-                'overall_status': 'ALL_ITEMS_FULFILLED' if all_fulfilled else 'SOME_ITEMS_SHORT'}
+# Module-level convenience functions
+_default_selector: Optional[BatchSelector] = None
+
+
+def select_batch(input_string: str) -> Dict[str, Any]:
+    """Select a batch using the default selector."""
+    if not _default_selector:
+        raise RuntimeError("Selector not configured. Call configure_selector first.")
+    result = _default_selector.select(input_string)
+    return result.to_dict()
+
+
+def query_frappe_batch(golden_number: str) -> Dict[str, Any]:
+    """Query Frappe for a specific batch by golden number."""
+    if not _default_selector:
+        raise RuntimeError("Selector not configured. Call configure_selector first.")
+    result = _default_selector._search_exact(golden_number)
+    return result.to_dict()
+
+
+def format_response(result: SelectionResult) -> Dict[str, Any]:
+    """Format a SelectionResult for AI agent consumption."""
+    return result.to_dict()
