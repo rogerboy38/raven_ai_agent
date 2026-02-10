@@ -1,0 +1,514 @@
+# Source URL: https://raw.githubusercontent.com/The-Commit-Company/raven/develop/raven/api/raven_message.py
+# Content Length: 14102 characters
+# Extracted at: 2026-02-10 10:09:51
+#============================================================
+
+import json
+from datetime import timedelta
+import frappe
+from frappe import \_
+from frappe.query\_builder import JoinType, Order
+from frappe.query\_builder.functions import Coalesce, Count
+from raven.api.raven\_channel import create\_direct\_message\_channel, get\_peer\_user\_id
+from raven.utils import get\_channel\_member, is\_channel\_member, track\_channel\_visit
+@frappe.whitelist(methods=["POST"])
+def send\_message(
+channel\_id: str,
+text: str,
+is\_reply: bool = False,
+linked\_message: str | None = None,
+json\_content: dict | str | None = None,
+send\_silently: bool = False,
+):
+if is\_reply:
+doc = frappe.get\_doc(
+{
+"doctype": "Raven Message",
+"channel\_id": channel\_id,
+"text": text,
+"message\_type": "Text",
+"is\_reply": is\_reply,
+"linked\_message": linked\_message,
+"json": json\_content,
+}
+)
+else:
+doc = frappe.get\_doc(
+{
+"doctype": "Raven Message",
+"channel\_id": channel\_id,
+"text": text,
+"message\_type": "Text",
+"json": json\_content,
+}
+)
+if send\_silently:
+doc.flags.send\_silently = True
+doc.insert()
+return doc
+@frappe.whitelist()
+def fetch\_recent\_files(channel\_id: str):
+"""
+Fetches recently sent files in a channel
+Check if the user has permission to view the channel
+"""
+if not frappe.has\_permission("Raven Channel", doc=channel\_id):
+frappe.throw(\_("You don't have permission to view this channel"), frappe.PermissionError)
+files = frappe.db.get\_all(
+"Raven Message",
+filters={"channel\_id": channel\_id, "message\_type": ["in", ["Image", "File"]]},
+fields=["name", "file", "owner", "creation", "message\_type"],
+order\_by="creation desc",
+limit\_page\_length=10,
+)
+return files
+def get\_messages(channel\_id: str):
+messages = frappe.db.get\_all(
+"Raven Message",
+filters={"channel\_id": channel\_id},
+fields=[
+"name",
+"owner",
+"creation",
+"modified",
+"text",
+"file",
+"message\_type",
+"message\_reactions",
+"is\_reply",
+"linked\_message",
+"\_liked\_by",
+"channel\_id",
+"thumbnail\_width",
+"thumbnail\_height",
+"file\_thumbnail",
+"link\_doctype",
+"link\_document",
+"replied\_message\_details",
+"content",
+"is\_edited",
+"is\_thread",
+"is\_forwarded",
+],
+order\_by="creation asc",
+)
+return messages
+@frappe.whitelist()
+def save\_message(message\_id: str, add: str | bool = False):
+"""
+Save the message as a bookmark
+"""
+if isinstance(add, str):
+add = add.lower() == "yes" or add == "1"
+if not frappe.has\_permission(doctype="Raven Message", doc=message\_id, ptype="read"):
+frappe.throw(\_("You don't have permission to save this message"), frappe.PermissionError)
+from frappe.desk.like import toggle\_like
+toggle\_like("Raven Message", message\_id, add)
+liked\_by = frappe.db.get\_value("Raven Message", message\_id, "\_liked\_by")
+frappe.publish\_realtime(
+"message\_saved",
+{
+"message\_id": message\_id,
+"liked\_by": liked\_by,
+},
+user=frappe.session.user,
+)
+return "message saved"
+@frappe.whitelist()
+def get\_pinned\_messages(channel\_id: str):
+# check if the user has permission to view the channel
+frappe.has\_permission("Raven Channel", doc=channel\_id, ptype="read", throw=True)
+pinnedMessagesString = frappe.db.get\_value("Raven Channel", channel\_id, "pinned\_messages\_string")
+pinnedMessages = pinnedMessagesString.split("\n") if pinnedMessagesString else []
+return frappe.db.get\_all(
+"Raven Message",
+filters={"name": ["in", pinnedMessages]},
+fields=[
+"name",
+"owner",
+"creation",
+"bot",
+"text",
+"file",
+"message\_type",
+"message\_reactions",
+"\_liked\_by",
+"channel\_id",
+"thumbnail\_width",
+"thumbnail\_height",
+"file\_thumbnail",
+"link\_doctype",
+"link\_document",
+"replied\_message\_details",
+"hide\_link\_preview",
+"is\_bot\_message",
+"content",
+"is\_edited",
+"is\_thread",
+"is\_forwarded",
+],
+order\_by="creation asc",
+)
+@frappe.whitelist()
+def get\_saved\_messages():
+"""
+Fetches list of all messages liked by the user
+Check if the user has permission to view the message
+"""
+raven\_message = frappe.qb.DocType("Raven Message")
+raven\_channel = frappe.qb.DocType("Raven Channel")
+raven\_channel\_member = frappe.qb.DocType("Raven Channel Member")
+query = (
+frappe.qb.from\_(raven\_message)
+.join(raven\_channel, JoinType.left)
+.on(raven\_message.channel\_id == raven\_channel.name)
+.join(raven\_channel\_member, JoinType.left)
+.on(raven\_channel.name == raven\_channel\_member.channel\_id)
+.select(
+raven\_message.name,
+raven\_message.owner,
+raven\_message.creation,
+raven\_message.text,
+raven\_message.channel\_id,
+raven\_message.file,
+raven\_message.message\_type,
+raven\_message.message\_reactions,
+raven\_message.\_liked\_by,
+raven\_channel.workspace,
+raven\_message.thumbnail\_width,
+raven\_message.thumbnail\_height,
+raven\_message.is\_bot\_message,
+raven\_message.bot,
+)
+.where(raven\_message.\_liked\_by.like("%" + frappe.session.user + "%"))
+.where(
+(raven\_channel.type.isin(["Open", "Public"]))
+| (raven\_channel\_member.user\_id == frappe.session.user)
+)
+.orderby(raven\_message.creation, order=Order.asc)
+.distinct()
+) # Add DISTINCT keyword to retrieve only unique messages
+messages = query.run(as\_dict=True)
+return messages
+def parse\_messages(messages):
+messages\_with\_date\_header = []
+previous\_message = None
+for i in range(len(messages)):
+message = messages[i]
+is\_continuation = (
+previous\_message
+and message["owner"] == previous\_message["owner"]
+and (message["creation"] - previous\_message["creation"]) < timedelta(minutes=2)
+)
+message["is\_continuation"] = int(bool(is\_continuation))
+if i == 0 or message["creation"].date() != previous\_message["creation"].date():
+messages\_with\_date\_header.append({"block\_type": "date", "data": message["creation"].date()})
+messages\_with\_date\_header.append({"block\_type": "message", "data": message})
+previous\_message = message
+return messages\_with\_date\_header
+def check\_permission(channel\_id):
+if frappe.get\_cached\_value("Raven Channel", channel\_id, "type") == "Private":
+if is\_channel\_member(channel\_id):
+pass
+elif frappe.session.user == "Administrator":
+pass
+else:
+frappe.throw(\_("You don't have permission to view this channel"), frappe.PermissionError)
+@frappe.whitelist()
+def get\_messages\_with\_dates(channel\_id: str):
+check\_permission(channel\_id)
+messages = get\_messages(channel\_id)
+track\_channel\_visit(channel\_id=channel\_id, publish\_event\_for\_user=True, commit=True)
+return parse\_messages(messages)
+@frappe.whitelist()
+def get\_unread\_count\_for\_channels():
+"""
+Fetch all channels where the user has unread messages > 0
+"""
+channel = frappe.qb.DocType("Raven Channel")
+channel\_member = frappe.qb.DocType("Raven Channel Member")
+message = frappe.qb.DocType("Raven Message")
+query = (
+frappe.qb.from\_(channel)
+.left\_join(channel\_member)
+.on(
+(channel.name == channel\_member.channel\_id) & (channel\_member.user\_id == frappe.session.user)
+)
+.where(channel\_member.user\_id == frappe.session.user)
+.where(channel.is\_archived == 0)
+.where(channel.is\_thread == 0)
+.where(message.message\_type != "System")
+.where(
+message.creation > Coalesce(channel\_member.last\_visit, "2000-11-11")
+) # Only count messages after the last visit for performance
+.left\_join(message)
+.on(channel.name == message.channel\_id)
+)
+channels\_query = (
+query.select(channel.name, channel.is\_direct\_message, Count(message.name).as\_("unread\_count"))
+.groupby(channel.name, channel.is\_direct\_message)
+.run(as\_dict=True)
+)
+return channels\_query
+@frappe.whitelist()
+def get\_unread\_count\_for\_channel(channel\_id: str):
+channel\_member = get\_channel\_member(channel\_id=channel\_id)
+if channel\_member:
+last\_timestamp = frappe.get\_cached\_value(
+"Raven Channel Member", channel\_member["name"], "last\_visit"
+)
+return frappe.db.count(
+"Raven Message",
+filters={
+"channel\_id": channel\_id,
+"creation": (">", last\_timestamp),
+"message\_type": ["!=", "System"],
+},
+)
+else:
+if frappe.get\_cached\_value("Raven Channel", channel\_id, "type") == "Open":
+return frappe.db.count(
+"Raven Message",
+filters={
+"channel\_id": channel\_id,
+"message\_type": ["!=", "System"],
+},
+)
+else:
+return 0
+@frappe.whitelist()
+def get\_timeline\_message\_content(doctype: str, docname: str | int):
+channel = frappe.qb.DocType("Raven Channel")
+channel\_member = frappe.qb.DocType("Raven Channel Member")
+message = frappe.qb.DocType("Raven Message")
+user = frappe.qb.DocType("User")
+query = (
+frappe.qb.from\_(message)
+.select(
+message.creation,
+message.owner,
+message.name,
+message.text,
+message.file,
+channel.name.as\_("channel\_id"),
+channel.channel\_name,
+channel.type,
+channel.is\_direct\_message,
+user.full\_name,
+channel.is\_self\_message,
+)
+.join(channel)
+.on(message.channel\_id == channel.name)
+.join(channel\_member)
+.on(
+(message.channel\_id == channel\_member.channel\_id) & (message.owner == channel\_member.user\_id)
+)
+.join(user)
+.on(message.owner == user.name)
+.where((channel.type != "Private") | (channel\_member.user\_id == frappe.session.user))
+.where(message.link\_doctype == doctype)
+.where(message.link\_document == docname)
+)
+data = query.run(as\_dict=True)
+timeline\_contents = []
+for log in data:
+if log.is\_direct\_message:
+peer\_user\_id = get\_peer\_user\_id(log.channel\_id, log.is\_direct\_message, log.is\_self\_message)
+if peer\_user\_id:
+log["peer\_user"] = frappe.db.get\_value("User", peer\_user\_id, "full\_name")
+timeline\_contents.append(
+{
+"icon": "share",
+"is\_card": True,
+"creation": log.creation,
+"template": "send\_message",
+"template\_data": log,
+}
+)
+return timeline\_contents
+file\_extensions = {
+"doc": [
+"doc",
+"docx",
+"odt",
+"ott",
+"rtf",
+"txt",
+"dot",
+"dotx",
+"docm",
+"dotm",
+"pages",
+],
+"ppt": [
+"ppt",
+"pptx",
+"odp",
+"otp",
+"pps",
+"ppsx",
+"pot",
+"potx",
+"pptm",
+"ppsm",
+"potm",
+"ppam",
+"ppa",
+"key",
+],
+"xls": [
+"xls",
+"xlsx",
+"csv",
+"ods",
+"ots",
+"xlsb",
+"xlsm",
+"xlt",
+"xltx",
+"xltm",
+"xlam",
+"xla",
+"numbers",
+],
+}
+@frappe.whitelist()
+def get\_all\_files\_shared\_in\_channel(
+channel\_id: str,
+file\_name: str | None = None,
+file\_type: str | None = None,
+start\_after: int = 0,
+page\_length: int | None = None,
+):
+# check if the user has permission to view the channel
+check\_permission(channel\_id)
+message = frappe.qb.DocType("Raven Message")
+user = frappe.qb.DocType("Raven User")
+file = frappe.qb.DocType("File")
+query = (
+frappe.qb.from\_(message)
+.join(file)
+.on(message.name == file.attached\_to\_name)
+.join(user)
+.on(message.owner == user.name)
+.select(
+file.name,
+file.file\_name,
+file.file\_type,
+file.file\_size,
+file.file\_url,
+message.owner,
+message.creation,
+message.message\_type,
+message.thumbnail\_width,
+message.thumbnail\_height,
+message.file\_thumbnail,
+user.full\_name,
+user.user\_image,
+message.name.as\_("message\_id"),
+)
+.where(message.channel\_id == channel\_id)
+)
+# search for file name
+if file\_name:
+query = query.where(file.file\_name.like("%" + file\_name + "%"))
+# search for file type
+if file\_type:
+if file\_type == "image":
+query = query.where(message.message\_type == "Image")
+elif file\_type == "file":
+query = query.where(message.message\_type == "File")
+elif file\_type == "pdf":
+query = query.where(file.file\_type == "pdf")
+else:
+# Get the list of extensions for the given file type
+extensions = file\_extensions.get(file\_type)
+if extensions:
+query = query.where((file.file\_type).isin(extensions))
+else:
+query = query.where(message.message\_type.isin(["Image", "File"]))
+files = (
+query.orderby(message.creation, order=Order["desc"])
+.limit(page\_length)
+.offset(start\_after)
+.run(as\_dict=True)
+)
+return files
+@frappe.whitelist()
+def get\_count\_for\_pagination\_of\_files(
+channel\_id: str, file\_name: str | None = None, file\_type: str | None = None
+):
+# check if the user has permission to view the channel
+check\_permission(channel\_id)
+message = frappe.qb.DocType("Raven Message")
+# user = frappe.qb.DocType("Raven User")
+file = frappe.qb.DocType("File")
+query = (
+frappe.qb.from\_(message)
+.join(file, JoinType.left)
+.on(message.name == file.attached\_to\_name)
+.select(Count(message.name).as\_("count"))
+.where(message.channel\_id == channel\_id)
+)
+# search for file name
+if file\_name:
+query = query.where(file.file\_name.like("%" + file\_name + "%"))
+# search for file type
+if file\_type:
+if file\_type == "image":
+query = query.where(message.message\_type == "Image")
+elif file\_type == "pdf":
+query = query.where(file.file\_type == "pdf")
+else:
+# Get the list of extensions for the given file type
+extensions = file\_extensions.get(file\_type)
+if extensions:
+query = query.where((file.file\_type).isin(extensions))
+else:
+query = query.where(message.message\_type.isin(["Image", "File"]))
+count = query.run(as\_dict=True)
+return count[0]["count"]
+@frappe.whitelist(methods=["POST"])
+def forward\_message(message\_receivers: list[dict], forwarded\_message: dict):
+"""
+Forward a message to multiple users/ or in multiple channels
+"""
+for receiver in message\_receivers:
+if receiver["type"] == "User":
+# send forwarded message as a DM to the user
+# get DM channel ID, create a copy of the message and send it to the channel, change the message owner to current sender
+dm\_channel\_id = create\_direct\_message\_channel(receiver["name"])
+add\_forwarded\_message\_to\_channel(dm\_channel\_id, forwarded\_message)
+else:
+# send forwarded message to the channel
+add\_forwarded\_message\_to\_channel(receiver["name"], forwarded\_message)
+return "messages forwarded"
+def add\_forwarded\_message\_to\_channel(channel\_id: str, forwarded\_message: dict):
+"""
+Forward a message to a channel - copy over the message,
+change the owner to the current user and timestamp to now,
+mark it as forwarded
+"""
+# If the forwarded message has a file, we need to remove the "fid" from the URL - this is done so that the new user can access the file
+if forwarded\_message.get("file"):
+forwarded\_message["file"] = forwarded\_message["file"].split("?")[0]
+doc = frappe.get\_doc(
+{
+"doctype": "Raven Message",
+\*\*forwarded\_message,
+"channel\_id": channel\_id,
+"name": None,
+"owner": frappe.session.user,
+"creation": frappe.utils.now\_datetime(),
+"modified": frappe.utils.now\_datetime(),
+"is\_continuation": 0,
+"is\_edited": 0,
+"is\_reply": 0,
+"is\_forwarded": 1,
+"is\_thread": 0,
+"replied\_message\_details": None,
+"message\_reactions": None,
+}
+)
+doc.insert()
+return "message forwarded"

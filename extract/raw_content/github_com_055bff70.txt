@@ -1,0 +1,259 @@
+# Source URL: https://github.com/The-Commit-Company/raven/search?q=socket
+# Content Length: 13767 characters
+# Extracted at: 2026-02-10 10:12:34
+#============================================================
+
+Issue search results · GitHub
+[Skip to content](#start-of-content)
+## Navigation Menu
+Toggle navigation
+[Sign in](/login?return\_to=https%3A%2F%2Fgithub.com%2Fsearch%3Fq%3Drepo%253AThe-Commit-Company%252Fraven%2Bsocket)
+Appearance settings
+\* Platform
++ AI CODE CREATION
+- [GitHub CopilotWrite better code with AI](https://github.com/features/copilot)
+- [GitHub SparkBuild and deploy intelligent apps](https://github.com/features/spark)
+- [GitHub ModelsManage and compare prompts](https://github.com/features/models)
+- [MCP RegistryNewIntegrate external tools](https://github.com/mcp)
++ DEVELOPER WORKFLOWS
+- [ActionsAutomate any workflow](https://github.com/features/actions)
+- [CodespacesInstant dev environments](https://github.com/features/codespaces)
+- [IssuesPlan and track work](https://github.com/features/issues)
+- [Code ReviewManage code changes](https://github.com/features/code-review)
++ APPLICATION SECURITY
+- [GitHub Advanced SecurityFind and fix vulnerabilities](https://github.com/security/advanced-security)
+- [Code securitySecure your code as you build](https://github.com/security/advanced-security/code-security)
+- [Secret protectionStop leaks before they start](https://github.com/security/advanced-security/secret-protection)
++ EXPLORE
+- [Why GitHub](https://github.com/why-github)
+- [Documentation](https://docs.github.com)
+- [Blog](https://github.blog)
+- [Changelog](https://github.blog/changelog)
+- [Marketplace](https://github.com/marketplace)
+[View all features](https://github.com/features)
+\* Solutions
++ BY COMPANY SIZE
+- [Enterprises](https://github.com/enterprise)
+- [Small and medium teams](https://github.com/team)
+- [Startups](https://github.com/enterprise/startups)
+- [Nonprofits](https://github.com/solutions/industry/nonprofits)
++ BY USE CASE
+- [App Modernization](https://github.com/solutions/use-case/app-modernization)
+- [DevSecOps](https://github.com/solutions/use-case/devsecops)
+- [DevOps](https://github.com/solutions/use-case/devops)
+- [CI/CD](https://github.com/solutions/use-case/ci-cd)
+- [View all use cases](https://github.com/solutions/use-case)
++ BY INDUSTRY
+- [Healthcare](https://github.com/solutions/industry/healthcare)
+- [Financial services](https://github.com/solutions/industry/financial-services)
+- [Manufacturing](https://github.com/solutions/industry/manufacturing)
+- [Government](https://github.com/solutions/industry/government)
+- [View all industries](https://github.com/solutions/industry)
+[View all solutions](https://github.com/solutions)
+\* Resources
++ EXPLORE BY TOPIC
+- [AI](https://github.com/resources/articles?topic=ai)
+- [Software Development](https://github.com/resources/articles?topic=software-development)
+- [DevOps](https://github.com/resources/articles?topic=devops)
+- [Security](https://github.com/resources/articles?topic=security)
+- [View all topics](https://github.com/resources/articles)
++ EXPLORE BY TYPE
+- [Customer stories](https://github.com/customer-stories)
+- [Events & webinars](https://github.com/resources/events)
+- [Ebooks & reports](https://github.com/resources/whitepapers)
+- [Business insights](https://github.com/solutions/executive-insights)
+- [GitHub Skills](https://skills.github.com)
++ SUPPORT & SERVICES
+- [Documentation](https://docs.github.com)
+- [Customer support](https://support.github.com)
+- [Community forum](https://github.com/orgs/community/discussions)
+- [Trust center](https://github.com/trust-center)
+- [Partners](https://github.com/partners)
+\* Open Source
++ COMMUNITY
+- [GitHub SponsorsFund open source developers](https://github.com/sponsors)
++ PROGRAMS
+- [Security Lab](https://securitylab.github.com)
+- [Maintainer Community](https://maintainers.github.com)
+- [Accelerator](https://github.com/accelerator)
+- [Archive Program](https://archiveprogram.github.com)
++ REPOSITORIES
+- [Topics](https://github.com/topics)
+- [Trending](https://github.com/trending)
+- [Collections](https://github.com/collections)
+\* Enterprise
++ ENTERPRISE SOLUTIONS
+- [Enterprise platformAI-powered developer platform](https://github.com/enterprise)
++ AVAILABLE ADD-ONS
+- [GitHub Advanced SecurityEnterprise-grade security features](https://github.com/security/advanced-security)
+- [Copilot for BusinessEnterprise-grade AI features](https://github.com/features/copilot/copilot-business)
+- [Premium SupportEnterprise-grade 24/7 support](https://github.com/premium-support)
+\* [Pricing](https://github.com/pricing)
+Search or jump to...
+# Search code, repositories, users, issues, pull requests...
+Search
+Clear
+[Search syntax tips](https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax)
+# Provide feedback
+We read every piece of feedback, and take your input very seriously.
+Include my email address so I can be contacted
+Cancel
+Submit feedback
+# Saved searches
+## Use saved searches to filter your results more quickly
+Name
+Query
+To see all available qualifiers, see our [documentation](https://docs.github.com/search-github/github-code-search/understanding-github-code-search-syntax).
+Cancel
+Create saved search
+[Sign in](/login?return\_to=https%3A%2F%2Fgithub.com%2Fsearch%3Fq%3Drepo%253AThe-Commit-Company%252Fraven%2Bsocket)
+[Sign up](/signup?ref\_cta=Sign+up&ref\_loc=header+logged+out&ref\_page=%2Fsearch&source=header)
+Appearance settings
+Resetting focus
+You signed in with another tab or window. Reload to refresh your session.You signed out in another tab or window. Reload to refresh your session.You switched accounts on another tab or window. Reload to refresh your session.Dismiss alert
+# issues Search Results · repo:The-Commit-Company/raven socket
+## Filter by
+\* + [Code... (...)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=code)
++ [Issues29 (29)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues)
++ [Pull requests12 (12)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=pullrequests)
++ [Discussions5 (5)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=discussions)
++ [Commits20 (20)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=commits)
++ [Packages0 (0)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=registrypackages)
++ [Wikis0 (0)results](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=wikis)
+\* ### State
++ [Open](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues&state=open)
++ [Closed](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues&state=closed)
+\* ### Advanced
++ Owner
++ State
++ Close reason
++ [Has linked pull request](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket+linked%3Apr&type=issues)
++ Author
++ Assignee
++ Mentioned user
++ Mentioned team
++ Commenter
++ Involved user
++ Label
++ Milestone
++ Number of comments
++ Number of interactions
+\* [Advanced search](/search/advanced)
+Issues29 (29)
+29 results
+ (74ms)
+## 29 results
+in[The-Commit-Company/raven (press backspace or delete to remove)](/The-Commit-Company/raven)
+Sort by: Best match
+Filter
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [url with other port(not 443)，error:"Realtime events are not working. Please try refreshing the page."](/The-Commit-Company/raven/issues/1860)
+... resolved the issue. I suggest optimizing the code for this scenario. Thank you, the modified code is
+as follows:
+export const useActiveSocketConnection = () = { const { \*socket\* } = useContext ...
+\* ![](https://avatars.githubusercontent.com/u/173582153?s=48&v=4)fwr567
+·\* 9
+·\* Opened
+on Sep 26, 2025
+·\* [#1860](/The-Commit-Company/raven/issues/1860)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [mobile: \*socket\* connection failure shows alert which is not cleared after reconnecting](/The-Commit-Company/raven/issues/1984)
+The alert does get cleared when we restart the app.
+Image
+Edit -
+This is an issue from Expo s Network library - https://github.com/expo/expo/issues/37972
+https://github.com/expo/expo/pull/40705
+Migrating ...
+🐞 bug
+v3-mobile
+\* ![](https://avatars.githubusercontent.com/u/59260326?s=48&v=4)prathameshkurunkar7
+·\* Opened
+27 days ago
+·\* [#1984](/The-Commit-Company/raven/issues/1984)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [Realtime events are not working. Please try refreshing the page. In Local development](/The-Commit-Company/raven/issues/1918)
+Realtime events are not working. In Local Development setup. I am using \*socket\* io in 9001 port but the raven is sending
+request to 9000 port. I don t not its my config problem or not. frappe is ...
+\* ![](https://avatars.githubusercontent.com/u/29656617?s=48&v=4)sambhusbabu
+·\* 6
+·\* Opened
+on Nov 21, 2025
+·\* [#1918](/The-Commit-Company/raven/issues/1918)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [Realtime events are not working. Please try refreshing the page.](/The-Commit-Company/raven/issues/1912)
+... while ago, and despite using the Raven cloud service, using dedicated VM, adding
+more RAM, resolving \*socket\* errors, I still get those errors. And I suspect most of the people do.
+I absolutely ...
+\* ![](https://avatars.githubusercontent.com/u/67019341?s=48&v=4)yahyaoudra
+·\* 14
+·\* Opened
+on Nov 9, 2025
+·\* [#1912](/The-Commit-Company/raven/issues/1912)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [raven mobile error: realtime events are not working](/The-Commit-Company/raven/issues/1712)
+Ah that s why. You need to be on Frappe v15.63.0 or higher to use the mobile app - we fixed a few issues related to web
+\*sockets\* using OAuth bearer tokens in the framework to support the mobile app.
+\* ![](https://avatars.githubusercontent.com/u/172126898?s=48&v=4)ghostridero0o
+·\* 5
+·\* Opened
+on May 26, 2025
+·\* [#1712](/The-Commit-Company/raven/issues/1712)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [\*socket\* io problem](/The-Commit-Company/raven/issues/125)
+...
+import { io } from \*socket\*.io-client
+let \*socket\*\\_port = import.meta.env.VITE\\_\*SOCKET\*\\_PORT ?? 9000
+let host = window.location.hostname;
+let port = window.location.port ? `:${\*socket\*\\_port}` : ;
+let ...
+\* ![](https://avatars.githubusercontent.com/u/32662977?s=48&v=4)hieutrluu
+·\* 8
+·\* Opened
+on Mar 7, 2023
+·\* [#125](/The-Commit-Company/raven/issues/125)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [bug: race condition in reactions](/The-Commit-Company/raven/issues/1697)
+Does this get resolved when you hit refresh? If yes, then it would be a problem with subsequent \*socket\* updates.
+I ll try reproducing this with a script as well. My assumption is that there s only ...
+\* ![](https://avatars.githubusercontent.com/u/100779126?s=48&v=4)the-bokya
+·\* 5
+·\* Opened
+on May 21, 2025
+·\* [#1697](/The-Commit-Company/raven/issues/1697)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [Error on install](/The-Commit-Company/raven/issues/1597)
+... \*socket\*.io related issues here and
+you ll find quite a few. We ourselves use Frappe Cloud for our own sites even though we have a boatload of credits on
+AWS because it s easy. That doesn t mean that we don t want people to self host - in fact we help them when and where we
+can.
+\* ![](https://avatars.githubusercontent.com/u/56714680?s=48&v=4)dillfrescott
+·\* 17
+·\* Opened
+on Apr 8, 2025
+·\* [#1597](/The-Commit-Company/raven/issues/1597)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [Update chat stream when new message is sent without web \*socket\* events](/The-Commit-Company/raven/issues/1353)
+When the user hits send, add the message to the stream without waiting for the real-time web \*socket\* event.
+This can be further enhanced later by optimistically updating the stream (before the message is sent and response is
+received)
+\* ![](https://avatars.githubusercontent.com/u/19825455?s=48&v=4)nikkothari22
+·\* 1
+·\* Opened
+on Feb 15, 2025
+·\* [#1353](/The-Commit-Company/raven/issues/1353)
+### [The-Commit-Company/raven](/The-Commit-Company/raven) [Thread count doesn't get updated in real time.](/The-Commit-Company/raven/issues/1673)
+... , then this event is not broadcasted to
+those users.
+Possible options:
+1. Either create a new room for Raven itself - not sure if that s possible in the custom \*socket\* handler in Frappe
+2. Publish events to the Raven Settings doctype - and subscribe to that on the frontend.
+\* ![](https://avatars.githubusercontent.com/u/67804911?s=48&v=4)iamejaaz
+·\* 13
+·\* Opened
+on May 7, 2025
+·\* [#1673](/The-Commit-Company/raven/issues/1673)
+Previous[1](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues&p=1)[2](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues&p=2)[3](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues&p=3)[Next](https://github.com/search?q=repo%3AThe-Commit-Company%2Fraven+socket&type=issues&p=2)
+![](/images/modules/search/issues.png)
+## Learn how you can use GitHub Issues to plan and track your work.
+Save views for sprints, backlogs, teams, or releases. Rank, sort, and filter issues to suit the occasion. The possibilities are endless.[Learn more about GitHub Issues](https://docs.github.com/issues)
+ProTip!
+Press the
+/
+key to activate the search input again and adjust your query.
+![](/images/modules/search/issues.png)
+## Learn how you can use GitHub Issues to plan and track your work.
+Save views for sprints, backlogs, teams, or releases. Rank, sort, and filter issues to suit the occasion. The possibilities are endless.[Learn more about GitHub Issues](https://docs.github.com/issues)
+ProTip!
+Restrict your search to the title by using the in:title qualifier.
+You can’t perform that action at this time.

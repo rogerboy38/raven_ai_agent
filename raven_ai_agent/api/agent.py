@@ -3021,6 +3021,52 @@ def handle_raven_message(doc, method):
             })
             reply_doc.insert(ignore_permissions=True)
             frappe.db.commit()
+            
+            # Publish realtime event to notify frontend clients
+            # Using the same format as official Raven (raven_message.py)
+            frappe.publish_realtime(
+                "message_created",
+                {
+                    "channel_id": doc.channel_id,
+                    "sender": frappe.session.user,
+                    "message_id": reply_doc.name,
+                    "message_details": {
+                        "text": reply_doc.text,
+                        "channel_id": reply_doc.channel_id,
+                        "content": reply_doc.content if hasattr(reply_doc, 'content') else None,
+                        "file": reply_doc.file if hasattr(reply_doc, 'file') else None,
+                        "message_type": reply_doc.message_type,
+                        "is_edited": 0,
+                        "is_thread": reply_doc.is_thread if hasattr(reply_doc, 'is_thread') else 0,
+                        "is_forwarded": reply_doc.is_forwarded if hasattr(reply_doc, 'is_forwarded') else 0,
+                        "is_reply": reply_doc.is_reply if hasattr(reply_doc, 'is_reply') else 0,
+                        "poll_id": reply_doc.poll_id if hasattr(reply_doc, 'poll_id') else None,
+                        "creation": str(reply_doc.creation),
+                        "owner": reply_doc.owner,
+                        "modified_by": reply_doc.modified_by,
+                        "modified": str(reply_doc.modified),
+                        "linked_message": reply_doc.linked_message if hasattr(reply_doc, 'linked_message') else None,
+                        "replied_message_details": reply_doc.replied_message_details if hasattr(reply_doc, 'replied_message_details') else None,
+                        "link_doctype": reply_doc.link_doctype if hasattr(reply_doc, 'link_doctype') else None,
+                        "link_document": reply_doc.link_document if hasattr(reply_doc, 'link_document') else None,
+                        "message_reactions": reply_doc.message_reactions if hasattr(reply_doc, 'message_reactions') else None,
+                        "thumbnail_width": reply_doc.thumbnail_width if hasattr(reply_doc, 'thumbnail_width') else None,
+                        "thumbnail_height": reply_doc.thumbnail_height if hasattr(reply_doc, 'thumbnail_height') else None,
+                        "file_thumbnail": reply_doc.file_thumbnail if hasattr(reply_doc, 'file_thumbnail') else None,
+                        "image_width": reply_doc.image_width if hasattr(reply_doc, 'image_width') else None,
+                        "image_height": reply_doc.image_height if hasattr(reply_doc, 'image_height') else None,
+                        "name": reply_doc.name,
+                        "is_bot_message": 1,
+                        "bot": reply_doc.bot if hasattr(reply_doc, 'bot') else None,
+                        "hide_link_preview": reply_doc.hide_link_preview if hasattr(reply_doc, 'hide_link_preview') else 0,
+                        "blurhash": reply_doc.blurhash if hasattr(reply_doc, 'blurhash') else None,
+                    },
+                },
+                doctype="Raven Channel",
+                docname=doc.channel_id,
+                after_commit=True,
+            )
+            frappe.logger().info(f"[AI Agent] Published realtime event for channel {doc.channel_id}")
         
         frappe.logger().info(f"[AI Agent] Reply sent to channel {doc.channel_id}")
         
@@ -3037,5 +3083,49 @@ def handle_raven_message(doc, method):
             })
             error_doc.insert(ignore_permissions=True)
             frappe.db.commit()
+            
+            # Publish realtime event for error message too (same format as Raven)
+            frappe.publish_realtime(
+                "message_created",
+                {
+                    "channel_id": doc.channel_id,
+                    "sender": frappe.session.user,
+                    "message_id": error_doc.name,
+                    "message_details": {
+                        "text": error_doc.text,
+                        "channel_id": error_doc.channel_id,
+                        "content": error_doc.content if hasattr(error_doc, 'content') else None,
+                        "file": None,
+                        "message_type": error_doc.message_type,
+                        "is_edited": 0,
+                        "is_thread": 0,
+                        "is_forwarded": 0,
+                        "is_reply": 0,
+                        "poll_id": None,
+                        "creation": str(error_doc.creation),
+                        "owner": error_doc.owner,
+                        "modified_by": error_doc.modified_by,
+                        "modified": str(error_doc.modified),
+                        "linked_message": None,
+                        "replied_message_details": None,
+                        "link_doctype": None,
+                        "link_document": None,
+                        "message_reactions": None,
+                        "thumbnail_width": None,
+                        "thumbnail_height": None,
+                        "file_thumbnail": None,
+                        "image_width": None,
+                        "image_height": None,
+                        "name": error_doc.name,
+                        "is_bot_message": 1,
+                        "bot": None,
+                        "hide_link_preview": 0,
+                        "blurhash": None,
+                    },
+                },
+                doctype="Raven Channel",
+                docname=doc.channel_id,
+                after_commit=True,
+            )
         except:
             pass
