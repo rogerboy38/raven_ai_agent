@@ -1,0 +1,141 @@
+# Source URL: https://discuss.frappe.io/t/frappe-raven-chat-sent-a-message-that-was-not-shown-immediately/138293
+# Content Length: 13901 characters
+# Extracted at: 2026-02-10 11:34:32
+#============================================================
+
+Frappe Raven chat - sent a message that was not shown immediately - Frappe Forum
+[Frappe.io](https://frappe.io)[Frappe Cloud](https://frappe.io/cloud)[Documentation](https://docs.frappe.io/)[Partners](https://frappe.io/partners)[Frappe School](https://frappe.school)[Marketplace](https://cloud.frappe.io/marketplace)[Community Chat (new!)](https://community.frappe.io/)
+[Skip to main content](#main-container)
+[![](https://discuss.frappe.io/uploads/default/original/3X/e/1/e1295d1f76ba489dd58f8c9b55eee88286fc9a31.png)](/)
+Sign UpLog In
+\* ​
+# [Frappe Raven chat - sent a message that was not shown immediately](/t/frappe-raven-chat-sent-a-message-that-was-not-shown-immediately/138293)
+You have selected \*\*0\*\* posts.
+select all
+cancel selecting
+1.2kviews3links
+[![](/user\_avatar/discuss.frappe.io/the.shirini/48/64162\_2.png)3](/u/the.shirini)
+[![](/user\_avatar/discuss.frappe.io/nikkothari22/48/71132\_2.png)2](/u/nikkothari22)
+[![](/letter\_avatar\_proxy/v4/letter/p/e9bcb4/48.png)2](/u/Peer)
+[![](/user\_avatar/discuss.frappe.io/revant\_one/48/55081\_2.png)](/u/revant\_one)
+read5min
+1/8
+[![](/user\_avatar/discuss.frappe.io/the.shirini/48/64162\_2.png)](/u/the.shirini)
+[the.shirini](/u/the.shirini)
+[Dec 2024](/t/frappe-raven-chat-sent-a-message-that-was-not-shown-immediately/138293)
+Dear guys,
+I am new to Raven.
+I installed Frappe 15 and everything is good but I have a problem with immediately showing the enter a message, it’s not showing and I must close and open chat after that to show the message!
+Maybe need config Webhook on frappe or other things?
+Please help
+Best Regards,
+1
+​
+​
+\* [Frappe Realtime (socketIO) in development mode](https://discuss.frappe.io/t/frappe-realtime-socketio-in-development-mode/124392/3)
+1.2kviews3links
+[![](/user\_avatar/discuss.frappe.io/the.shirini/48/64162\_2.png)3](/u/the.shirini)
+[![](/user\_avatar/discuss.frappe.io/nikkothari22/48/71132\_2.png)2](/u/nikkothari22)
+[![](/letter\_avatar\_proxy/v4/letter/p/e9bcb4/48.png)2](/u/Peer)
+[![](/user\_avatar/discuss.frappe.io/revant\_one/48/55081\_2.png)](/u/revant\_one)
+read5min
+10 days later
+[![](/letter\_avatar\_proxy/v4/letter/p/e9bcb4/48.png)](/u/peer)
+[Peer](/u/peer)
+[Dec 2024](/t/frappe-raven-chat-sent-a-message-that-was-not-shown-immediately/138293/2)
+My very first users also complain about this from day one.
+But I’m not convinced it is that bad.
+Advantage is: It doesn’t constitute an immediate interruption, because it has a PULL-aspect in the UI instead of being 100% PUSHy.
+So it respects the user in a very “You decide when” way.
+Still it would be nice to be able to configure feeding raven messages into the notifications bell or so, if the user wants it.
+​
+​
+[![](/user\_avatar/discuss.frappe.io/nikkothari22/48/71132\_2.png)](/u/nikkothari22)
+[nikkothari22](/u/nikkothari22)Contributor
+[Dec 2024](/t/frappe-raven-chat-sent-a-message-that-was-not-shown-immediately/138293/3)
+[@the.shirini](/u/the.shirini) Is your realtime web socket connection working? Can you check the “System Health Report” in the desk interface to see if the socketIO ping check works?
+[@Peer](/u/peer) Raven is meant to be real-time - but it needs socketIO to work on the site.
+​
+​
+[![](/letter\_avatar\_proxy/v4/letter/p/e9bcb4/48.png)](/u/peer)
+[Peer](/u/peer)
+[Dec 2024](/t/frappe-raven-chat-sent-a-message-that-was-not-shown-immediately/138293/4)
+Thank you for the hint. But how can I debug and activate the SocketIO?
+\*\*Symptom:\*\*
+\* raven doesn’t work real-time
+\* possibly related: On /app/backups, a requested backup does appear only after a long time (hours).
+\*\*Confirming the socketIO problem:\*\*
+On page /app/system-health-report I get:
+> Realtime (SocketIO)
+> SocketIO Ping Check\*\*Fail\*\*
+\*\*Trying to locate the error:\*\*
+The websocket container listens:
+```
+$ sudo docker exec -it erpbv\_websocket\_1 bash
+frappe@86d9b3c54936:~/frappe-bench$ ss -tulpan
+NetidStateRecv-Q Send-Q LocalAddress:PortPeerAddress:PortProcess
+udp UNCONN00127.0.0.11:332460.0.0.0:\*
+tcp LISTEN04096127.0.0.11:450630.0.0.0:\*
+tcp ESTAB00172.22.0.10:54962172.22.0.4:6379users:(("node",pid=1,fd=18))
+tcp LISTEN0511 \*:9000 \*:\*users:(("node",pid=1,fd=19))
+```
+I tried to make the frontend or the websocket container listen on port 9000 with a construct like
+```
+ports:
+- "80:8080"
+- "9000:9000"
+```
+in the compose.yml, which results in something like:
+```
+$ sudo docker ps | grep frontend
+a58f79d7a820 erpnext-bv:v0.0.1 "nginx-entrypoint.sh" 2 hours ago Up 2 hours 0.0.0.0:9000->9000/tcp, :::9000->9000/tcp, 0.0.0.0:80->8080/tcp, :::80->8080/tcp erpbv\_fronten\_1
+```
+but the “SocketIO Ping Check” on the “System Health Check” was still failing in both cases.
+And the same port cannot be activated in both containers at the same time (because it’s an entry point from outside of the container zoo).
+I’m not sure if it needs to be opened in the frontend at all because I found log entries from the frontend which are proxied to \*\*/socket.io/\*\* in the websocket container at port 9000.
+```
+$ sudo docker logs erpbv\_frontend\_1 |grep socket.io
+192.168.20.205 - - [16/Dec/2024:10:41:14 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF3j0H HTTP/1.1" 200 118 "http://bv-erpnext/app/system-health-report" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:41:14 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF3j0p&sid=tDXSF46xxeG0MqtPAAAA HTTP/1.1" 200 2 "http://bv-erpnext/app/system-health-report" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:41:14 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF3j0q&sid=tDXSF46xxeG0MqtPAAAA HTTP/1.1" 200 40 "http://bv-erpnext/app/system-health-report" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:41:14 +0000] "GET /socket.io/?EIO=4&transport=websocket&sid=tDXSF46xxeG0MqtPAAAA HTTP/1.1" 101 10 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:41:14 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF3j1a&sid=tDXSF46xxeG0MqtPAAAA HTTP/1.1" 200 1 "http://bv-erpnext/app/system-health-report" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:41:14 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF3j1b&sid=tDXSF46xxeG0MqtPAAAA HTTP/1.1" 200 2 "http://bv-erpnext/app/system-health-report" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:49:30 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF5c1U HTTP/1.1" 200 118 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:49:30 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF5c2G&sid=pAtZqLr3RUysTBdwAAAC HTTP/1.1" 200 2 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:49:30 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF5c2G.0&sid=pAtZqLr3RUysTBdwAAAC HTTP/1.1" 200 40 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:49:30 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF5c2d&sid=pAtZqLr3RUysTBdwAAAC HTTP/1.1" 200 1 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:49:30 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF5c2d.0&sid=pAtZqLr3RUysTBdwAAAC HTTP/1.1" 200 2 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:10:49:30 +0000] "GET /socket.io/?EIO=4&transport=websocket&sid=pAtZqLr3RUysTBdwAAAC HTTP/1.1" 101 2 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:02:03 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF8Tuk HTTP/1.1" 200 118 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:02:03 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF8Tvy&sid=BASeFDRPVO8U7yF7AAAE HTTP/1.1" 200 2 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:02:03 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF8Tv-&sid=BASeFDRPVO8U7yF7AAAE HTTP/1.1" 200 40 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:02:03 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF8TwR&sid=BASeFDRPVO8U7yF7AAAE HTTP/1.1" 200 2 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:02:03 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF8TwQ&sid=BASeFDRPVO8U7yF7AAAE HTTP/1.1" 400 52 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:02:03 +0000] "GET /socket.io/?EIO=4&transport=websocket&sid=BASeFDRPVO8U7yF7AAAE HTTP/1.1" 101 2 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:07:41 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF9mPX HTTP/1.1" 200 118 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:07:41 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF9mQL&sid=skyX448jWJauUY4KAAAG HTTP/1.1" 200 2 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:07:41 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF9mQM&sid=skyX448jWJauUY4KAAAG HTTP/1.1" 200 40 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:07:41 +0000] "POST /socket.io/?EIO=4&transport=polling&t=PFF9mQj.0&sid=skyX448jWJauUY4KAAAG HTTP/1.1" 200 2 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:07:41 +0000] "GET /socket.io/?EIO=4&transport=polling&t=PFF9mQj&sid=skyX448jWJauUY4KAAAG HTTP/1.1" 400 52 "http://bv-erpnext/app/backups" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+192.168.20.205 - - [16/Dec/2024:11:07:41 +0000] "GET /socket.io/?EIO=4&transport=websocket&sid=skyX448jWJauUY4KAAAG HTTP/1.1" 101 2 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+```
+Some result in status 400, but many in 200. So the proxy is working (here: even with no port 9000 externally opened).
+But the Health Check Ping still fails. Why? Does the ping check work correctly in containers? How can I test this?
+At my current state of knowledge, I’m not sure how to debug this and hot to get the SocketIO to work. Any hints?
+​
+​
+Reply
+### New & Unread Topics
+Topic list, column headers with buttons are sortable.
+| Topic | Replies | Views | Activity |
+| --- | --- | --- | --- |
+| [ERPNext & WooCommerce Integration Expert Needed (Pesapal, Guest Checkout, Delivery Tracking)](/t/erpnext-woocommerce-integration-expert-needed-pesapal-guest-checkout-delivery-tracking/151410) | [1](/t/erpnext-woocommerce-integration-expert-needed-pesapal-guest-checkout-delivery-tracking/151410/1) | 60 | [Aug 2025](/t/erpnext-woocommerce-integration-expert-needed-pesapal-guest-checkout-delivery-tracking/151410/2) |
+| [Discount issue in purchase order](/t/discount-issue-in-purchase-order/144566) | [1](/t/discount-issue-in-purchase-order/144566/1) | 113 | [Mar 2025](/t/discount-issue-in-purchase-order/144566/2) |
+| [Banbank statements](/t/banbank-statements/145039) | [0](/t/banbank-statements/145039/1) | 112 | [Apr 2025](/t/banbank-statements/145039/1) |
+| [How to install ERPNext V16?](/t/how-to-install-erpnext-v16/151405) | [14](/t/how-to-install-erpnext-v16/151405/1) | 3.0k | [Jan 4](/t/how-to-install-erpnext-v16/151405/15) |
+| [URY ERPNext Frappe ………………………………………………..](/t/ury-erpnext-frappe/155139) | [2](/t/ury-erpnext-frappe/155139/1) | 98 | [Oct 2025](/t/ury-erpnext-frappe/155139/3) |
+### Want to read more? [Browse all categories](/categories) or [view latest topics](/latest).
+[Powered by Discourse](https://discourse.org/powered-by)
+[Frappe](https://frappe.io)
+Invalid dateInvalid date

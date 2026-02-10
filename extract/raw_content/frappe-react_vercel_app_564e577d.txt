@@ -1,0 +1,125 @@
+# Source URL: https://frappe-react.vercel.app/
+# Content Length: 5688 characters
+# Extracted at: 2026-02-10 11:35:13
+#============================================================
+
+
+Frappe React SDK – Nextra[Frappe React SDK](/)[Contact ↗Contact ↗ (opens in a new tab)](https://twitter.com/nik_kothari22)[GitHubGitHub (opens in a new tab)](https://github.com/The-Commit-Company/frappe-react-sdk)
+
+* [Introduction](/)
+* [Setup](/setup)
+  + [Setup your local development server](/setup/dev_server)
+  + [Using Doppio](/setup/doppio)
+  + [Using TypeScript](/setup/typescript)
+  + [Using other React frameworks](/setup/react_frameworks)
+* [Authentication](/authentication)
+* [Database](/database)
+  + [Get a list of documents](/database/get_list)
+  + [Read a document](/database/read)
+  + [Create a document](/database/create)
+  + [Update a document](/database/update)
+  + [Delete a document](/database/delete)
+* [API Calls](/api_calls)
+  + [GET](/api_calls/get)
+  + [POST](/api_calls/post)
+  + [PUT](/api_calls/put)
+  + [DELETE](/api_calls/delete)
+* [File Uploads](/file_uploads)
+* [Search](/search)
+* [Realtime Events](/realtime_events)
+  + [Document Events](/realtime_events/doc_events)
+  + [DocType Events](/realtime_events/doctype_events)
+  + [Other Realtime Events](/realtime_events/events)
+
+* [Introduction](/)
+  + [What is Frappe React SDK?](#what-is-frappe-react-sdk)
+  + [Features](#features)
+  + [Showcase](#showcase)
+* [Setup](/setup)
+  + [Setup your local development server](/setup/dev_server)
+  + [Using Doppio](/setup/doppio)
+  + [Using TypeScript](/setup/typescript)
+  + [Using other React frameworks](/setup/react_frameworks)
+* [Authentication](/authentication)
+* [Database](/database)
+  + [Get a list of documents](/database/get_list)
+  + [Read a document](/database/read)
+  + [Create a document](/database/create)
+  + [Update a document](/database/update)
+  + [Delete a document](/database/delete)
+* [API Calls](/api_calls)
+  + [GET](/api_calls/get)
+  + [POST](/api_calls/post)
+  + [PUT](/api_calls/put)
+  + [DELETE](/api_calls/delete)
+* [File Uploads](/file_uploads)
+* [Search](/search)
+* [Realtime Events](/realtime_events)
+  + [Document Events](/realtime_events/doc_events)
+  + [DocType Events](/realtime_events/doctype_events)
+  + [Other Realtime Events](/realtime_events/events)
+* [Contact ↗ (opens in a new tab)](https://twitter.com/nik_kothari22)
+Light
+
+On This Page
+
+* [What is Frappe React SDK?](#what-is-frappe-react-sdk)
+* [Features](#features)
+* [frappe-js-sdk](#frappe-js-sdk)
+* [SWR](#swr)
+* [Showcase](#showcase)
+
+[Question? Give us feedback → (opens in a new tab)](https://github.com/The-Commit-Company/frappe-react-sdk/issues/new?title=Feedback%20for%20%E2%80%9CFrappe%20React%20SDK%E2%80%9D&labels=feedback)[Edit this page](https://github.com/The-Commit-Company/frappe-react-sdk/pages/index.mdx)Introduction
+
+Frappe React SDK
+================
+
+React hooks library for a [Frappe Framework (opens in a new tab)](https://frappeframework.com) backend.
+
+[![]()](https://github.com/nikkothari22/frappe-react-sdk)[![]()](https://github.com/nikkothari22/frappe-react-sdk)[![]()](https://www.npmjs.com/package/frappe-react-sdk)[![]()](https://www.npmjs.com/package/frappe-react-sdk)
+⚠️
+
+This documentation is still a work-in-progress, and hence some information might be outdated or unavailable. We are working on it. 💪🏻  
+The SDK is well documented in the codebase with JSDocs, hence you should be able to read the documentation inside your code editor while using it.
+
+What is Frappe React SDK?
+-------------------------
+
+Simply put, this library is a collection of **hooks** that allows developers to build React apps with a Frappe framework backend.
+
+It encapsulates logic for data fetching - including things like loading states, revalidation, progress indicators and debouncing in hooks.
+In most cases, you would only need to write a **single line of code** to implement complex logic.
+
+Features
+--------
+
+The library currently supports the following features:
+
+* 🔐 Authentication - login with username and password (cookie based) + token based authentication, logout and maintain user state
+* 🗄 Database - Hooks to get document, get list of documents, get count, create, update and delete documents
+* 📄 File upload - Hook to upload a file to the Frappe filesystem. Maintains loading, progress and error states.
+* 🤙🏻 API calls - Hooks to make API calls to your whitelisted backend functions and maintain state
+* 🔍 Search - Hook to search documents in your database (with debouncing ✨)
+
+The library uses [frappe-js-sdk (opens in a new tab)](https://github.com/The-Commit-Company/frappe-js-sdk) and [SWR (opens in a new tab)](https://swr.vercel.app) under the hood to make API calls to your Frappe backend.
+
+#### frappe-js-sdk
+
+Internally, we use **frappe-js-sdk**, another library that we maintain, to make calls to the Frappe backend. frappe-js-sdk is a npm package that can be used with any Javascript framework. it uses Axios under the hood to make API calls.
+frappe-react-sdk is just a wrapper around frappe-js-sdk.
+
+#### SWR
+
+SWR uses a cache invalidation strategy and also updates the data constantly and automatically (in the background). This allows the UI to always be fast and reactive.
+The hooks in the library use the default configuration for useSWR but you will be able to pass in your configuration of useSWR to all hooks in this library. Please refer to the [useSWR API Options (opens in a new tab)](https://swr.vercel.app/docs/options)
+
+Showcase
+--------
+
+We at **[The Commit Company (opens in a new tab)](https://github.com/The-Commit-Company)** use and maintain this library for all our projects with Frappe and React. Our open-source work messaging tool **[Raven (opens in a new tab)](https://github.com/The-Commit-Company/Raven)** also uses this SDK.
+
+[Setup](/setup)Light
+
+---
+
+Built by The Commit Company using Nextra
