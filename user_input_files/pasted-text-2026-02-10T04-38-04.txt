@@ -1,0 +1,1184 @@
+index-5wEi1EGJ.js:885 Last workspace AMB-Wellness
+index-5wEi1EGJ.js:1798 Frappe Push Notification initialized
+manifest.webmanifest:1  Manifest: property 'scope' ignored. Start url should be within scope of scope URL.
+[NEW] Explain Console errors by using Copilot in Edge: click
+         
+         to explain an error. 
+        Learn more
+        Don't show again
+index-5wEi1EGJ.js:169 Socket connection failed 0
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rcOl 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:34 [Intervention] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rckX 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rd8Y 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:169 Socket connection failed 1
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rdrQ 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rf61 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rgMp 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rhdU 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:169 Socket connection failed 2
+index-5wEi1EGJ.js:169 Socket connection failed 2
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5riu2 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
+index-5wEi1EGJ.js:169 Socket connection failed 2
+index-5wEi1EGJ.js:54   GET https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling&t=Pn5rkG9 404 (Not Found)
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+reconnect @ index-5wEi1EGJ.js:54
+maybeReconnectOnOpen @ index-5wEi1EGJ.js:54
+s @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+rr.emit @ index-5wEi1EGJ.js:54
+onError @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+setTimeout
+o.onreadystatechange @ index-5wEi1EGJ.js:54
+XMLHttpRequest.send
+create @ index-5wEi1EGJ.js:54
+Op @ index-5wEi1EGJ.js:54
+request @ index-5wEi1EGJ.js:54
+doPoll @ index-5wEi1EGJ.js:54
+poll @ index-5wEi1EGJ.js:54
+doOpen @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+ac @ index-5wEi1EGJ.js:54
+open @ index-5wEi1EGJ.js:54
+yv @ index-5wEi1EGJ.js:54
+$p @ index-5wEi1EGJ.js:54
+PD @ index-5wEi1EGJ.js:54
+(anonymous) @ index-5wEi1EGJ.js:54
+useMemo @ index-5wEi1EGJ.js:39
+Xt.useMemo @ index-5wEi1EGJ.js:10
+ND @ index-5wEi1EGJ.js:54
+$1 @ index-5wEi1EGJ.js:39
+f4 @ index-5wEi1EGJ.js:41
+l4 @ index-5wEi1EGJ.js:41
+RA @ index-5wEi1EGJ.js:41
+Wf @ index-5wEi1EGJ.js:41
+o4 @ index-5wEi1EGJ.js:41
+M @ index-5wEi1EGJ.js:26
+Z @ index-5wEi1EGJ.js:26
