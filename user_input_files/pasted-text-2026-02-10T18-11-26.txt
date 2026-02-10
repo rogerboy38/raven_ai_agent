@@ -1,0 +1,94 @@
+0->localhost:40490 (ESTABLISHED)
+redis-ser 335090 frappe   63u  IPv4 2219606      0t0  TCP localhost:11000->localhost:40506 (ESTABLISHED)
+redis-ser 335090 frappe   64u  IPv4 2237694      0t0  TCP localhost:11000->localhost:54936 (ESTABLISHED)
+redis-ser 335096 frappe    6u  IPv4 2240821      0t0  TCP localhost:13000 (LISTEN)
+redis-ser 335096 frappe    7u  IPv4 2231054      0t0  TCP localhost:13000->localhost:39340 (ESTABLISHED)
+redis-ser 335096 frappe    8u  IPv4 2231056      0t0  TCP localhost:13000->localhost:39370 (ESTABLISHED)
+redis-ser 335096 frappe    9u  IPv4 2231057      0t0  TCP localhost:13000->localhost:39386 (ESTABLISHED)
+redis-ser 335096 frappe   10u  IPv4 2231058      0t0  TCP localhost:13000->localhost:39356 (ESTABLISHED)
+redis-ser 335096 frappe   11u  IPv4 2231059      0t0  TCP localhost:13000->localhost:39392 (ESTABLISHED)
+redis-ser 335096 frappe   12u  IPv4 2231061      0t0  TCP localhost:13000->localhost:39396 (ESTABLISHED)
+redis-ser 335096 frappe   13u  IPv4 2231063      0t0  TCP localhost:13000->localhost:39404 (ESTABLISHED)
+redis-ser 335096 frappe   14u  IPv4 2231064      0t0  TCP localhost:13000->localhost:39412 (ESTABLISHED)
+redis-ser 335096 frappe   15u  IPv4 2231066      0t0  TCP localhost:13000->localhost:39416 (ESTABLISHED)
+redis-ser 335096 frappe   16u  IPv4 2231068      0t0  TCP localhost:13000->localhost:39422 (ESTABLISHED)
+redis-ser 335096 frappe   17u  IPv4 2231070      0t0  TCP localhost:13000->localhost:39428 (ESTABLISHED)
+redis-ser 335096 frappe   18u  IPv4 2231072      0t0  TCP localhost:13000->localhost:39434 (ESTABLISHED)
+redis-ser 335096 frappe   19u  IPv4 2231073      0t0  TCP localhost:13000->localhost:39446 (ESTABLISHED)
+redis-ser 335096 frappe   20u  IPv4 2231075      0t0  TCP localhost:13000->localhost:39452 (ESTABLISHED)
+redis-ser 335096 frappe   21u  IPv4 2231077      0t0  TCP localhost:13000->localhost:39464 (ESTABLISHED)
+redis-ser 335096 frappe   22u  IPv4 2231079      0t0  TCP localhost:13000->localhost:39472 (ESTABLISHED)
+redis-ser 335096 frappe   23u  IPv4 2231081      0t0  TCP localhost:13000->localhost:39488 (ESTABLISHED)
+redis-ser 335096 frappe   24u  IPv4 2231083      0t0  TCP localhost:13000->localhost:39498 (ESTABLISHED)
+redis-ser 335096 frappe   25u  IPv4 2233764      0t0  TCP localhost:13000->localhost:35934 (ESTABLISHED)
+redis-ser 335096 frappe   26u  IPv4 2233766      0t0  TCP localhost:13000->localhost:35936 (ESTABLISHED)
+11000/tcp:           335090
+13000/tcp:           335096
+12:10:13 system        | redis_cache.1 started (pid=340855)
+12:10:13 system        | redis_queue.1 started (pid=340860)
+12:10:13 redis_cache.1 | 340858:C 10 Feb 2026 12:10:13.643 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+12:10:13 redis_cache.1 | 340858:C 10 Feb 2026 12:10:13.646 # Redis version=7.0.15, bits=64, commit=00000000, modified=0, pid=340858, just started
+12:10:13 redis_cache.1 | 340858:C 10 Feb 2026 12:10:13.646 # Configuration loaded
+12:10:13 redis_cache.1 | 340858:M 10 Feb 2026 12:10:13.646 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+12:10:13 redis_cache.1 | 340858:M 10 Feb 2026 12:10:13.646 * monotonic clock: POSIX clock_gettime
+12:10:13 redis_cache.1 | 340858:M 10 Feb 2026 12:10:13.646 # Warning: Could not create server TCP listening socket 127.0.0.1:13000: bind: Address already in use
+12:10:13 redis_cache.1 | 340858:M 10 Feb 2026 12:10:13.646 # Failed listening on port 13000 (TCP), aborting.
+12:10:13 system        | web.1 started (pid=340861)
+12:10:13 system        | redis_cache.1 stopped (rc=1)
+12:10:13 redis_queue.1 | 340863:C 10 Feb 2026 12:10:13.659 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+12:10:13 redis_queue.1 | 340863:C 10 Feb 2026 12:10:13.663 # Redis version=7.0.15, bits=64, commit=00000000, modified=0, pid=340863, just started
+12:10:13 redis_queue.1 | 340863:C 10 Feb 2026 12:10:13.663 # Configuration loaded
+12:10:13 redis_queue.1 | 340863:M 10 Feb 2026 12:10:13.665 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+12:10:13 redis_queue.1 | 340863:M 10 Feb 2026 12:10:13.665 * monotonic clock: POSIX clock_gettime
+12:10:13 redis_queue.1 | 340863:M 10 Feb 2026 12:10:13.665 # Warning: Could not create server TCP listening socket 127.0.0.1:11000: bind: Address already in use
+12:10:13 redis_queue.1 | 340863:M 10 Feb 2026 12:10:13.665 # Failed listening on port 11000 (TCP), aborting.
+12:10:13 system        | redis_queue.1 stopped (rc=1)
+12:10:13 system        | socketio.1 started (pid=340867)
+12:10:13 system        | watch.1 started (pid=340869)
+12:10:13 system        | schedule.1 started (pid=340877)
+12:10:13 system        | worker.1 started (pid=340883)
+12:10:13 system        | sending SIGTERM to web.1 (pid 340861)
+12:10:13 system        | sending SIGTERM to socketio.1 (pid 340867)
+12:10:13 system        | sending SIGTERM to watch.1 (pid 340869)
+12:10:13 system        | sending SIGTERM to schedule.1 (pid 340877)
+12:10:13 system        | sending SIGTERM to worker.1 (pid 340883)
+12:10:13 system        | web.1 stopped (rc=-15)
+12:10:13 system        | worker.1 stopped (rc=-15)
+12:10:13 system        | schedule.1 stopped (rc=-15)
+12:10:13 system        | watch.1 stopped (rc=-15)
+12:10:13 system        | socketio.1 stopped (rc=-15)
+(env) frappe@UbuntuVM:~/frappe-bench$ bench start
+12:11:04 system        | redis_cache.1 started (pid=340906)
+12:11:04 system        | redis_queue.1 started (pid=340910)
+12:11:04 redis_cache.1 | 340909:C 10 Feb 2026 12:11:04.851 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+12:11:04 redis_cache.1 | 340909:C 10 Feb 2026 12:11:04.853 # Redis version=7.0.15, bits=64, commit=00000000, modified=0, pid=340909, just started
+12:11:04 redis_cache.1 | 340909:C 10 Feb 2026 12:11:04.853 # Configuration loaded
+12:11:04 redis_cache.1 | 340909:M 10 Feb 2026 12:11:04.854 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+12:11:04 redis_cache.1 | 340909:M 10 Feb 2026 12:11:04.854 * monotonic clock: POSIX clock_gettime
+12:11:04 redis_cache.1 | 340909:M 10 Feb 2026 12:11:04.854 # Warning: Could not create server TCP listening socket 127.0.0.1:13000: bind: Address already in use
+12:11:04 redis_cache.1 | 340909:M 10 Feb 2026 12:11:04.854 # Failed listening on port 13000 (TCP), aborting.
+12:11:04 redis_queue.1 | 340913:C 10 Feb 2026 12:11:04.852 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+12:11:04 redis_queue.1 | 340913:C 10 Feb 2026 12:11:04.855 # Redis version=7.0.15, bits=64, commit=00000000, modified=0, pid=340913, just started
+12:11:04 redis_queue.1 | 340913:C 10 Feb 2026 12:11:04.855 # Configuration loaded
+12:11:04 redis_queue.1 | 340913:M 10 Feb 2026 12:11:04.855 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+12:11:04 redis_queue.1 | 340913:M 10 Feb 2026 12:11:04.855 * monotonic clock: POSIX clock_gettime
+12:11:04 redis_queue.1 | 340913:M 10 Feb 2026 12:11:04.855 # Warning: Could not create server TCP listening socket 127.0.0.1:11000: bind: Address already in use
+12:11:04 system        | web.1 started (pid=340915)
+12:11:04 redis_queue.1 | 340913:M 10 Feb 2026 12:11:04.855 # Failed listening on port 11000 (TCP), aborting.
+12:11:04 system        | redis_queue.1 stopped (rc=1)
+12:11:04 system        | redis_cache.1 stopped (rc=1)
+12:11:04 system        | socketio.1 started (pid=340916)
+12:11:04 system        | watch.1 started (pid=340921)
+12:11:04 system        | schedule.1 started (pid=340931)
+12:11:04 system        | worker.1 started (pid=340933)
+12:11:04 system        | sending SIGTERM to web.1 (pid 340915)
+12:11:04 system        | sending SIGTERM to socketio.1 (pid 340916)
+12:11:04 system        | sending SIGTERM to watch.1 (pid 340921)
+12:11:04 system        | sending SIGTERM to schedule.1 (pid 340931)
+12:11:04 system        | sending SIGTERM to worker.1 (pid 340933)
+12:11:04 system        | web.1 stopped (rc=-15)
+12:11:04 system        | watch.1 stopped (rc=-15)
+12:11:04 system        | worker.1 stopped (rc=-15)
+12:11:04 system        | schedule.1 stopped (rc=-15)
+12:11:04 system        | socketio.1 stopped (rc=-15)
+(env) frappe@UbuntuVM:~/frappe-bench$ 
