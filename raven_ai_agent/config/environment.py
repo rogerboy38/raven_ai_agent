@@ -144,6 +144,15 @@ class EnvironmentDetector:
             except ValueError:
                 pass
         
+        # Check for ngrok in host_name - indicates sandbox
+        try:
+            site_config = frappe.get_site_config()
+            host_name = site_config.get("host_name", "")
+            if "ngrok" in host_name:
+                return DeploymentType.SANDBOX
+        except:
+            pass
+        
         # Check for Frappe Cloud
         if self._is_frappe_cloud():
             return DeploymentType.FRAPPE_CLOUD
