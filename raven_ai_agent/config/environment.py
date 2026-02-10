@@ -3,16 +3,22 @@ Environment Configuration Module for Raven AI Agent
 ====================================================
 
 This module provides adaptive configuration based on the deployment environment:
-- Sandbox (Development): Direct port access, bench dev server
-- Production with Traefik: Docker containers, reverse proxy
+- Sandbox (Development): Direct port access, bench dev server, ngrok tunnel
+- Production with Traefik: Docker containers on VPS (e.g., v2.sysmayal.cloud)
 - Production with Nginx: Traditional Frappe setup
-- Frappe Cloud: Managed infrastructure
+- Frappe Cloud: Managed infrastructure (e.g., *.frappe.cloud sites)
 
 The app auto-detects the environment and adjusts:
-1. Socket.IO connection strategy
+1. Socket.IO connection strategy (port 9000 for sandbox, 9001 for prod)
 2. Real-time event publishing
 3. Redis connection settings
 4. File paths and URLs
+5. CORS and authentication handling
+
+Known Environments:
+- Sandbox: ngrok tunnel -> nginx multiplexer (8005) -> 8000/9000
+- Production VPS: Traefik -> nginx sidecar -> Socket.IO on 9001
+- Frappe Cloud: Managed infrastructure
 """
 
 import os
@@ -25,11 +31,38 @@ from dataclasses import dataclass
 
 class DeploymentType(Enum):
     """Supported deployment environments"""
-    SANDBOX = "sandbox"              # Development with bench
-    PRODUCTION_TRAEFIK = "traefik"   # Docker + Traefik reverse proxy
+    SANDBOX = "sandbox"              # Development with bench, ngrok tunnel
+    SANDBOX_NGROK = "sandbox_ngrok"  # Sandbox specifically with ngrok
+    PRODUCTION_TRAEFIK = "traefik"   # Docker + Traefik reverse proxy (VPS)
     PRODUCTION_NGINX = "nginx"       # Traditional Nginx + Supervisor
     FRAPPE_CLOUD = "frappe_cloud"    # Managed Frappe Cloud
     UNKNOWN = "unknown"
+
+
+# Known environment configurations from infrastructure documentation
+KNOWN_ENVIRONMENTS = {
+    # Sandbox environment details
+    "sandbox": {
+        "site_pattern": "sysmayal2_v_frappe_cloud",  # Site name pattern
+        "ngrok_domain": "sysmayal.ngrok.io",
+        "socketio_port": 9000,
+        "web_port": 8000,
+        "multiplexer_port": 8005,  # nginx multiplexer when properly configured
+        "redis_socketio_port": 13000,
+    },
+    # Production VPS with Traefik
+    "production_vps": {
+        "domain": "v2.sysmayal.cloud",
+        "socketio_port": 9001,  # Different from sandbox!
+        "uses_traefik": True,
+        "uses_nginx_sidecar": True,
+    },
+    # Frappe Cloud
+    "frappe_cloud": {
+        "domain_pattern": ".frappe.cloud",
+        "managed": True,
+    }
+}
 
 
 @dataclass
@@ -50,6 +83,36 @@ class EnvironmentConfig:
     # Additional settings
     debug_mode: bool
     cors_origins: list
+    
+    # Environment-specific extras
+    ngrok_tunnel: Optional[str] = None  # ngrok URL if applicable
+    traefik_host: Optional[str] = None  # Traefik routing host
+    is_multiplexer_enabled: bool = False  # Whether nginx multiplexer is active
+    
+    def get_socketio_url(self) -> str:
+        """Get the full Socket.IO URL for this environment."""
+        protocol = "wss" if self.use_ssl else "ws"
+        
+        # If ngrok tunnel is available and we're in sandbox, use it
+        if self.ngrok_tunnel and self.deployment_type in [DeploymentType.SANDBOX, DeploymentType.SANDBOX_NGROK]:
+            return f"wss://{self.ngrok_tunnel}/socket.io"
+        
+        if self.socketio_port in [80, 443]:
+            return f"{protocol}://{self.socketio_host}{self.websocket_path}"
+        else:
+            return f"{protocol}://{self.socketio_host}:{self.socketio_port}{self.websocket_path}"
+    
+    def get_external_socketio_url(self) -> str:
+        """
+        Get the Socket.IO URL that external clients (browser) should use.
+        This handles the ngrok/traefik indirection.
+        """
+        if self.ngrok_tunnel:
+            return f"wss://{self.ngrok_tunnel}/socket.io"
+        elif self.traefik_host:
+            return f"wss://{self.traefik_host}/socket.io"
+        else:
+            return self.get_socketio_url()
 
 
 class EnvironmentDetector:
@@ -111,6 +174,11 @@ class EnvironmentDetector:
             site_config = frappe.get_site_config()
             if site_config.get("frappe_cloud_site"):
                 return True
+            
+            # Check if site name matches Frappe Cloud pattern
+            site_name = getattr(frappe.local, 'site', '')
+            if site_name and '.frappe.cloud' in site_name:
+                return True
         except:
             pass
         
@@ -139,6 +207,19 @@ class EnvironmentDetector:
                     return True
             except:
                 pass
+        
+        # Check for known production domain (v2.sysmayal.cloud)
+        try:
+            site_name = getattr(frappe.local, 'site', '')
+            if site_name and 'v2.sysmayal.cloud' in site_name:
+                return True
+            
+            # Check environment variable for domain
+            site_domain = os.environ.get("SITE_DOMAIN", "")
+            if 'v2.sysmayal.cloud' in site_domain:
+                return True
+        except:
+            pass
         
         return False
     
@@ -177,6 +258,11 @@ class EnvironmentDetector:
             
             if site_config.get("dev_server"):
                 return True
+            
+            # Check for known sandbox site pattern
+            site_name = getattr(frappe.local, 'site', '')
+            if site_name and 'sysmayal2_v_frappe_cloud' in site_name:
+                return True
         except:
             pass
         
@@ -186,7 +272,52 @@ class EnvironmentDetector:
             # Procfile exists - likely development
             return True
         
+        # Check for ngrok process or environment hints
+        if os.environ.get("NGROK_URL") or os.environ.get("NGROK_AUTHTOKEN"):
+            return True
+        
         return False
+    
+    def _detect_ngrok_tunnel(self) -> Optional[str]:
+        """
+        Detect if ngrok tunnel is active and return the tunnel URL.
+        """
+        # Check environment variable first
+        ngrok_url = os.environ.get("NGROK_URL")
+        if ngrok_url:
+            return ngrok_url.replace("https://", "").replace("http://", "")
+        
+        # Check site config for ngrok URL
+        try:
+            site_config = frappe.get_site_config()
+            ngrok_url = site_config.get("ngrok_url") or site_config.get("ngrok_tunnel")
+            if ngrok_url:
+                return ngrok_url.replace("https://", "").replace("http://", "")
+        except:
+            pass
+        
+        # Try to detect ngrok via API (if ngrok is running locally)
+        try:
+            import urllib.request
+            import json
+            response = urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=1)
+            data = json.loads(response.read())
+            for tunnel in data.get("tunnels", []):
+                if tunnel.get("proto") == "https":
+                    public_url = tunnel.get("public_url", "")
+                    return public_url.replace("https://", "")
+        except:
+            pass
+        
+        # Return known sandbox ngrok domain if site matches
+        try:
+            site_name = getattr(frappe.local, 'site', '')
+            if 'sysmayal2_v_frappe_cloud' in site_name:
+                return KNOWN_ENVIRONMENTS["sandbox"]["ngrok_domain"]
+        except:
+            pass
+        
+        return None
     
     def get_config(self, force_refresh: bool = False) -> EnvironmentConfig:
         """
@@ -222,38 +353,72 @@ class EnvironmentDetector:
     
     def _get_sandbox_config(self, site_config: Dict, common_config: Dict) -> EnvironmentConfig:
         """Configuration for sandbox/development environment"""
-        socketio_port = site_config.get("socketio_port") or common_config.get("socketio_port", 9000)
-        redis_socketio = common_config.get("redis_socketio", "redis://localhost:13000")
+        # Use known sandbox configuration
+        sandbox_env = KNOWN_ENVIRONMENTS["sandbox"]
+        socketio_port = site_config.get("socketio_port") or common_config.get("socketio_port", sandbox_env["socketio_port"])
+        redis_socketio = common_config.get("redis_socketio", f"redis://localhost:{sandbox_env['redis_socketio_port']}")
         
         # In sandbox, we often access via local IP or ngrok
         site_name = getattr(frappe.local, 'site', 'localhost')
         
+        # Detect ngrok tunnel
+        ngrok_tunnel = self._detect_ngrok_tunnel()
+        
+        # Determine SSL based on ngrok presence
+        use_ssl = ngrok_tunnel is not None
+        
+        # Check if nginx multiplexer is configured (port 8005)
+        is_multiplexer_enabled = self._check_multiplexer_enabled(sandbox_env["multiplexer_port"])
+        
         return EnvironmentConfig(
-            deployment_type=DeploymentType.SANDBOX,
+            deployment_type=DeploymentType.SANDBOX_NGROK if ngrok_tunnel else DeploymentType.SANDBOX,
             socketio_port=socketio_port,
             socketio_host="localhost",
             redis_socketio=redis_socketio,
-            use_ssl=False,
-            site_url=f"http://{site_name}",
+            use_ssl=use_ssl,
+            site_url=f"https://{ngrok_tunnel}" if ngrok_tunnel else f"http://{site_name}",
             websocket_path="/socket.io",
-            proxy_headers_required=False,
+            proxy_headers_required=ngrok_tunnel is not None,
             realtime_strategy="frappe_native",
             debug_mode=True,
-            cors_origins=["*"]  # Allow all in development
+            cors_origins=["*", f"https://{ngrok_tunnel}"] if ngrok_tunnel else ["*"],
+            ngrok_tunnel=ngrok_tunnel,
+            is_multiplexer_enabled=is_multiplexer_enabled
         )
     
+    def _check_multiplexer_enabled(self, port: int) -> bool:
+        """Check if nginx multiplexer is running on specified port."""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', port))
+            sock.close()
+            return result == 0
+        except:
+            return False
+    
     def _get_traefik_config(self, site_config: Dict, common_config: Dict) -> EnvironmentConfig:
-        """Configuration for Docker + Traefik deployment"""
-        # In Traefik setup, Socket.IO is typically on same port via path routing
-        socketio_port = 443  # HTTPS via Traefik
+        """Configuration for Docker + Traefik deployment (e.g., v2.sysmayal.cloud)"""
+        # Use known production configuration
+        prod_env = KNOWN_ENVIRONMENTS["production_vps"]
+        
+        # In Traefik setup, external access is via 443, but internal Socket.IO is on 9001
+        # The nginx sidecar proxies to the actual Socket.IO port
+        internal_socketio_port = prod_env["socketio_port"]  # 9001
+        
+        # External connection goes through Traefik on 443
+        external_socketio_port = 443  # HTTPS via Traefik
+        
         redis_socketio = common_config.get("redis_socketio", "redis://redis-socketio:6379")
         
         site_name = getattr(frappe.local, 'site', os.environ.get("SITE_NAME", "localhost"))
-        traefik_host = site_config.get("traefik_host") or os.environ.get("TRAEFIK_HOST", site_name)
+        
+        # Use known production domain or fallback
+        traefik_host = site_config.get("traefik_host") or os.environ.get("TRAEFIK_HOST", prod_env["domain"])
         
         return EnvironmentConfig(
             deployment_type=DeploymentType.PRODUCTION_TRAEFIK,
-            socketio_port=socketio_port,
+            socketio_port=external_socketio_port,  # External clients connect via 443
             socketio_host=traefik_host,
             redis_socketio=redis_socketio,
             use_ssl=True,
@@ -262,7 +427,8 @@ class EnvironmentDetector:
             proxy_headers_required=True,
             realtime_strategy="frappe_native",
             debug_mode=False,
-            cors_origins=[f"https://{traefik_host}"]
+            cors_origins=[f"https://{traefik_host}"],
+            traefik_host=traefik_host
         )
     
     def _get_nginx_config(self, site_config: Dict, common_config: Dict) -> EnvironmentConfig:
@@ -346,12 +512,16 @@ def get_socketio_url() -> str:
     This is useful for client-side configuration.
     """
     config = get_config()
-    protocol = "wss" if config.use_ssl else "ws"
-    
-    if config.socketio_port in [80, 443]:
-        return f"{protocol}://{config.socketio_host}{config.websocket_path}"
-    else:
-        return f"{protocol}://{config.socketio_host}:{config.socketio_port}{config.websocket_path}"
+    return config.get_socketio_url()
+
+
+def get_external_socketio_url() -> str:
+    """
+    Get the Socket.IO URL that external clients (browser) should use.
+    This handles ngrok/traefik indirection automatically.
+    """
+    config = get_config()
+    return config.get_external_socketio_url()
 
 
 def get_allowed_origins() -> list:
@@ -387,16 +557,83 @@ def log_environment_info():
     frappe.logger().info(f"  Debug Mode: {config.debug_mode}")
 
 
+def get_environment_summary() -> Dict[str, Any]:
+    """
+    Get a summary of the current environment for debugging/logging.
+    """
+    config = get_config()
+    return {
+        "deployment_type": config.deployment_type.value,
+        "socketio_url": config.get_socketio_url(),
+        "external_socketio_url": config.get_external_socketio_url(),
+        "use_ssl": config.use_ssl,
+        "debug_mode": config.debug_mode,
+        "ngrok_tunnel": config.ngrok_tunnel,
+        "traefik_host": config.traefik_host,
+        "is_multiplexer_enabled": config.is_multiplexer_enabled,
+        "realtime_strategy": config.realtime_strategy,
+    }
+
+
+def validate_realtime_connectivity() -> Dict[str, Any]:
+    """
+    Validate that realtime connectivity is properly configured.
+    Returns a dict with validation results and recommendations.
+    """
+    config = get_config()
+    results = {
+        "environment": config.deployment_type.value,
+        "checks": [],
+        "warnings": [],
+        "recommendations": []
+    }
+    
+    # Check based on environment type
+    if config.deployment_type in [DeploymentType.SANDBOX, DeploymentType.SANDBOX_NGROK]:
+        # Sandbox checks
+        if config.ngrok_tunnel:
+            results["checks"].append(f"✓ ngrok tunnel detected: {config.ngrok_tunnel}")
+            if not config.is_multiplexer_enabled:
+                results["warnings"].append("⚠ nginx multiplexer not detected on port 8005")
+                results["recommendations"].append(
+                    "For proper Socket.IO routing via ngrok, configure nginx multiplexer on port 8005. "
+                    "See RAVEN_INFRASTRUCTURE_FIX_HANDOUT.md for setup instructions."
+                )
+        else:
+            results["checks"].append("✓ Local development mode (no ngrok)")
+            results["recommendations"].append(
+                "Socket.IO available at localhost:9000. For external access, configure ngrok."
+            )
+    
+    elif config.deployment_type == DeploymentType.PRODUCTION_TRAEFIK:
+        results["checks"].append(f"✓ Traefik production detected: {config.traefik_host}")
+        results["recommendations"].append(
+            "Ensure Traefik is configured to route /socket.io to the nginx sidecar container."
+        )
+    
+    elif config.deployment_type == DeploymentType.FRAPPE_CLOUD:
+        results["checks"].append("✓ Frappe Cloud detected (managed infrastructure)")
+        results["recommendations"].append(
+            "Realtime is managed by Frappe Cloud. No additional configuration needed."
+        )
+    
+    return results
+
+
 # Export commonly used functions
 __all__ = [
     'DeploymentType',
     'EnvironmentConfig',
     'EnvironmentDetector',
+    'KNOWN_ENVIRONMENTS',
     'get_environment',
     'get_config',
     'get_socketio_url',
+    'get_external_socketio_url',
     'get_allowed_origins',
     'is_production',
     'is_development',
-    'log_environment_info'
+    'log_environment_info',
+    'get_environment_summary',
+    'validate_realtime_connectivity'
 ]

@@ -1,0 +1,255 @@
+You already have almost everything you need in place; the main job now is to make Raven’s config describe your VPS and sandbox correctly, with port 9000 as the Socket.IO base.
+
+Below is a concrete “multi‑platform” configuration spec you can give the team, aligned with your get_config() / get_external_socketio_url() helpers and the fact that 9000 is the correct port.
+
+1. High‑level goal
+Design raven_ai_agent so that the same Python code:
+
+python
+from raven_ai_agent.api.channel_utils import publish_message_created_event
+publish_message_created_event(message_doc, channel_id)
+works unchanged across:
+
+VPS production (Traefik + nginx, external domain: v2.sysmayal.cloud).
+
+Sandbox (bench on Ubuntu + ngrok, external domain: sysmayal.ngrok.io).
+
+Local dev (plain bench start or bench start --dev).
+​
+​
+
+Environment‑specific details (ports, domains, HTTPS vs HTTP) must live in a small config module, surfaced as:
+
+python
+from raven_ai_agent.config import get_config, diagnose_realtime
+
+config = get_config()
+print(config.deployment_type.value)
+print(config.get_external_socketio_url())
+
+diagnosis = diagnose_realtime()
+print(diagnosis)
+2. Expected configuration model in raven_ai_agent.config
+The team should implement something like:
+
+python
+# raven_ai_agent/config.py
+from enum import Enum
+import frappe
+from urllib.parse import urlparse
+
+class DeploymentType(str, Enum):
+    VPS_PROD = "vps_prod"
+    SANDBOX = "sandbox"
+    LOCAL = "local"
+
+class RavenConfig:
+    def __init__(self, deployment_type: DeploymentType, base_url: str, socketio_port: int):
+        self.deployment_type = deployment_type
+        self.base_url = base_url.rstrip("/")
+        self.socketio_port = socketio_port
+
+    def get_external_http_base(self) -> str:
+        return self.base_url
+
+    def get_external_socketio_url(self) -> str:
+        """
+        Return the full Socket.IO base URL that the frontend should use,
+        e.g. https://v2.sysmayal.cloud or https://sysmayal.ngrok.io:9000
+        """
+        # For prod and sandbox, we normally use the same origin as Frappe,
+        # and rely on proxies/ngrok to route /socket.io/ correctly.
+        return self.base_url
+
+def get_config() -> RavenConfig:
+    conf = frappe.get_conf()
+    site_conf = frappe.local.conf
+
+    host_name = site_conf.get("host_name")
+    web_port = int(site_conf.get("webserver_port", conf.get("webserver_port", 8000)))
+    socketio_port = int(site_conf.get("socketio_port", conf.get("socketio_port", 9000)))
+
+    # Infer deployment type
+    if host_name == "v2.sysmayal.cloud":
+        deployment = DeploymentType.VPS_PROD
+        base_url = f"https://{host_name}"
+    elif host_name and "ngrok.io" in host_name:
+        deployment = DeploymentType.SANDBOX
+        base_url = f"https://{host_name}"
+    else:
+        deployment = DeploymentType.LOCAL
+        base_url = f"http://localhost:{web_port}"
+
+    return RavenConfig(
+        deployment_type=deployment,
+        base_url=base_url,
+        socketio_port=socketio_port,
+    )
+This reflects what you have on both environments now (socketio_port 9000, webserver_port 8000, host names set in site_config.json).
+
+3. How the frontend should use this config
+The contract for FE is:
+
+For all deployments, connect to Socket.IO on the same origin as the Frappe site, with path: "/socket.io/".
+
+The backend proxies/ngrok must make sure /socket.io/ reaches the correct port (9000 on Frappe host).
+
+Example pseudo‑code on the server side to expose the socket URL:
+
+python
+# e.g. API endpoint or context injected into Raven frontend
+from raven_ai_agent.config import get_config
+
+def get_raven_realtime_context():
+    cfg = get_config()
+    return {
+        "deployment_type": cfg.deployment_type.value,
+        "socketio_base_url": cfg.get_external_socketio_url(),  # e.g. https://v2.sysmayal.cloud
+        "socketio_path": "/socket.io/",
+    }
+Then in the Raven frontend:
+
+ts
+const socket = io(config.socketio_base_url, {
+  path: config.socketio_path,
+  transports: ["websocket", "polling"],
+  withCredentials: true,
+});
+No hard‑coded :9000 in the browser; use origin + /socket.io/ and rely on infra to route correctly.
+
+4. VPS production: specific config expectations
+Given what you discovered on the VPS:
+
+Frappe common_site_config.json / site config:
+
+"socketio_port": 9000
+
+"webserver_port": 8000
+​
+
+Node apps/frappe/realtime/index.js listens on that socketio_port and logs:
+Realtime service listening on: ws://0.0.0.0:9000.
+
+The dev team should ensure:
+
+Single public endpoint
+
+https://v2.sysmayal.cloud/socket.io/ → forwards to http://<Frappe-host>:9000/socket.io/ via Traefik + nginx, preserving:
+
+HTTP/1.1
+
+Upgrade / Connection headers for WebSockets
+
+Query string (EIO, transport, sid, etc.).
+
+No hard‑coded 9001
+
+Remove any old references to port 9001 in scripts (start_v3.sh or Docker labels), align everything on 9000 to match socketio_port.
+
+Traefik + nginx minimal rules
+
+As in the previous answer, but with 9000 instead of 9001:
+
+text
+# nginx inside frappe-socketio container
+upstream socketio_backend { server 172.17.0.1:9000; }
+
+server {
+  listen 80;
+  location /socket.io/ {
+    proxy_pass http://socketio_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 86400;
+    proxy_send_timeout 86400;
+    proxy_buffering off;
+  }
+}
+Traefik labels:
+
+text
+- "traefik.http.routers.frappe-socketio.rule=Host(`v2.sysmayal.cloud`) && PathPrefix(`/socket.io`)"
+- "traefik.http.services.frappe-socketio.loadbalancer.server.port=80"
+With this, get_external_socketio_url() for vps_prod can simply return https://v2.sysmayal.cloud; FE always uses that + /socket.io/.
+
+5. Sandbox: specific config expectations
+From sandbox:
+
+socketio_port is 9000 in both common_site_config.json and site_config.json.
+
+Frappe web is on 8000.
+
+Browser currently hits https://sysmayal.ngrok.io/socket.io/... and gets 404, because ngrok only forwards to 8000.
+​
+​
+
+The config model above should detect:
+
+host_name: "sysmayal.ngrok.io" ⇒ DeploymentType.SANDBOX.
+
+base_url: "https://sysmayal.ngrok.io".
+
+For this to work, the team must:
+
+Update ngrok (or nginx in front) so that:
+
+/ → localhost:8000 (Frappe web).
+
+/socket.io/ → localhost:9000 (Socket.IO server).
+
+Once that’s done:
+
+config.get_external_socketio_url() will return https://sysmayal.ngrok.io.
+
+FE will connect to https://sysmayal.ngrok.io/socket.io/.
+
+Internally that will reach port 9000, matching the working curl handshake you saw on sandbox.
+
+6. Diagnostics helper contract
+You already sketched:
+
+python
+from raven_ai_agent.config import get_config, diagnose_realtime
+
+config = get_config()
+print(config.deployment_type.value)
+print(config.get_external_socketio_url())
+
+diagnosis = diagnose_realtime()
+print(diagnosis)
+The team can implement diagnose_realtime() to:
+
+Print deployment_type and socketio_port.
+
+Try:
+
+curl equivalent (via requests) to http://localhost:<socketio_port>/socket.io/?EIO=4&transport=polling and report status.
+
+Optionally, for HTTPS environments, a requests.get(config.get_external_socketio_url() + "/socket.io/?EIO=4&transport=polling") and report if it returns 200 or not.
+
+Return a small structured dict string like:
+
+python
+{
+  "deployment_type": "sandbox",
+  "local_socketio_ok": True,
+  "external_socketio_ok": False,
+  "hint": "External /socket.io/ is not mapped to socketio_port 9000"
+}
+This gives your team and operators a one‑line view of misconfigurations per environment.
+
+7. Key guidance to give the dev team
+Use socketio_port = 9000 as the single source of truth on Frappe side for both VPS and sandbox.
+
+Make raven_ai_agent.config map host names → deployment type → base URL and provide get_external_socketio_url() for FE.
+
+Ensure infra maps <base_url>/socket.io/ to socketio_port (9000) in every environment.
+
+Raven app code should keep using publish_message_created_event(message_doc, channel_id) and never hard‑code ports or paths.
+
+With these pieces, your “multi‑platform environment adapter” becomes just configuration and routing; the Raven code path stays identical across VPS, sandbox, and local.

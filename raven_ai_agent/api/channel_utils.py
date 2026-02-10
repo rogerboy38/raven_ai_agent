@@ -3,7 +3,7 @@ from frappe import _
 from typing import Optional, Dict, Any
 
 
-def publish_message_created_event(message_doc, channel_id: str) -> None:
+def publish_message_created_event(message_doc, channel_id: str, use_adaptive: bool = True) -> None:
     """
     Publish a realtime event when a new Raven Message is created.
     
@@ -16,6 +16,7 @@ def publish_message_created_event(message_doc, channel_id: str) -> None:
     Args:
         message_doc: The Raven Message document that was just inserted
         channel_id: The channel ID where the message was sent
+        use_adaptive: If True, use the environment-aware publish (default: True)
     
     Usage:
         from raven_ai_agent.api.channel_utils import publish_message_created_event
@@ -32,14 +33,33 @@ def publish_message_created_event(message_doc, channel_id: str) -> None:
         # Publish realtime event so UI updates immediately
         publish_message_created_event(message, channel_id)
     """
+    message_data = {
+        "channel_id": channel_id,
+        "sender": frappe.session.user,
+        "message_id": message_doc.name,
+        "message_details": _get_message_details(message_doc),
+    }
+    
+    if use_adaptive:
+        # Use the environment-aware publish function
+        try:
+            from raven_ai_agent.config.realtime import publish_message
+            publish_message(
+                channel_id=channel_id,
+                message_data=message_data,
+                event_name="message_created",
+                after_commit=True,
+                log_debug=True
+            )
+            return
+        except ImportError:
+            # Fall back to direct publish if config module not available
+            pass
+    
+    # Direct publish (original behavior)
     frappe.publish_realtime(
         "message_created",
-        {
-            "channel_id": channel_id,
-            "sender": frappe.session.user,
-            "message_id": message_doc.name,
-            "message_details": _get_message_details(message_doc),
-        },
+        message_data,
         doctype="Raven Channel",
         docname=channel_id,
         after_commit=True,
@@ -166,3 +186,77 @@ def get_all_non_dm_channels(hide_archived=True):
     query = query.orderby(channel.channel_name)
     
     return query.run(as_dict=True)
+
+
+
+@frappe.whitelist()
+def get_realtime_config():
+    """
+    Get the current realtime configuration for the client.
+    
+    This endpoint provides the client with environment-specific
+    Socket.IO configuration, including the correct URL to use.
+    
+    Returns:
+        Dict with Socket.IO configuration
+    """
+    try:
+        from raven_ai_agent.config import get_client_config
+        return get_client_config()
+    except ImportError:
+        # Fallback if config module not available
+        return {
+            "socketio_url": None,
+            "error": "Config module not available"
+        }
+
+
+@frappe.whitelist()
+def diagnose_realtime_connection():
+    """
+    Run realtime diagnostics and return results.
+    
+    This endpoint is useful for debugging Socket.IO connectivity
+    issues across different environments.
+    
+    Returns:
+        Dict with diagnostic results
+    """
+    try:
+        from raven_ai_agent.config import diagnose_realtime
+        return diagnose_realtime()
+    except ImportError:
+        return {
+            "error": "Config module not available",
+            "note": "Install/update raven_ai_agent.config module"
+        }
+
+
+@frappe.whitelist()
+def get_environment_info():
+    """
+    Get detailed environment information.
+    
+    Returns information about the current deployment environment,
+    useful for debugging and documentation.
+    
+    Returns:
+        Dict with environment details
+    """
+    try:
+        from raven_ai_agent.config import (
+            get_environment,
+            get_environment_summary,
+            is_production,
+            is_development,
+        )
+        
+        summary = get_environment_summary()
+        summary["is_production"] = is_production()
+        summary["is_development"] = is_development()
+        
+        return summary
+    except ImportError:
+        return {
+            "error": "Config module not available"
+        }
