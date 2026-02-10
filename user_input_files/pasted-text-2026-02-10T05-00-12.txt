@@ -1,0 +1,119 @@
+
+C:\Users\dev_s>curl "https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling" -w "%{http_code}"
+<!DOCTYPE html>
+<!-- Built on Frappe. https://frappeframework.com/ -->
+<html lang="en" dir="ltr">
+<head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta name="generator" content="frappe">
+
+
+                <meta name="title" content="404"><meta name="language" content="en"><meta property="og:type"  content="article"><meta property="og:title"  content="404"><meta name="twitter:title" content="404"><meta name="twitter:card" content="summary">
+
+
+        <title>Not Found</title>
+
+
+        <link
+                rel="shortcut icon"
+                href="/assets/erpnext/images/erpnext-favicon.svg"
+                type="image/x-icon"
+        >
+        <link type="text/css" rel="stylesheet" href="/assets/frappe/dist/css/website.bundle.CYELHMKW.css">
+<link type="text/css" rel="stylesheet" href="/assets/erpnext/dist/css/erpnext-web.bundle.4E2UDCZ6.css">
+
+
+
+
+        <script>
+                window.frappe = {};
+                window._version_number = "1770692127.3753319";
+                frappe.ready_events = [];
+                frappe.ready = function(fn) {
+                        frappe.ready_events.push(fn);
+                }
+                window.dev_server = 0;
+                window.socketio_port = 9000;
+                window.show_language_picker = false;
+        </script>
+</head>
+<body frappe-session-status="logged-out" data-path="404" class="">
+
+
+
+
+
+
+
+
+
+
+<div id="page-404" data-path="socket.io">
+
+<div class="page-content-wrapper">
+        <!-- breadcrumbs -->
+        <div class="page-breadcrumbs">
+
+
+
+        </div>
+
+
+        <main class="container">
+                <div class="page-header-wrapper">
+                        <div class="page-header">
+
+                        </div>
+
+
+                </div>
+
+                <div class="page_content">
+<style>
+        body {
+                background-color: var(--subtle-accent);
+                font-size: var(--text-base);
+        }
+</style>
+
+<script>
+        window.is_404 = true;
+</script>
+
+<div class="error-page">
+        <div>
+                <h4>
+                        Page not found
+                </h4>
+                <div class="details">
+                        <a href='/' class="text-muted">Back to Home</a>
+                </div>
+        </div>
+</div>
+
+</div>
+
+                <div class="page-footer"></div>
+        </main>
+
+</div>
+
+</div>
+
+
+<div id="all-symbols" style="display:none"></div><script type="text/javascript">fetch(`/assets/frappe/icons/lucide/icons.svg?v=${window._version_number}`, {credentials: "same-origin"}).then((r) => r.text()).then((svg) => {let c = document.getElementById("all-symbols"); c.insertAdjacentHTML("beforeend", svg);});</script><script type="text/javascript">fetch(`/assets/frappe/icons/timeless/icons.svg?v=${window._version_number}`, {credentials: "same-origin"}).then((r) => r.text()).then((svg) => {let c = document.getElementById("all-symbols"); c.insertAdjacentHTML("beforeend", svg);});</script><script type="text/javascript">fetch(`/assets/frappe/icons/espresso/icons.svg?v=${window._version_number}`, {credentials: "same-origin"}).then((r) => r.text()).then((svg) => {let c = document.getElementById("all-symbols"); c.insertAdjacentHTML("beforeend", svg);});</script><script type="text/javascript">fetch(`/assets/erpnext/icons/pos-icons.svg?v=${window._version_number}`, {credentials: "same-origin"}).then((r) => r.text()).then((svg) => {let c = document.getElementById("all-symbols"); c.insertAdjacentHTML("beforeend", svg);});</script>
+        <!-- js should be loaded in body! -->
+        <script>
+                frappe.boot = {"lang":"en","apps_data":{"apps":[{"name":"drive","logo":"/assets/drive/frontend/favicon-310x310.png","title":"Drive","route":"/drive"}],"is_desk_apps":0,"default_path":"/desk"},"sysdefaults":{"float_precision":6,"date_format":"dd/mm/yyyy","time_format":"HH:mm:ss","first_day_of_the_week":"Sunday","number_format":"#,###.##","currency":"MXN"},"time_zone":{"system":"America/Mexico_City","user":"America/Mexico_City"},"assets_json":{"billing.bundle.js":"/assets/frappe/dist/js/billing.bundle.YXK5SUC5.js","bootstrap-4-web.bundle.js":"/assets/frappe/dist/js/bootstrap-4-web.bundle.AZ67VXZX.js","calendar.bundle.js":"/assets/frappe/dist/js/calendar.bundle.CUFNYKMX.js","controls.bundle.js":"/assets/frappe/dist/js/controls.bundle.XAXZZASD.js","data_import_tools.bundle.js":"/assets/frappe/dist/js/data_import_tools.bundle.BNJXE246.js","desk.bundle.js":"/assets/frappe/dist/js/desk.bundle.C3LQCUOI.js","dialog.bundle.js":"/assets/frappe/dist/js/dialog.bundle.5QQNPX3S.js","form.bundle.js":"/assets/frappe/dist/js/form.bundle.HZFXB2EU.js","frappe-web.bundle.js":"/assets/frappe/dist/js/frappe-web.bundle.7R6T63H7.js","libs.bundle.js":"/assets/frappe/dist/js/libs.bundle.TCCLKT27.js","list.bundle.js":"/assets/frappe/dist/js/list.bundle.X4QOGCLY.js","logtypes.bundle.js":"/assets/frappe/dist/js/logtypes.bundle.2DA34EB2.js","onboarding_tours.bundle.js":"/assets/frappe/dist/js/onboarding_tours.bundle.P7QYMXLW.js","photoswipe.bundle.js":"/assets/frappe/dist/js/photoswipe.bundle.2BDW3PAH.js","report.bundle.js":"/assets/frappe/dist/js/report.bundle.ZWW3MKPT.js","sentry.bundle.js":"/assets/frappe/dist/js/sentry.bundle.SI3DB3BY.js","syntax_highlighting.bundle.js":"/assets/frappe/dist/js/syntax_highlighting.bundle.XKU56PFM.js","telemetry.bundle.js":"/assets/frappe/dist/js/telemetry.bundle.DQEBDMFO.js","video_player.bundle.js":"/assets/frappe/dist/js/video_player.bundle.IOEIXC2G.js","web_form.bundle.js":"/assets/frappe/dist/js/web_form.bundle.RLKUJJZH.js","form_builder.bundle.js":"/assets/frappe/dist/js/form_builder.bundle.A4FVT2GU.js","print_format_builder.bundle.js":"/assets/frappe/dist/js/print_format_builder.bundle.ZYDZ4RTV.js","workflow_builder.bundle.js":"/assets/frappe/dist/js/workflow_builder.bundle.IUCEXEBQ.js","build_events.bundle.js":"/assets/frappe/dist/js/build_events.bundle.Q7QTA36B.js","file_uploader.bundle.js":"/assets/frappe/dist/js/file_uploader.bundle.2LKKXCH5.js","kanban_board.bundle.js":"/assets/frappe/dist/js/kanban_board.bundle.L56XYUZN.js","desk.bundle.css":"/assets/frappe/dist/css/desk.bundle.V62THYUD.css","email.bundle.css":"/assets/frappe/dist/css/email.bundle.TNXZPB5Z.css","login.bundle.css":"/assets/frappe/dist/css/login.bundle.KUUA6FXF.css","print.bundle.css":"/assets/frappe/dist/css/print.bundle.EE32P3W5.css","print_format.bundle.css":"/assets/frappe/dist/css/print_format.bundle.GWVS2P43.css","report.bundle.css":"/assets/frappe/dist/css/report.bundle.BICZZCQB.css","web_form.bundle.css":"/assets/frappe/dist/css/web_form.bundle.JAO5L2TU.css","website.bundle.css":"/assets/frappe/dist/css/website.bundle.CYELHMKW.css","bank-reconciliation-tool.bundle.js":"/assets/erpnext/dist/js/bank-reconciliation-tool.bundle.SSX4GOM5.js","erpnext.bundle.js":"/assets/erpnext/dist/js/erpnext.bundle.BKW7C6BK.js","item-dashboard.bundle.js":"/assets/erpnext/dist/js/item-dashboard.bundle.EFDNYWT4.js","point-of-sale.bundle.js":"/assets/erpnext/dist/js/point-of-sale.bundle.R5PC3G7I.js","bom_configurator.bundle.js":"/assets/erpnext/dist/js/bom_configurator.bundle.JLUUNKVF.js","erpnext-web.bundle.css":"/assets/erpnext/dist/css/erpnext-web.bundle.4E2UDCZ6.css","erpnext.bundle.css":"/assets/erpnext/dist/css/erpnext.bundle.RPUQVYOM.css","erpnext_email.bundle.css":"/assets/erpnext/dist/css/erpnext_email.bundle.BQDXCJHV.css","hierarchy-chart.bundle.js":"/assets/hrms/dist/js/hierarchy-chart.bundle.C6LCZVVS.js","hrms.bundle.js":"/assets/hrms/dist/js/hrms.bundle.4LO55TMU.js","interview.bundle.js":"/assets/hrms/dist/js/interview.bundle.ZJTIMGTY.js","performance.bundle.js":"/assets/hrms/dist/js/performance.bundle.HWRHZE2C.js","hrms.bundle.css":"/assets/hrms/dist/css/hrms.bundle.RHVQ5ON6.css","rnd_nutrition.bundle.js":"/assets/rnd_nutrition/dist/js/rnd_nutrition.bundle.WKYYZWTZ.js","rnd_nutrition.bundle.css":"/assets/rnd_nutrition/dist/css/rnd_nutrition.bundle.ZXCBNBU6.css","raven.bundle.js":"/assets/raven/dist/js/raven.bundle.S3FSQYHN.js","raven_chat.bundle.jsx":"/assets/raven/dist/raven_chat.bundle.VTAQMNJW.js","raven.bundle.css":"/assets/raven/dist/css/raven.bundle.DJBH7N4D.css","ff_integration.bundle.js":"/assets/drive/dist/js/ff_integration.bundle.FPCT5WMR.js","rtl_desk.bundle.css":"/assets/frappe/dist/css-rtl/desk.bundle.TJQMGZ6G.css","rtl_email.bundle.css":"/assets/frappe/dist/css-rtl/email.bundle.7GKTMT6E.css","rtl_login.bundle.css":"/assets/frappe/dist/css-rtl/login.bundle.6SBZA2U5.css","rtl_print.bundle.css":"/assets/frappe/dist/css-rtl/print.bundle.QBTOPSBW.css","rtl_print_format.bundle.css":"/assets/frappe/dist/css-rtl/print_format.bundle.BZFEJZVI.css","rtl_report.bundle.css":"/assets/frappe/dist/css-rtl/report.bundle.OSIJBCAZ.css","rtl_web_form.bundle.css":"/assets/frappe/dist/css-rtl/web_form.bundle.UDSRNSXO.css","rtl_website.bundle.css":"/assets/frappe/dist/css-rtl/website.bundle.TTK2QMNQ.css","rtl_erpnext-web.bundle.css":"/assets/erpnext/dist/css-rtl/erpnext-web.bundle.E6H6IXWH.css","rtl_erpnext.bundle.css":"/assets/erpnext/dist/css-rtl/erpnext.bundle.7CONVZZA.css","rtl_erpnext_email.bundle.css":"/assets/erpnext/dist/css-rtl/erpnext_email.bundle.6VP3G3PA.css","rtl_hrms.bundle.css":"/assets/hrms/dist/css-rtl/hrms.bundle.PCMAJH5S.css","rtl_rnd_nutrition.bundle.css":"/assets/rnd_nutrition/dist/css-rtl/rnd_nutrition.bundle.5CONI3LW.css","rtl_raven.bundle.css":"/assets/raven/dist/css-rtl/raven.bundle.E4J3DJIX.css"},"sitename":"sysmayal2_v_frappe_cloud","is_fc_site":0}
+                // for backward compatibility of some libs
+                frappe.sys_defaults = frappe.boot.sysdefaults;
+        </script>
+        <script type="text/javascript" src="/assets/frappe/dist/js/frappe-web.bundle.7R6T63H7.js"></script>
+
+        <script type="text/javascript" src="/website_script.js"></script>
+        <script type="text/javascript" src="/assets/erpnext_mexico_compliance/js/portal_invoice.js"></script>
+
+        <script>frappe.csrf_token = "None";</script></body>
+</html>404
+C:\Users\dev_s>
