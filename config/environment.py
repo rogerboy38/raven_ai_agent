@@ -40,14 +40,14 @@ class DeploymentType(Enum):
 
 
 # Known environment configurations from infrastructure documentation
-# KEY INSIGHT FROM PARALLEL TEAM: Use socketio_port = 9000 as the SINGLE SOURCE OF TRUTH
-# for both VPS and sandbox. The Node realtime service listens on 9000.
+# NOTE: socketio_port is READ FROM SITE CONFIG at runtime, not hardcoded here.
+# VPS uses 9001, sandbox uses 9000 - these are their actual configurations.
 KNOWN_ENVIRONMENTS = {
     # Sandbox environment details
     "sandbox": {
         "site_pattern": "sysmayal2_v_frappe_cloud",  # Site name pattern
         "ngrok_domain": "sysmayal.ngrok.io",
-        "socketio_port": 9000,  # Socket.IO internal port
+        "default_socketio_port": 9000,  # Fallback only
         "web_port": 8000,
         "multiplexer_port": 8005,  # nginx multiplexer when properly configured
         "redis_socketio_port": 13000,
@@ -55,10 +55,10 @@ KNOWN_ENVIRONMENTS = {
     # Production VPS with Traefik
     "production_vps": {
         "domain": "v2.sysmayal.cloud",
-        "socketio_port": 9000,  # CORRECTED: Same as sandbox! Not 9001
+        "default_socketio_port": 9001,  # VPS uses 9001 per actual site config
         "uses_traefik": True,
         "uses_nginx_sidecar": True,
-        # External access via Traefik on 443, routes to nginx sidecar -> 9000
+        # External access via Traefik on 443, routes to nginx sidecar
     },
     # Frappe Cloud
     "frappe_cloud": {
@@ -188,7 +188,21 @@ class EnvironmentDetector:
         return False
     
     def _is_docker_traefik(self) -> bool:
-        """Check if running in Docker with Traefik"""
+        """Check if running in Docker with Traefik or VPS production"""
+        # Check for known production domain (v2.sysmayal.cloud) via host_name
+        try:
+            site_config = frappe.get_site_config()
+            host_name = site_config.get("host_name", "")
+            if "v2.sysmayal.cloud" in host_name:
+                return True
+            
+            # Check domains list
+            domains = site_config.get("domains", [])
+            if any("v2.sysmayal.cloud" in d for d in domains):
+                return True
+        except:
+            pass
+        
         # Check for Docker-specific paths
         if os.path.exists("/.dockerenv"):
             # Check for Traefik labels or environment
@@ -406,12 +420,8 @@ class EnvironmentDetector:
     
     def _get_traefik_config(self, site_config: Dict, common_config: Dict) -> EnvironmentConfig:
         """Configuration for Docker + Traefik deployment (e.g., v2.sysmayal.cloud)"""
-        # Use known production configuration
-        prod_env = KNOWN_ENVIRONMENTS["production_vps"]
-        
-        # CORRECTED per parallel team: Internal Socket.IO is on 9000 (same as sandbox)
-        # The nginx sidecar proxies to the actual Socket.IO port (9000)
-        internal_socketio_port = prod_env["socketio_port"]  # 9000
+        # Read socketio_port from site config (VPS uses 9001)
+        internal_socketio_port = site_config.get("socketio_port") or common_config.get("socketio_port", 9001)
         
         # External connection goes through Traefik on 443
         external_socketio_port = 443  # HTTPS via Traefik
@@ -420,8 +430,10 @@ class EnvironmentDetector:
         
         site_name = getattr(frappe.local, 'site', os.environ.get("SITE_NAME", "localhost"))
         
-        # Use known production domain or fallback
-        traefik_host = site_config.get("traefik_host") or os.environ.get("TRAEFIK_HOST", prod_env["domain"])
+        # Get domain from host_name or domains list
+        host_name = site_config.get("host_name", "").replace("https://", "").replace("http://", "")
+        domains = site_config.get("domains", [])
+        traefik_host = host_name or (domains[0] if domains else KNOWN_ENVIRONMENTS["production_vps"]["domain"])
         
         return EnvironmentConfig(
             deployment_type=DeploymentType.PRODUCTION_TRAEFIK,
