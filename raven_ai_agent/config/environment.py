@@ -40,12 +40,14 @@ class DeploymentType(Enum):
 
 
 # Known environment configurations from infrastructure documentation
+# KEY INSIGHT FROM PARALLEL TEAM: Use socketio_port = 9000 as the SINGLE SOURCE OF TRUTH
+# for both VPS and sandbox. The Node realtime service listens on 9000.
 KNOWN_ENVIRONMENTS = {
     # Sandbox environment details
     "sandbox": {
         "site_pattern": "sysmayal2_v_frappe_cloud",  # Site name pattern
         "ngrok_domain": "sysmayal.ngrok.io",
-        "socketio_port": 9000,
+        "socketio_port": 9000,  # Socket.IO internal port
         "web_port": 8000,
         "multiplexer_port": 8005,  # nginx multiplexer when properly configured
         "redis_socketio_port": 13000,
@@ -53,9 +55,10 @@ KNOWN_ENVIRONMENTS = {
     # Production VPS with Traefik
     "production_vps": {
         "domain": "v2.sysmayal.cloud",
-        "socketio_port": 9001,  # Different from sandbox!
+        "socketio_port": 9000,  # CORRECTED: Same as sandbox! Not 9001
         "uses_traefik": True,
         "uses_nginx_sidecar": True,
+        # External access via Traefik on 443, routes to nginx sidecar -> 9000
     },
     # Frappe Cloud
     "frappe_cloud": {
@@ -402,9 +405,9 @@ class EnvironmentDetector:
         # Use known production configuration
         prod_env = KNOWN_ENVIRONMENTS["production_vps"]
         
-        # In Traefik setup, external access is via 443, but internal Socket.IO is on 9001
-        # The nginx sidecar proxies to the actual Socket.IO port
-        internal_socketio_port = prod_env["socketio_port"]  # 9001
+        # CORRECTED per parallel team: Internal Socket.IO is on 9000 (same as sandbox)
+        # The nginx sidecar proxies to the actual Socket.IO port (9000)
+        internal_socketio_port = prod_env["socketio_port"]  # 9000
         
         # External connection goes through Traefik on 443
         external_socketio_port = 443  # HTTPS via Traefik
