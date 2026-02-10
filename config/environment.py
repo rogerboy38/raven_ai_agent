@@ -290,9 +290,13 @@ class EnvironmentDetector:
         if ngrok_url:
             return ngrok_url.replace("https://", "").replace("http://", "")
         
-        # Check site config for ngrok URL
+        # Check site config for ngrok URL (could be in host_name, ngrok_url, or ngrok_tunnel)
         try:
             site_config = frappe.get_site_config()
+            host_name = site_config.get("host_name", "")
+            # If host_name contains ngrok, use it
+            if host_name and "ngrok" in host_name:
+                return host_name.replace("https://", "").replace("http://", "")
             ngrok_url = site_config.get("ngrok_url") or site_config.get("ngrok_tunnel")
             if ngrok_url:
                 return ngrok_url.replace("https://", "").replace("http://", "")
