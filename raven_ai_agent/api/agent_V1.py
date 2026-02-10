@@ -7,6 +7,9 @@ import json
 from typing import Optional, Dict, List
 from openai import OpenAI
 
+# Import channel utilities for realtime events
+from raven_ai_agent.api.channel_utils import publish_message_created_event
+
 # Import vector store for semantic search
 try:
     from raven_ai_agent.utils.vector_store import VectorStore
@@ -371,9 +374,14 @@ def handle_raven_message(doc, method):
     
     if result["success"]:
         # Reply in Raven
-        frappe.get_doc({
+        reply_doc = frappe.get_doc({
             "doctype": "Raven Message",
             "channel_id": doc.channel_id,
             "text": result["response"],
             "message_type": "Text"
-        }).insert(ignore_permissions=True)
+        })
+        reply_doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+        
+        # Publish realtime event to notify frontend clients
+        publish_message_created_event(reply_doc, doc.channel_id)

@@ -13,6 +13,9 @@ import frappe
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+# Import channel utilities for realtime events
+from raven_ai_agent.api.channel_utils import publish_message_created_event
+
 
 class RavenOrchestrator:
     """
@@ -102,49 +105,8 @@ class RavenOrchestrator:
                 message.insert(ignore_permissions=True)
                 frappe.db.commit()
                 
-                # Publish realtime event (same format as official Raven)
-                frappe.publish_realtime(
-                    "message_created",
-                    {
-                        "channel_id": self.channel.name,
-                        "sender": frappe.session.user,
-                        "message_id": message.name,
-                        "message_details": {
-                            "text": message.text,
-                            "channel_id": message.channel_id,
-                            "content": message.content if hasattr(message, 'content') else None,
-                            "file": message.file if hasattr(message, 'file') else None,
-                            "message_type": message.message_type,
-                            "is_edited": 0,
-                            "is_thread": message.is_thread if hasattr(message, 'is_thread') else 0,
-                            "is_forwarded": message.is_forwarded if hasattr(message, 'is_forwarded') else 0,
-                            "is_reply": message.is_reply if hasattr(message, 'is_reply') else 0,
-                            "poll_id": message.poll_id if hasattr(message, 'poll_id') else None,
-                            "creation": str(message.creation),
-                            "owner": message.owner,
-                            "modified_by": message.modified_by,
-                            "modified": str(message.modified),
-                            "linked_message": message.linked_message if hasattr(message, 'linked_message') else None,
-                            "replied_message_details": message.replied_message_details if hasattr(message, 'replied_message_details') else None,
-                            "link_doctype": message.link_doctype if hasattr(message, 'link_doctype') else None,
-                            "link_document": message.link_document if hasattr(message, 'link_document') else None,
-                            "message_reactions": message.message_reactions if hasattr(message, 'message_reactions') else None,
-                            "thumbnail_width": message.thumbnail_width if hasattr(message, 'thumbnail_width') else None,
-                            "thumbnail_height": message.thumbnail_height if hasattr(message, 'thumbnail_height') else None,
-                            "file_thumbnail": message.file_thumbnail if hasattr(message, 'file_thumbnail') else None,
-                            "image_width": message.image_width if hasattr(message, 'image_width') else None,
-                            "image_height": message.image_height if hasattr(message, 'image_height') else None,
-                            "name": message.name,
-                            "is_bot_message": message.is_bot_message if hasattr(message, 'is_bot_message') else 0,
-                            "bot": message.bot if hasattr(message, 'bot') else None,
-                            "hide_link_preview": message.hide_link_preview if hasattr(message, 'hide_link_preview') else 0,
-                            "blurhash": message.blurhash if hasattr(message, 'blurhash') else None,
-                        },
-                    },
-                    doctype="Raven Channel",
-                    docname=self.channel.name,
-                    after_commit=True,
-                )
+                # Publish realtime event to notify frontend clients
+                publish_message_created_event(message, self.channel.name)
                 
                 return message.as_dict()
                 
