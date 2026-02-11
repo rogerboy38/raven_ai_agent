@@ -20,46 +20,53 @@
    "websocket-client>=1.0.0",
    ```
 
+4. **Installed deps in bench env** - ✅ DONE
+   ```bash
+   ./env/bin/pip install "python-socketio[client]" websocket-client
+   ```
+
 ---
 
 ## Current Blocker
 
-**python-socketio not being detected** in bench console despite being installed:
+**Connection hangs on connect()** - The client uses `wss://` scheme but python-socketio needs `https://` for initial polling handshake:
 
-```bash
-pip list | grep socketio
-# Shows: python-socketio 5.16.1
+```python
+# Current (wrong):
+url = "wss://sysmayal.ngrok.io/socket.io"
+
+# Should be:
+url = "https://sysmayal.ngrok.io"  # python-socketio adds /socket.io automatically
 ```
 
-But in bench console:
+### Error Trace
 ```
-socketio_available: False
+client = get_socketio_client(auto_connect=True)
+# Hangs at: self._sio.connect(config.url, ...)
+# Times out trying to connect to wss:// URL
 ```
-
-### Root Cause
-The bench console runs in a different Python environment. The library is installed in user site-packages but not in the bench/frappe environment.
 
 ---
 
-## Next Steps to Fix
+## Fix Required (Next Session)
 
-### Option 1: Install in bench environment
-```bash
-cd ~/frappe-bench
-./env/bin/pip install "python-socketio[client]" websocket-client
-```
+Edit `raven_ai_agent/realtime/client.py` - Change URL scheme in `_get_config()`:
 
-### Option 2: Install via bench
-```bash
-bench pip install "python-socketio[client]" websocket-client
-```
-
-### Option 3: Check Python paths
 ```python
-# In bench console
-import sys
-print(sys.path)
-# Then ensure the user site-packages is included
+def _get_config(self) -> ConnectionConfig:
+    # ...
+    socketio_url = get_external_socketio_url()
+    
+    # FIX: python-socketio needs https:// not wss://
+    if socketio_url.startswith('wss://'):
+        socketio_url = socketio_url.replace('wss://', 'https://')
+    elif socketio_url.startswith('ws://'):
+        socketio_url = socketio_url.replace('ws://', 'http://')
+    
+    # Also remove /socket.io suffix if present (library adds it)
+    socketio_url = socketio_url.replace('/socket.io', '')
+    
+    return ConnectionConfig(url=socketio_url, ...)
 ```
 
 ---
@@ -74,7 +81,7 @@ from realtime.client import get_socketio_client
 
 client = get_socketio_client(auto_connect=True)
 print(client.get_status())
-# Should show: state: connected, socketio_available: True
+# Should show: state: connected, is_connected: True
 ```
 
 ---
@@ -85,7 +92,7 @@ print(client.get_status())
 |------|--------|----------|
 | `config/environment.py` | Updated | Detects ngrok via host_name |
 | `realtime/__init__.py` | New | Module init |
-| `realtime/client.py` | New | Socket.IO client |
+| `realtime/client.py` | New | Socket.IO client (needs URL fix) |
 | `pyproject.toml` | Updated | Added socketio deps |
 
 ---
@@ -95,7 +102,9 @@ print(client.get_status())
 All changes pushed to `main` branch:
 - https://github.com/rogerboy38/raven_ai_agent
 
-Latest commit: `dc60bff` - deps: Add python-socketio and websocket-client
+Latest commits:
+- `147e3b5` - docs: Add realtime module handout
+- `dc60bff` - deps: Add python-socketio and websocket-client
 
 ---
 
@@ -107,7 +116,13 @@ Latest commit: `dc60bff` - deps: Add python-socketio and websocket-client
    - Sandbox: `sandbox_ngrok` → `wss://sysmayal.ngrok.io/socket.io`
    - VPS: `traefik` → reads `socketio_port` from site_config
 
-3. **Frontend issue identified** - Browser console showed `frappe.socketio: NOT FOUND`. The Raven frontend needs to use our new realtime client instead of relying on Frappe's broken one.
+3. **URL scheme issue** - python-socketio library expects `https://` not `wss://`. It handles the WebSocket upgrade internally.
+
+4. **Socket.IO server is responding** - Verified with curl:
+   ```bash
+   curl "https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling"
+   # Returns: 0{"sid":"xxx","upgrades":["websocket"],...}
+   ```
 
 ---
 
@@ -134,16 +149,19 @@ emit_to_channel('my-channel', 'message_event', {'text': 'Hello'})
 
 ---
 
-## VPS Commands Reference
+## Commands Reference
 
 ```bash
-# Pull latest
+# Pull latest on sandbox
 cd ~/frappe-bench/apps/raven_ai_agent
 git pull upstream main
 
-# Install deps in bench env
+# Install deps in bench env (already done)
 cd ~/frappe-bench
 ./env/bin/pip install "python-socketio[client]" websocket-client
+
+# Test Socket.IO server
+curl "https://sysmayal.ngrok.io/socket.io/?EIO=4&transport=polling"
 ```
 
 ---
