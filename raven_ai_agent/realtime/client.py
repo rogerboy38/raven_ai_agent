@@ -119,20 +119,29 @@ class RealtimeClient:
         # Import here to avoid circular imports
         try:
             from raven_ai_agent.config import get_config, get_external_socketio_url
+            from raven_ai_agent.config.environment import DeploymentType
             
             env_config = get_config()
-            socketio_url = get_external_socketio_url()
             
-            # CRITICAL: python-socketio needs https:// not wss:// for initial handshake
-            # The library handles WebSocket upgrade internally after HTTP connection
-            if socketio_url.startswith("wss://"):
-                socketio_url = socketio_url.replace("wss://", "https://")
-            elif socketio_url.startswith("ws://"):
-                socketio_url = socketio_url.replace("ws://", "http://")
-            
-            # Remove /socket.io suffix if present (we specify path separately)
-            if socketio_url.endswith("/socket.io"):
-                socketio_url = socketio_url[:-10]
+            # For SANDBOX environments, use localhost directly
+            # (avoids network issues when connecting to external ngrok URL from inside the sandbox)
+            if env_config.deployment_type in [DeploymentType.SANDBOX, DeploymentType.SANDBOX_NGROK]:
+                socketio_port = env_config.socketio_port or 9000
+                socketio_url = f"http://localhost:{socketio_port}"
+            else:
+                # For production/other environments, use external URL
+                socketio_url = get_external_socketio_url()
+                
+                # CRITICAL: python-socketio needs https:// not wss:// for initial handshake
+                # The library handles WebSocket upgrade internally after HTTP connection
+                if socketio_url.startswith("wss://"):
+                    socketio_url = socketio_url.replace("wss://", "https://")
+                elif socketio_url.startswith("ws://"):
+                    socketio_url = socketio_url.replace("ws://", "http://")
+                
+                # Remove /socket.io suffix if present (we specify path separately)
+                if socketio_url.endswith("/socket.io"):
+                    socketio_url = socketio_url[:-10]
             
             return ConnectionConfig(
                 url=socketio_url,
