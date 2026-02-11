@@ -1,0 +1,163 @@
+index-CtjWn3ii.js:885 Last workspace 
+sw.js?config=%7B%22projectId%22%3A%22raven-c2659%22%2C%22appId%22%3A%221%3A257310726313%3Aweb%3A4bca8a6ac8f3c1ffa631b8%22%2C%22storageBucket%22%3A%22raven-c2659.firebasestorage.app%22%2C%22apiKey%22%3A%22AIzaSyDXZR-Ww8hgNHr8CaEgJAiTdEEL4UwPTig%22%2C%22authDomain%22%3A%22raven-c2659.firebaseapp.com%22%2C%22messagingSenderId%22%3A%22257310726313%22%7D:855 Service Worker Initialized
+index-CtjWn3ii.js:1798 Frappe Push Notification initialized
+index-CtjWn3ii.js:169 Socket connection failed 0
+index-CtjWn3ii.js:54  WebSocket connection to 'wss://v2.sysmayal.cloud/socket.io/?EIO=4&transport=websocket&sid=6uR_NGalmluHRveUAACB' failed: WebSocket is closed before the connection is established.
+doClose @ index-CtjWn3ii.js:54
+close @ index-CtjWn3ii.js:54
+s @ index-CtjWn3ii.js:54
+c @ index-CtjWn3ii.js:54
+d @ index-CtjWn3ii.js:54
+r @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onClose @ index-CtjWn3ii.js:54
+n @ index-CtjWn3ii.js:54
+close @ index-CtjWn3ii.js:54
+_close @ index-CtjWn3ii.js:54
+_destroy @ index-CtjWn3ii.js:54
+destroy @ index-CtjWn3ii.js:54
+onpacket @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+(anonymous) @ index-CtjWn3ii.js:54
+Promise.then
+(anonymous) @ index-CtjWn3ii.js:54
+ondecoded @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+add @ index-CtjWn3ii.js:54
+ondata @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onPacket @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onPacket @ index-CtjWn3ii.js:54
+r @ index-CtjWn3ii.js:54
+onData @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onLoad @ index-CtjWn3ii.js:54
+o.onreadystatechange @ index-CtjWn3ii.js:54
+XMLHttpRequest.send
+create @ index-CtjWn3ii.js:54
+Op @ index-CtjWn3ii.js:54
+request @ index-CtjWn3ii.js:54
+doPoll @ index-CtjWn3ii.js:54
+poll @ index-CtjWn3ii.js:54
+onData @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onLoad @ index-CtjWn3ii.js:54
+o.onreadystatechange @ index-CtjWn3ii.js:54
+XMLHttpRequest.send
+create @ index-CtjWn3ii.js:54
+Op @ index-CtjWn3ii.js:54
+request @ index-CtjWn3ii.js:54
+doPoll @ index-CtjWn3ii.js:54
+poll @ index-CtjWn3ii.js:54
+doOpen @ index-CtjWn3ii.js:54
+open @ index-CtjWn3ii.js:54
+open @ index-CtjWn3ii.js:54
+ac @ index-CtjWn3ii.js:54
+open @ index-CtjWn3ii.js:54
+connect @ index-CtjWn3ii.js:54
+onError @ index-CtjWn3ii.js:169
+(anonymous) @ index-CtjWn3ii.js:54
+c @ index-CtjWn3ii.js:2
+Promise.then
+u @ index-CtjWn3ii.js:2
+(anonymous) @ index-CtjWn3ii.js:2
+Re @ index-CtjWn3ii.js:2
+(anonymous) @ index-CtjWn3ii.js:54
+(anonymous) @ index-CtjWn3ii.js:54
+Lf @ index-CtjWn3ii.js:41
+t4 @ index-CtjWn3ii.js:41
+e4 @ index-CtjWn3ii.js:41
+SA @ index-CtjWn3ii.js:41
+MA @ index-CtjWn3ii.js:41
+As @ index-CtjWn3ii.js:41
+a4 @ index-CtjWn3ii.js:41
+Ei @ index-CtjWn3ii.js:39
+(anonymous) @ index-CtjWn3ii.js:41
+index-CtjWn3ii.js:34 [Intervention] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113
+index-CtjWn3ii.js:169 Socket connection failed 1
+index-CtjWn3ii.js:54  WebSocket connection to 'wss://v2.sysmayal.cloud/socket.io/?EIO=4&transport=websocket&sid=igQU1s6AOVbtMSEqAACD' failed: WebSocket is closed before the connection is established.
+doClose @ index-CtjWn3ii.js:54
+close @ index-CtjWn3ii.js:54
+s @ index-CtjWn3ii.js:54
+c @ index-CtjWn3ii.js:54
+d @ index-CtjWn3ii.js:54
+r @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onClose @ index-CtjWn3ii.js:54
+n @ index-CtjWn3ii.js:54
+close @ index-CtjWn3ii.js:54
+_close @ index-CtjWn3ii.js:54
+_destroy @ index-CtjWn3ii.js:54
+destroy @ index-CtjWn3ii.js:54
+onpacket @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+(anonymous) @ index-CtjWn3ii.js:54
+Promise.then
+(anonymous) @ index-CtjWn3ii.js:54
+ondecoded @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+add @ index-CtjWn3ii.js:54
+ondata @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onPacket @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onPacket @ index-CtjWn3ii.js:54
+r @ index-CtjWn3ii.js:54
+onData @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onLoad @ index-CtjWn3ii.js:54
+o.onreadystatechange @ index-CtjWn3ii.js:54
+XMLHttpRequest.send
+create @ index-CtjWn3ii.js:54
+Op @ index-CtjWn3ii.js:54
+request @ index-CtjWn3ii.js:54
+doPoll @ index-CtjWn3ii.js:54
+poll @ index-CtjWn3ii.js:54
+onData @ index-CtjWn3ii.js:54
+rr.emit @ index-CtjWn3ii.js:54
+onLoad @ index-CtjWn3ii.js:54
+o.onreadystatechange @ index-CtjWn3ii.js:54
+XMLHttpRequest.send
+create @ index-CtjWn3ii.js:54
+Op @ index-CtjWn3ii.js:54
+request @ index-CtjWn3ii.js:54
+doPoll @ index-CtjWn3ii.js:54
+poll @ index-CtjWn3ii.js:54
+doOpen @ index-CtjWn3ii.js:54
+open @ index-CtjWn3ii.js:54
+open @ index-CtjWn3ii.js:54
+ac @ index-CtjWn3ii.js:54
+open @ index-CtjWn3ii.js:54
+connect @ index-CtjWn3ii.js:54
+onError @ index-CtjWn3ii.js:169
+(anonymous) @ index-CtjWn3ii.js:54
+c @ index-CtjWn3ii.js:2
+Promise.then
+u @ index-CtjWn3ii.js:2
+(anonymous) @ index-CtjWn3ii.js:2
+Re @ index-CtjWn3ii.js:2
+(anonymous) @ index-CtjWn3ii.js:54
+(anonymous) @ index-CtjWn3ii.js:54
+q.isPaused.q.onErrorRetry.retryCount @ index-CtjWn3ii.js:54
+setTimeout
+Sj @ index-CtjWn3ii.js:54
+(anonymous) @ index-CtjWn3ii.js:54
+c @ index-CtjWn3ii.js:2
+Promise.then
+u @ index-CtjWn3ii.js:2
+(anonymous) @ index-CtjWn3ii.js:2
+Re @ index-CtjWn3ii.js:2
+(anonymous) @ index-CtjWn3ii.js:54
+(anonymous) @ index-CtjWn3ii.js:54
+Lf @ index-CtjWn3ii.js:41
+t4 @ index-CtjWn3ii.js:41
+e4 @ index-CtjWn3ii.js:41
+SA @ index-CtjWn3ii.js:41
+MA @ index-CtjWn3ii.js:41
+As @ index-CtjWn3ii.js:41
+a4 @ index-CtjWn3ii.js:41
+Ei @ index-CtjWn3ii.js:39
+(anonymous) @ index-CtjWn3ii.js:41
+index-CtjWn3ii.js:169 Socket connection failed 2
+index-CtjWn3ii.js:169 Socket connection failed 2
