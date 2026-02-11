@@ -1,0 +1,349 @@
+{
+    "actions": [],
+    "creation": "2026-01-06 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "enabled",
+        "sb_api",
+        "default_provider",
+        "fallback_provider",
+        "cb_provider",
+        "openai_api_key",
+        "model",
+        "sb_deepseek",
+        "deepseek_api_key",
+        "deepseek_model",
+        "cb_deepseek",
+        "deepseek_use_reasoning",
+        "sb_claude",
+        "claude_api_key",
+        "claude_model",
+        "sb_minimax",
+        "minimax_api_key",
+        "minimax_group_id",
+        "cb_minimax",
+        "minimax_model",
+        "sb_settings",
+        "max_tokens",
+        "confidence_threshold",
+        "cb_1",
+        "cost_budget_daily",
+        "cost_warning_threshold",
+        "sb_behavior",
+        "default_autonomy",
+        "allow_level_3",
+        "cb_2",
+        "memory_retention_days",
+        "generate_daily_summaries",
+        "sb_raven",
+        "raven_enabled",
+        "raven_trigger",
+        "sb_voice",
+        "elevenlabs_api_key",
+        "default_voice",
+        "sb_channels",
+        "whatsapp_enabled",
+        "whatsapp_phone_number_id",
+        "whatsapp_access_token",
+        "cb_channels",
+        "telegram_enabled",
+        "telegram_bot_token",
+        "slack_enabled",
+        "slack_bot_token"
+    ],
+    "fields": [
+        {
+            "default": "1",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "label": "Enabled"
+        },
+        {
+            "fieldname": "sb_api",
+            "fieldtype": "Section Break",
+            "label": "Provider Configuration"
+        },
+        {
+            "default": "OpenAI",
+            "fieldname": "default_provider",
+            "fieldtype": "Select",
+            "label": "Default Provider",
+            "options": "OpenAI\nDeepSeek\nClaude\nMiniMax"
+        },
+        {
+            "fieldname": "fallback_provider",
+            "fieldtype": "Select",
+            "label": "Fallback Provider",
+            "options": "\nOpenAI\nDeepSeek\nClaude\nMiniMax",
+            "description": "Automatic failover if primary fails"
+        },
+        {
+            "fieldname": "cb_provider",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "openai_api_key",
+            "fieldtype": "Password",
+            "label": "OpenAI API Key"
+        },
+        {
+            "default": "gpt-4o-mini",
+            "fieldname": "model",
+            "fieldtype": "Select",
+            "label": "OpenAI Model",
+            "options": "gpt-4o-mini\ngpt-4o\ngpt-4-turbo\ngpt-3.5-turbo"
+        },
+        {
+            "fieldname": "sb_deepseek",
+            "fieldtype": "Section Break",
+            "label": "DeepSeek Configuration",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "deepseek_api_key",
+            "fieldtype": "Password",
+            "label": "DeepSeek API Key"
+        },
+        {
+            "default": "deepseek-chat",
+            "fieldname": "deepseek_model",
+            "fieldtype": "Select",
+            "label": "DeepSeek Model",
+            "options": "deepseek-chat\ndeepseek-reasoner"
+        },
+        {
+            "fieldname": "cb_deepseek",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "deepseek_use_reasoning",
+            "fieldtype": "Check",
+            "label": "Use Reasoning Mode",
+            "description": "Enable chain-of-thought for complex queries"
+        },
+        {
+            "fieldname": "sb_claude",
+            "fieldtype": "Section Break",
+            "label": "Claude Configuration",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "claude_api_key",
+            "fieldtype": "Password",
+            "label": "Claude API Key"
+        },
+        {
+            "default": "claude-3-5-sonnet-20241022",
+            "fieldname": "claude_model",
+            "fieldtype": "Select",
+            "label": "Claude Model",
+            "options": "claude-3-5-sonnet-20241022\nclaude-3-opus-20240229\nclaude-3-haiku-20240307"
+        },
+        {
+            "fieldname": "sb_minimax",
+            "fieldtype": "Section Break",
+            "label": "MiniMax Configuration",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "minimax_api_key",
+            "fieldtype": "Password",
+            "label": "MiniMax API Key"
+        },
+        {
+            "fieldname": "minimax_group_id",
+            "fieldtype": "Data",
+            "label": "MiniMax Group ID"
+        },
+        {
+            "fieldname": "cb_minimax",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "abab6.5-chat",
+            "fieldname": "minimax_model",
+            "fieldtype": "Select",
+            "label": "MiniMax Model",
+            "options": "abab6.5-chat\nabab5.5-chat"
+        },
+        {
+            "fieldname": "sb_settings",
+            "fieldtype": "Section Break",
+            "label": "General Settings"
+        },
+        {
+            "default": "2000",
+            "fieldname": "max_tokens",
+            "fieldtype": "Int",
+            "label": "Max Tokens"
+        },
+        {
+            "default": "0.7",
+            "description": "Minimum confidence to respond without caveats",
+            "fieldname": "confidence_threshold",
+            "fieldtype": "Float",
+            "label": "Confidence Threshold"
+        },
+        {
+            "fieldname": "cb_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "10",
+            "fieldname": "cost_budget_daily",
+            "fieldtype": "Currency",
+            "label": "Daily Cost Budget ($)",
+            "description": "Maximum daily spend across all providers"
+        },
+        {
+            "default": "0.8",
+            "fieldname": "cost_warning_threshold",
+            "fieldtype": "Float",
+            "label": "Warning Threshold",
+            "description": "Warn at this % of budget (0.8 = 80%)"
+        },
+        {
+            "fieldname": "sb_behavior",
+            "fieldtype": "Section Break",
+            "label": "Behavior Settings"
+        },
+        {
+            "default": "1 - Copilot",
+            "fieldname": "default_autonomy",
+            "fieldtype": "Select",
+            "label": "Default Autonomy Level",
+            "options": "1 - Copilot\n2 - Command\n3 - Agent"
+        },
+        {
+            "default": "0",
+            "description": "Enable full autonomous operations",
+            "fieldname": "allow_level_3",
+            "fieldtype": "Check",
+            "label": "Allow Level 3 (Agent) Operations"
+        },
+        {
+            "fieldname": "cb_2",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "90",
+            "description": "How long to keep non-critical memories",
+            "fieldname": "memory_retention_days",
+            "fieldtype": "Int",
+            "label": "Memory Retention (Days)"
+        },
+        {
+            "default": "1",
+            "fieldname": "generate_daily_summaries",
+            "fieldtype": "Check",
+            "label": "Generate Daily Summaries"
+        },
+        {
+            "fieldname": "sb_raven",
+            "fieldtype": "Section Break",
+            "label": "Raven Integration"
+        },
+        {
+            "default": "1",
+            "fieldname": "raven_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Raven Integration"
+        },
+        {
+            "default": "@ai",
+            "description": "Word to trigger AI response in Raven",
+            "fieldname": "raven_trigger",
+            "fieldtype": "Data",
+            "label": "Trigger Word"
+        },
+        {
+            "fieldname": "sb_voice",
+            "fieldtype": "Section Break",
+            "label": "Voice Integration",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "elevenlabs_api_key",
+            "fieldtype": "Password",
+            "label": "ElevenLabs API Key"
+        },
+        {
+            "default": "rachel",
+            "fieldname": "default_voice",
+            "fieldtype": "Select",
+            "label": "Default Voice",
+            "options": "rachel\ndrew\nclyde\npaul\ndomi\nbella"
+        },
+        {
+            "fieldname": "sb_channels",
+            "fieldtype": "Section Break",
+            "label": "Multi-Channel Integration",
+            "collapsible": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "whatsapp_enabled",
+            "fieldtype": "Check",
+            "label": "Enable WhatsApp"
+        },
+        {
+            "fieldname": "whatsapp_phone_number_id",
+            "fieldtype": "Data",
+            "label": "WhatsApp Phone Number ID",
+            "depends_on": "whatsapp_enabled"
+        },
+        {
+            "fieldname": "whatsapp_access_token",
+            "fieldtype": "Password",
+            "label": "WhatsApp Access Token",
+            "depends_on": "whatsapp_enabled"
+        },
+        {
+            "fieldname": "cb_channels",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "telegram_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Telegram"
+        },
+        {
+            "fieldname": "telegram_bot_token",
+            "fieldtype": "Password",
+            "label": "Telegram Bot Token",
+            "depends_on": "telegram_enabled"
+        },
+        {
+            "default": "0",
+            "fieldname": "slack_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Slack"
+        },
+        {
+            "fieldname": "slack_bot_token",
+            "fieldtype": "Password",
+            "label": "Slack Bot Token",
+            "depends_on": "slack_enabled"
+        }
+    ],
+    "issingle": 1,
+    "links": [],
+    "modified": "2026-01-31 13:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Raven AI Agent",
+    "name": "AI Agent Settings",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "read": 1,
+            "role": "System Manager",
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}
