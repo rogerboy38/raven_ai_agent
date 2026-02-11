@@ -232,17 +232,46 @@ class RaymondLucyAgent:
         self.autonomy_level = 1  # Default to COPILOT
         
     def _get_settings(self) -> Dict:
-        """Load AI Agent Settings"""
+        """Load AI Agent Settings - tries multiple sources"""
+        # Try 1: Our AI Agent Settings doctype
         try:
             settings = frappe.get_single("AI Agent Settings")
-            return {
-                "openai_api_key": settings.get_password("openai_api_key"),
-                "model": settings.model or "gpt-4o-mini",
-                "max_tokens": settings.max_tokens or 2000,
-                "confidence_threshold": settings.confidence_threshold or 0.7
-            }
+            api_key = settings.get_password("openai_api_key")
+            if api_key:
+                return {
+                    "openai_api_key": api_key,
+                    "model": settings.model or "gpt-4o-mini",
+                    "max_tokens": settings.max_tokens or 2000,
+                    "confidence_threshold": settings.confidence_threshold or 0.7
+                }
         except Exception:
-            return {}
+            pass
+        
+        # Try 2: Raven's AI Settings (Raven Settings doctype)
+        try:
+            raven_settings = frappe.get_single("Raven Settings")
+            api_key = raven_settings.get_password("openai_api_key")
+            if api_key:
+                return {
+                    "openai_api_key": api_key,
+                    "model": "gpt-4o-mini",
+                    "max_tokens": 2000,
+                    "confidence_threshold": 0.7
+                }
+        except Exception:
+            pass
+        
+        # Try 3: Site config fallback
+        api_key = frappe.conf.get("openai_api_key")
+        if api_key:
+            return {
+                "openai_api_key": api_key,
+                "model": "gpt-4o-mini",
+                "max_tokens": 2000,
+                "confidence_threshold": 0.7
+            }
+        
+        return {}
     
     def get_morning_briefing(self) -> str:
         """Lucy Protocol: Load context at session start"""
