@@ -1,5 +1,29 @@
 # Raven AI Agent - Realtime Module Handout
 
+## 🚀 NEXT SESSION: START HERE
+
+### Step 1: Tell Agent to Continue
+Copy and paste this to the agent:
+
+```
+Continue from the Raven realtime module handout at docs/REALTIME_MODULE_HANDOUT.md
+
+Current task: Fix URL scheme in realtime/client.py so Socket.IO client can connect.
+
+The issue: python-socketio needs https:// not wss:// for initial handshake.
+
+File to edit: /workspace/raven_ai_agent/raven_ai_agent/realtime/client.py
+
+After fix, test on sandbox with bench console.
+```
+
+### Step 2: What Agent Should Do
+1. Edit `client.py` - fix URL scheme from `wss://` to `https://`
+2. Push to git
+3. Test connection on sandbox
+
+---
+
 ## Session Summary (2026-02-11)
 
 ### What Was Accomplished
@@ -48,9 +72,9 @@ client = get_socketio_client(auto_connect=True)
 
 ---
 
-## Fix Required (Next Session)
+## Fix Required
 
-Edit `raven_ai_agent/realtime/client.py` - Change URL scheme in `_get_config()`:
+Edit `raven_ai_agent/raven_ai_agent/realtime/client.py` - Change URL scheme in `_get_config()`:
 
 ```python
 def _get_config(self) -> ConnectionConfig:
@@ -74,7 +98,7 @@ def _get_config(self) -> ConnectionConfig:
 ## Testing After Fix
 
 ```python
-# bench console
+# bench console on sandbox
 import sys
 sys.path.insert(0, '/home/frappe/frappe-bench/apps/raven_ai_agent/raven_ai_agent')
 from realtime.client import get_socketio_client
@@ -103,6 +127,7 @@ All changes pushed to `main` branch:
 - https://github.com/rogerboy38/raven_ai_agent
 
 Latest commits:
+- `7f520df` - docs: Update handout with URL scheme fix needed
 - `147e3b5` - docs: Add realtime module handout
 - `dc60bff` - deps: Add python-socketio and websocket-client
 
