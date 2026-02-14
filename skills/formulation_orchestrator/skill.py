@@ -144,8 +144,8 @@ class FormulationOrchestratorSkill(SkillBase):
             "timestamp": datetime.now().isoformat(),
         }
         
-        # Try to extract item code (ITEM_XXXXXXXXXX format)
-        item_match = re.search(r'ITEM_\d{10}', query, re.IGNORECASE)
+        # Try to extract item code (ITEM_XXXXXXXXXX format or generic XXXX-XXXX format)
+        item_match = re.search(r'(ITEM_\d{10}|[A-Z]+-[A-Z0-9]+)', query, re.IGNORECASE)
         if item_match:
             request["item_code"] = item_match.group(0).upper()
         
