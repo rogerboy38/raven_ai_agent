@@ -27,5 +27,6 @@ scheduler_events = {
 # Website
 website_route_rules = []
 
-# Fixtures
-fixtures = ["AI Agent Settings"]
+# Fixtures (disabled temporarily)
+# fixtures = ["AI Agent Settings"]
+fixtures = []
