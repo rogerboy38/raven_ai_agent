@@ -155,8 +155,8 @@ try:
     all_correct = True
     for query, expected in test_queries:
         # Check if any trigger matches
-        query_lower = query.lower()
-        matches = any(t in query_lower for t in skill.triggers)
+        q_lower = query.lower()
+        matches = any(t in q_lower for t in skill.triggers)
         
         if matches != expected:
             all_correct = False
