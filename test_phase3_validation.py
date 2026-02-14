@@ -107,11 +107,11 @@ try:
     
     # Get a real item with batches
     items_with_batch = frappe.db.sql("""
-        SELECT DISTINCT item_code FROM `tabBatch` 
+        SELECT DISTINCT item FROM `tabBatch` 
         WHERE batch_qty > 0 LIMIT 1
     """, as_dict=True)
     
-    item_code = items_with_batch[0].item_code if items_with_batch else "TEST-ITEM"
+    item_code = items_with_batch[0].item if items_with_batch else "TEST-ITEM"
     
     msg = AgentMessage(
         source_agent="orchestrator",
