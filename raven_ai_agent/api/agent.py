@@ -3015,8 +3015,21 @@ def handle_raven_message(doc, method):
                 response = exec_agent.process_command(query)
                 result = {"success": True, "response": response}
             else:
-                agent = RaymondLucyAgent(user)
-                result = agent.process_query(query)
+                # Try SkillRouter first for specialized skills (formulation, etc.)
+                try:
+                    from raven_ai_agent.skills.router import SkillRouter
+                    router = SkillRouter()
+                    router_result = router.route(query)
+                    if router_result and router_result.get("handled"):
+                        result = {"success": True, "response": router_result.get("response", "Skill executed.")}
+                    else:
+                        # Fallback to general agent
+                        agent = RaymondLucyAgent(user)
+                        result = agent.process_query(query)
+                except ImportError:
+                    frappe.logger().warning("[AI Agent] SkillRouter not available, using default agent")
+                    agent = RaymondLucyAgent(user)
+                    result = agent.process_query(query)
         finally:
             frappe.flags.ignore_permissions = original_ignore
         
