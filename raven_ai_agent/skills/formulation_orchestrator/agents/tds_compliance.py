@@ -111,12 +111,22 @@ class TDSComplianceAgent(BaseSubAgent):
                     "parameters": compliance['parameters']
                 })
         
-        all_pass = len(non_compliant) == 0 and len(compliant) > 0
+        # If no TDS requirements, treat all batches as compliant (skip COA check)
+        if not tds_requirements:
+            all_pass = True
+            compliant = [{**b, "status": "NO_REQUIREMENTS", "parameters": {}} for b in batches]
+            non_compliant = []
+        else:
+            all_pass = len(non_compliant) == 0 and len(compliant) > 0
+        
+        # Count NO_COA batches separately
+        no_coa_count = sum(1 for b in non_compliant if b.get('status') == 'NO_COA')
         
         self.send_status("completed", {
             "passed": all_pass,
             "compliant_count": len(compliant),
-            "non_compliant_count": len(non_compliant)
+            "non_compliant_count": len(non_compliant),
+            "no_coa_count": no_coa_count
         })
         
         return {
@@ -127,7 +137,9 @@ class TDSComplianceAgent(BaseSubAgent):
                 "total_batches": len(batches),
                 "compliant_count": len(compliant),
                 "non_compliant_count": len(non_compliant),
-                "compliance_rate": len(compliant) / len(batches) * 100 if batches else 0
+                "no_coa_count": no_coa_count,
+                "compliance_rate": len(compliant) / len(batches) * 100 if batches else 0,
+                "tds_requirements_provided": bool(tds_requirements)
             }
         }
     

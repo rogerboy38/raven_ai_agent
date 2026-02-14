@@ -380,14 +380,18 @@ class ReportGenerator(BaseSubAgent):
     
     def _format_compliance(self, compliance: Dict) -> Dict:
         """Format compliance results."""
+        summary = compliance.get('summary', {})
         return {
             "passed": compliance.get('passed', False),
             "compliant_count": len(compliance.get('compliant_batches', [])),
             "non_compliant_count": len(compliance.get('non_compliant_batches', [])),
-            "compliance_rate": compliance.get('summary', {}).get('compliance_rate', 0),
+            "no_coa_count": summary.get('no_coa_count', 0),
+            "tds_requirements_provided": summary.get('tds_requirements_provided', True),
+            "compliance_rate": summary.get('compliance_rate', 0),
             "failing_batches": [
                 {
                     "batch_name": b.get('batch_name'),
+                    "status": b.get('status'),
                     "failing_parameters": b.get('failing_parameters', [])
                 }
                 for b in compliance.get('non_compliant_batches', [])
@@ -419,20 +423,31 @@ class ReportGenerator(BaseSubAgent):
         compliance = phases.get('compliance', {})
         costs = phases.get('costs', {})
         optimization = phases.get('optimization', {})
+        batch_selection = phases.get('batch_selection', {})
+        
+        # Batch selection status
+        coverage = batch_selection.get('coverage_percent', 0)
+        if coverage >= 100:
+            recommendations.append(f"✅ Stock available: {batch_selection.get('total_qty', 0)} units ({coverage:.0f}% coverage)")
+        elif coverage > 0:
+            recommendations.append(f"⚠️ Partial stock: Only {coverage:.0f}% coverage available")
         
         # Compliance recommendations
-        if not compliance.get('passed', True):
+        summary = compliance.get('summary', {})
+        if not summary.get('tds_requirements_provided', True):
+            recommendations.append("ℹ️ No TDS requirements specified - compliance check skipped")
+        elif summary.get('no_coa_count', 0) > 0:
+            recommendations.append(f"⚠️ {summary.get('no_coa_count')} batch(es) missing COA data - cannot verify compliance")
+        elif not compliance.get('passed', True):
             non_compliant = compliance.get('non_compliant_batches', [])
-            recommendations.append(
-                f"⚠️ {len(non_compliant)} batch(es) failed TDS compliance. "
-                "Consider using suggested alternatives."
-            )
+            recommendations.append(f"❌ {len(non_compliant)} batch(es) failed TDS compliance")
         
         # Cost recommendations
         if costs:
-            cost_per_unit = costs.get('cost_per_unit', 0)
-            # Could add threshold-based recommendations here
-            
+            total_cost = costs.get('total_cost', 0)
+            if total_cost == 0:
+                recommendations.append("⚠️ No pricing data - set valuation_rate on Item or create Item Price")
+        
         # Optimization recommendations
         if optimization.get('recommendations'):
             for rec in optimization['recommendations']:
@@ -442,6 +457,7 @@ class ReportGenerator(BaseSubAgent):
                         f"one of {len(rec.get('alternatives', []))} compliant alternatives"
                     )
         
+        # Final status
         if not recommendations:
             recommendations.append("✅ All criteria met. Proceed with production.")
         
@@ -475,17 +491,29 @@ class ReportGenerator(BaseSubAgent):
         # Compliance
         compliance = report.get('compliance', {})
         if compliance:
-            status = "✅ PASSED" if compliance.get('passed') else "❌ FAILED"
+            if not compliance.get('tds_requirements_provided', True):
+                status = "⚠️ NO TDS REQUIREMENTS (skipped)"
+            elif compliance.get('passed'):
+                status = "✅ PASSED"
+            else:
+                status = "❌ FAILED"
             lines.append(f"\n✅ COMPLIANCE: {status}")
             lines.append(f"  Compliant: {compliance.get('compliant_count')}")
             lines.append(f"  Non-Compliant: {compliance.get('non_compliant_count')}")
+            if compliance.get('no_coa_count', 0) > 0:
+                lines.append(f"  Missing COA: {compliance.get('no_coa_count')}")
         
         # Costs
         costs = report.get('costs', {})
         if costs:
             lines.append("\n💰 COSTS:")
-            lines.append(f"  Total: {costs.get('currency', 'MXN')} {costs.get('total_cost', 0):,.2f}")
-            lines.append(f"  Per Unit: {costs.get('currency', 'MXN')} {costs.get('cost_per_unit', 0):,.2f}")
+            total_cost = costs.get('total_cost', 0)
+            if total_cost == 0:
+                lines.append(f"  Total: ⚠️ {costs.get('currency', 'MXN')} 0.00 (No pricing data)")
+                lines.append(f"  Note: Set valuation_rate on Item or create Item Price")
+            else:
+                lines.append(f"  Total: {costs.get('currency', 'MXN')} {total_cost:,.2f}")
+                lines.append(f"  Per Unit: {costs.get('currency', 'MXN')} {costs.get('cost_per_unit', 0):,.2f}")
         
         # Recommendations
         recommendations = report.get('recommendations', [])

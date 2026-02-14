@@ -292,12 +292,22 @@ class FormulationOrchestratorSkill(SkillBase):
     
     def _execute_cost_calculation(self, batches: list, workflow: WorkflowState) -> Dict:
         """Execute Phase 4: Cost Calculation."""
+        # Normalize batch format (batch selector uses qty_available, cost calc expects qty)
+        normalized_batches = []
+        for b in batches:
+            normalized_batches.append({
+                "batch_name": b.get("batch_name"),
+                "item_code": b.get("item_code"),
+                "qty": b.get("qty") or b.get("qty_available", 0),
+                "warehouse": b.get("warehouse")
+            })
+        
         message = AgentMessage(
             source_agent="orchestrator",
             target_agent="cost_calculator",
             action="calculate_costs",
             payload={
-                "batches": batches,
+                "batches": normalized_batches,
                 "include_overhead": True
             },
             workflow_id=workflow.workflow_id,
