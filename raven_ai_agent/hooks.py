@@ -29,4 +29,4 @@ website_route_rules = []
 
 # Fixtures (disabled temporarily)
 # fixtures = ["AI Agent Settings"]
-fixtures = []
+fixtures = ["IoT Ollama Settings"]

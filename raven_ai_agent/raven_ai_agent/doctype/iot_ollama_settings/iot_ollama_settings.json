@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-02-26 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "sb_connection",
+  "ollama_url",
+  "cb_conn",
+  "default_model",
+  "request_timeout",
+  "sb_bot",
+  "bot_mention_trigger",
+  "cb_bot2",
+  "bot_description"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "bold": 1
+  },
+  {
+   "fieldname": "sb_connection",
+   "fieldtype": "Section Break",
+   "label": "Ollama Connection"
+  },
+  {
+   "fieldname": "ollama_url",
+   "fieldtype": "Data",
+   "label": "Ollama URL",
+   "default": "http://localhost:11434",
+   "reqd": 1,
+   "description": "URL of the Ollama API server"
+  },
+  {
+   "fieldname": "cb_conn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_model",
+   "fieldtype": "Data",
+   "label": "Default Model",
+   "default": "tinyllama",
+   "reqd": 1,
+   "description": "Default Ollama model to use"
+  },
+  {
+   "fieldname": "request_timeout",
+   "fieldtype": "Int",
+   "label": "Request Timeout (s)",
+   "default": "120",
+   "description": "Timeout in seconds for Ollama API requests"
+  },
+  {
+   "fieldname": "sb_bot",
+   "fieldtype": "Section Break",
+   "label": "Bot Configuration"
+  },
+  {
+   "fieldname": "bot_mention_trigger",
+   "fieldtype": "Data",
+   "label": "Bot Mention Trigger",
+   "default": "iot",
+   "reqd": 1,
+   "description": "Keyword to trigger this bot (e.g. @iot)"
+  },
+  {
+   "fieldname": "cb_bot2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bot_description",
+   "fieldtype": "Small Text",
+   "label": "Bot Description",
+   "default": "IoT Ollama AI Bot for educational projects"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-02-26 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Raven AI Agent",
+ "name": "IoT Ollama Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

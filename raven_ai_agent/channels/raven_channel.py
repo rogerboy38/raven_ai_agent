@@ -62,67 +62,47 @@ class RavenOrchestrator:
                 )
                 self._initialized = False
         return self._channel
-    
+    #
     def _send_message(self, text: str, message_type: str = "Text") -> Optional[Dict]:
         """
-        Send a message to the channel.
-        
-        Args:
-            text: Message text (supports Markdown)
-            message_type: Type of message (Text, Image, File, etc.)
-            
-        Returns:
-            Message document dict or None if failed
+        Send a message to the channel using direct database creation + realtime event.
         """
         if not self.channel:
-            frappe.log_error(
-                f"Cannot send message - channel '{self.channel_name}' not initialized",
-                "RavenOrchestrator._send_message"
-            )
+            frappe.log_error("Cannot send message: No channel associated", "RavenOrchestrator")
             return None
         
         try:
-            # Try to use Raven's message API
-            from raven.api.raven_message import send_message
-            
-            result = send_message(
-                channel_id=self.channel.name,
-                text=text,
-                message_type=message_type
-            )
-            
-            return result
-            
-        except ImportError:
-            # Fallback: Create message document directly
-            try:
-                message = frappe.get_doc({
-                    "doctype": "Raven Message",
-                    "channel_id": self.channel.name,
-                    "text": text,
-                    "message_type": message_type,
-                })
-                message.insert(ignore_permissions=True)
-                frappe.db.commit()
-                
-                # Publish realtime event to notify frontend clients
-                publish_message_created_event(message, self.channel.name)
-                
-                return message.as_dict()
-                
-            except Exception as e:
-                frappe.log_error(
-                    f"Failed to send message: {e}",
-                    "RavenOrchestrator._send_message"
-                )
+            # Get the Frappe user for the bot
+            bot_user = frappe.db.get_value("User", {"email": "raven@sysmayal.com"}, "name")
+            if not bot_user:
+                frappe.log_error("Raven AI bot user not found in User", "RavenOrchestrator")
                 return None
+            
+            # Create message directly in database - SIN el campo 'bot'
+            message_doc = frappe.get_doc({
+                "doctype": "Raven Message",
+                "channel_id": self.channel.name,
+                "text": text,
+                "message_type": message_type,
+                "owner": bot_user,
+                "is_bot_message": 1  # Este campo sí existe en la tabla
+                # ELIMINADO: "bot": "Raven AI" - causa error de validación
+            })
+            
+            message_doc.insert(ignore_permissions=True)
+            frappe.db.commit()
+            
+            # Publish realtime event
+            from raven_ai_agent.api.channel_utils import publish_message_created_event
+            publish_message_created_event(message_doc, self.channel.name)
+            
+            frappe.log_error(f"Message sent successfully to channel {self.channel.name}", "RavenOrchestrator")
+            return message_doc.as_dict()
         
         except Exception as e:
-            frappe.log_error(
-                f"Error sending Raven message: {e}",
-                "RavenOrchestrator._send_message"
-            )
+            frappe.log_error(f"Error sending message: {str(e)}", "RavenOrchestrator")
             return None
+    #
     
     def send_spec(self, phase: int, content: str, title: str = None) -> Optional[Dict]:
         """
