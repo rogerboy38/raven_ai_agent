@@ -1,0 +1,10 @@
+{
+ "name": "IoT Sensor Dashboard",
+ "doctype": "Report",
+ "ref_doctype": "IoT Sensor Reading",
+ "report_type": "Script Report",
+ "is_standard": "Yes",
+ "module": "Raven Ai Agent",
+ "disabled": 0,
+ "roles": [{"role": "System Manager"}]
+}
