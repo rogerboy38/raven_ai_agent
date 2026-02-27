@@ -1,0 +1,171 @@
+{
+ "actions": [],
+ "autoname": "format:IOT-SR-{####}",
+ "creation": "2026-02-26 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sensor_id",
+  "sensor_type",
+  "device_name",
+  "section_readings",
+  "temperature",
+  "humidity",
+  "pressure",
+  "light_level",
+  "section_location",
+  "location",
+  "latitude",
+  "longitude",
+  "section_status",
+  "status",
+  "reading_timestamp",
+  "battery_level",
+  "signal_strength",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "sensor_id",
+   "fieldtype": "Data",
+   "label": "Sensor ID",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "sensor_type",
+   "fieldtype": "Select",
+   "label": "Sensor Type",
+   "options": "\nDHT11\nDHT22\nBMP280\nBME280\nDS18B20\nMQ-2\nPIR\nUltrasonic\nLight\nSoil Moisture\nOther",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "device_name",
+   "fieldtype": "Data",
+   "label": "Device Name",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "section_readings",
+   "fieldtype": "Section Break",
+   "label": "Sensor Readings"
+  },
+  {
+   "fieldname": "temperature",
+   "fieldtype": "Float",
+   "label": "Temperature (C)",
+   "precision": 2,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "humidity",
+   "fieldtype": "Float",
+   "label": "Humidity (%)",
+   "precision": 2,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "pressure",
+   "fieldtype": "Float",
+   "label": "Pressure (hPa)",
+   "precision": 2
+  },
+  {
+   "fieldname": "light_level",
+   "fieldtype": "Float",
+   "label": "Light Level (lux)",
+   "precision": 2
+  },
+  {
+   "fieldname": "section_location",
+   "fieldtype": "Section Break",
+   "label": "Location"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "Location"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": 6
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": 6
+  },
+  {
+   "fieldname": "section_status",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nActive\nInactive\nError\nMaintenance",
+   "default": "Active",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reading_timestamp",
+   "fieldtype": "Datetime",
+   "label": "Reading Timestamp"
+  },
+  {
+   "fieldname": "battery_level",
+   "fieldtype": "Float",
+   "label": "Battery Level (%)",
+   "precision": 1
+  },
+  {
+   "fieldname": "signal_strength",
+   "fieldtype": "Int",
+   "label": "Signal Strength (dBm)"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Raven Ai Agent",
+ "name": "IoT Sensor Reading",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 0,
+   "cancel": 0,
+   "amend": 0
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "sensor_id",
+ "track_changes": 1
+}
