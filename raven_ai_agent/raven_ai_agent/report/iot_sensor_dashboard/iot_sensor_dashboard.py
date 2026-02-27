@@ -44,7 +44,7 @@ def get_data(filters):
 def get_chart(data):
     if not data:
         return None
-    labels = [d.get("reading_timestamp", "")[:16] for d in reversed(data[:50])]
+    labels = [str(d.get("reading_timestamp", ""))[:16] for d in reversed(data[:50])]
     temps = [d.get("temperature", 0) for d in reversed(data[:50])]
     humids = [d.get("humidity", 0) for d in reversed(data[:50])]
     return {
