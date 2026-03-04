@@ -352,70 +352,196 @@ class WorkflowOrchestrator:
 
     def validate_item_consistency(self, so_name: str) -> Dict:
         """
-        Validate that manufactured items match Sales Order items.
+        Comprehensive validation of a Sales Order's readiness.
 
-        Key check: The SO has item 0307, but manufacturing uses
-        ITEM_0612185231 (formulation). The final FG in 'FG to Sell'
-        must be 0307 (not 0612185231).
-
-        This catches the item 0307 vs 0227 mismatch issue.
+        Checks:
+        1. Item-BOM mismatch: WO produces wrong item vs SO expectation
+        2. Stock availability: FG warehouse has enough to fulfill
+        3. BOM existence: items have active BOMs for manufacturing
+        4. Pricing: zero-price detection
+        5. Customer readiness: tax regime for CFDI invoicing
+        6. Linked documents: draft DN/SI that need attention
         """
         try:
             so = frappe.get_doc("Sales Order", so_name)
 
             issues = []
-            for item in so.items:
-                # Check if item has stock in FG warehouse
-                available = frappe.db.get_value("Bin",
-                    {"item_code": item.item_code, "warehouse": item.warehouse},
-                    "actual_qty") or 0
+            checks_passed = []
 
-                # Check Work Orders produce the correct item
+            # --- Check 1: Item-level validation ---
+            for item in so.items:
+                # Stock availability
+                available = flt(frappe.db.get_value("Bin",
+                    {"item_code": item.item_code, "warehouse": item.warehouse},
+                    "actual_qty") or 0)
+
+                if available >= item.qty:
+                    checks_passed.append(
+                        f"✅ Stock OK: {item.item_code} — "
+                        f"{available:.0f} available, {item.qty:.0f} needed")
+                else:
+                    deficit = flt(item.qty) - available
+                    issues.append({
+                        "type": "insufficient_stock",
+                        "severity": "MEDIUM",
+                        "icon": "📦",
+                        "message": (
+                            f"Item {item.item_code}: {available:.0f} in stock, "
+                            f"need {item.qty:.0f} (short {deficit:.0f})"),
+                        "recommendation": (
+                            f"Create Work Order: "
+                            f"`@ai create work order {item.item_code} {int(deficit)} Kg`")
+                    })
+
+                # BOM existence
+                has_bom = frappe.db.exists("BOM", {
+                    "item": item.item_code, "is_active": 1, "docstatus": 1})
+                if has_bom:
+                    checks_passed.append(f"✅ BOM exists for {item.item_code}")
+                else:
+                    issues.append({
+                        "type": "no_bom",
+                        "severity": "HIGH",
+                        "icon": "🛑",
+                        "message": (
+                            f"No active BOM for item {item.item_code} "
+                            f"— cannot manufacture"),
+                        "recommendation": (
+                            "Create and submit a BOM before creating Work Orders")
+                    })
+
+                # Zero price
+                if flt(item.rate) == 0:
+                    issues.append({
+                        "type": "zero_price",
+                        "severity": "HIGH",
+                        "icon": "💰",
+                        "message": (
+                            f"Item {item.item_code} has $0.00 rate "
+                            f"— revenue will be zero"),
+                        "recommendation": (
+                            "Check Item Price list or linked Quotation "
+                            "for correct pricing")
+                    })
+                else:
+                    checks_passed.append(
+                        f"✅ Pricing OK: {item.item_code} @ "
+                        f"{so.currency} {flt(item.rate):,.2f}")
+
+                # WO item mismatch
                 wos = frappe.get_all("Work Order",
                     filters={
                         "sales_order": so_name,
                         "production_item": item.item_code,
-                        "docstatus": ["!=", 2]
-                    },
+                        "docstatus": ["!=", 2]},
                     fields=["name", "production_item", "bom_no"])
 
                 for wo in wos:
                     bom_item = frappe.db.get_value("BOM", wo.bom_no, "item")
-                    if bom_item != item.item_code:
+                    if bom_item and bom_item != item.item_code:
                         issues.append({
                             "type": "item_mismatch",
-                            "severity": "HIGH",
+                            "severity": "CRITICAL",
+                            "icon": "⛔",
                             "message": (
                                 f"WO {wo.name} BOM produces '{bom_item}' "
-                                f"but SO expects '{item.item_code}'"
-                            ),
-                            "work_order": wo.name,
-                            "expected_item": item.item_code,
-                            "actual_item": bom_item
+                                f"but SO expects '{item.item_code}'"),
+                            "recommendation": (
+                                f"Fix BOM on {wo.name} or create new WO "
+                                f"with correct BOM")
                         })
 
-                if available < item.qty:
-                    issues.append({
-                        "type": "insufficient_stock",
-                        "severity": "MEDIUM",
-                        "message": (
-                            f"Item {item.item_code}: available {available}, "
-                            f"required {item.qty} (short by {item.qty - available})"
-                        ),
-                        "item_code": item.item_code,
-                        "available": available,
-                        "required": item.qty
-                    })
+            # --- Check 2: Customer readiness for invoicing ---
+            customer = frappe.get_doc("Customer", so.customer)
+            tax_regime = customer.get("mx_tax_regime") or ""
+            if tax_regime:
+                checks_passed.append(
+                    f"✅ Customer tax regime: {tax_regime}")
+            else:
+                issues.append({
+                    "type": "missing_tax_regime",
+                    "severity": "MEDIUM",
+                    "icon": "📋",
+                    "message": (
+                        f"Customer {so.customer} has no SAT tax regime "
+                        f"— CFDI invoice will fail"),
+                    "recommendation": (
+                        "Set mx_tax_regime on Customer record "
+                        "(e.g., 601 for General de Ley)")
+                })
+
+            # --- Check 3: Document consistency ---
+            draft_dns = frappe.get_all("Delivery Note Item",
+                filters={"against_sales_order": so_name, "docstatus": 0},
+                fields=["parent"], group_by="parent")
+            if draft_dns:
+                issues.append({
+                    "type": "draft_dn",
+                    "severity": "LOW",
+                    "icon": "📝",
+                    "message": (
+                        f"{len(draft_dns)} draft Delivery Note(s) "
+                        f"pending submission"),
+                    "recommendation": (
+                        "Review and submit draft DNs before invoicing")
+                })
+
+            draft_sis = frappe.get_all("Sales Invoice Item",
+                filters={"sales_order": so_name, "docstatus": 0},
+                fields=["parent"], group_by="parent")
+            if draft_sis:
+                si_names = [si.parent for si in draft_sis]
+                issues.append({
+                    "type": "draft_si",
+                    "severity": "LOW",
+                    "icon": "📝",
+                    "message": (
+                        f"Draft Sales Invoice(s): "
+                        f"{', '.join(si_names)}"),
+                    "recommendation": (
+                        "Review and submit to proceed to payment")
+                })
+
+            # --- Build rich response ---
+            severity_order = {
+                "CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+            issues.sort(key=lambda x: severity_order.get(
+                x.get("severity", "LOW"), 9))
+
+            lines = [f"## Validation Report: {so_name}\n"]
+            lines.append(
+                f"Customer: {so.customer} | "
+                f"{so.currency} {flt(so.grand_total):,.2f} | "
+                f"Status: {so.status}\n")
+
+            if issues:
+                lines.append(
+                    f"### \u26a0\ufe0f {len(issues)} Issue(s) Found\n")
+                for issue in issues:
+                    icon = issue.get("icon", "\u26a0\ufe0f")
+                    lines.append(
+                        f"{icon} **[{issue['severity']}]** "
+                        f"{issue['message']}")
+                    if issue.get("recommendation"):
+                        lines.append(
+                            f"   \u2192 {issue['recommendation']}")
+                    lines.append("")
+            else:
+                lines.append(
+                    "### \u2705 All Checks Passed\n")
+
+            if checks_passed:
+                lines.append("### Passed Checks\n")
+                for check in checks_passed:
+                    lines.append(check)
 
             return {
                 "success": True,
                 "sales_order": so_name,
                 "issues": issues,
+                "checks_passed": checks_passed,
                 "is_valid": len(issues) == 0,
-                "message": (
-                    "✅ All items validated — no mismatches" if not issues
-                    else f"⚠️ {len(issues)} issue(s) found"
-                )
+                "message": "\n".join(lines)
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
