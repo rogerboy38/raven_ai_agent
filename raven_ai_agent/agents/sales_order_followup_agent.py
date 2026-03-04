@@ -9,11 +9,21 @@ UPDATED (2026-03-03) — Added:
   - create_from_quotation(quotation_name) — creates SO from Quotation (Step 3)
   - Updated STATUS_NEXT_ACTIONS to include manufacturing steps
   - Server Script safe (no import frappe issues)
+  - Data quality flags: zero-price, overdue, stale order detection
+  - Short SO name resolution (SO-00752 → SO-00752-LEGOSAN AB)
 
 CFDI Intelligence:
   - Auto-sets mx_cfdi_use to G03 (Gastos en general) for export customers
   - Sets custom_customer_invoice_currency from SO grand_total currency
   - SAT Tax Regime 601 for foreign customers (RFC: XAXX010101000)
+
+Data Quality Intelligence:
+  - Zero-price detection with 3-tier diagnosis:
+    1. Item Price exists in price list → suggest re-fetch
+    2. Quotation exists with priced item → suggest link/copy
+    3. No price source found → flag for review
+  - Overdue delivery detection (days past due)
+  - Stale order detection (>6 months with no activity)
 """
 import frappe
 from typing import Dict, List, Optional
@@ -120,8 +130,11 @@ class SalesOrderFollowupAgent:
             return {"success": False, "error": str(e)}
 
     def get_pending_orders(self, limit: int = 20) -> Dict:
-        """List all Sales Orders pending delivery or billing"""
+        """List all Sales Orders pending delivery or billing with data quality flags"""
         try:
+            from datetime import date, timedelta
+            today = date.today()
+
             orders = frappe.get_all("Sales Order",
                 filters={
                     "docstatus": 1,
@@ -133,7 +146,58 @@ class SalesOrderFollowupAgent:
                 limit=limit)
 
             result = []
+            alerts_summary = {"zero_price": 0, "overdue": 0, "stale": 0}
+
             for so in orders:
+                # === Data Quality Flags ===
+                flags = []
+
+                # Flag 1: Zero-price order (missing pricing) — deep diagnosis
+                if flt(so.grand_total) == 0:
+                    items = frappe.get_all("Sales Order Item",
+                        filters={"parent": so.name},
+                        fields=["item_code", "qty", "rate"])
+                    has_price_list = False
+                    has_matching_qtn = False
+                    for it in items:
+                        if it.rate == 0:
+                            # Check Item Price list
+                            price = frappe.get_all("Item Price",
+                                filters={"item_code": it.item_code, "selling": 1},
+                                fields=["price_list_rate", "currency"],
+                                limit=1)
+                            if price:
+                                has_price_list = True
+                            # Check if a quotation exists with this exact item + price
+                            qtn_items = frappe.get_all("Quotation Item",
+                                filters={"item_code": it.item_code, "rate": [">", 0]},
+                                fields=["parent", "rate", "qty"],
+                                limit=1)
+                            if qtn_items:
+                                has_matching_qtn = True
+
+                    if has_price_list:
+                        p = price[0]
+                        flags.append(f"⚠️ ZERO PRICE — Item Price exists ({p.currency} {p.price_list_rate}/unit), re-fetch pricing")
+                    elif has_matching_qtn:
+                        qi = qtn_items[0]
+                        flags.append(f"⚠️ ZERO PRICE — Quotation {qi.parent} has rate {qi.rate}/unit, link or copy pricing")
+                    else:
+                        flags.append("🚨 ZERO PRICE — No selling price or quotation found, needs pricing review")
+                    alerts_summary["zero_price"] += 1
+
+                # Flag 2: Overdue delivery (past delivery date, still open)
+                if so.delivery_date and so.delivery_date < today:
+                    days_overdue = (today - so.delivery_date).days
+                    flags.append(f"🔴 OVERDUE by {days_overdue} days")
+                    alerts_summary["overdue"] += 1
+
+                # Flag 3: Stale order (>6 months old, no activity)
+                if so.transaction_date and (today - so.transaction_date).days > 180:
+                    age_months = (today - so.transaction_date).days // 30
+                    flags.append(f"📦 STALE — {age_months} months old, consider closing or follow-up")
+                    alerts_summary["stale"] += 1
+
                 result.append({
                     "name": so.name,
                     "link": self.make_link("Sales Order", so.name),
@@ -141,13 +205,15 @@ class SalesOrderFollowupAgent:
                     "status": so.status,
                     "grand_total": f"{so.currency} {so.grand_total:,.2f}",
                     "delivery_date": str(so.delivery_date) if so.delivery_date else "Not set",
-                    "next_action": self.STATUS_NEXT_ACTIONS.get(so.status, "Review")
+                    "next_action": self.STATUS_NEXT_ACTIONS.get(so.status, "Review"),
+                    "flags": flags
                 })
 
             return {
                 "success": True,
                 "count": len(result),
-                "orders": result
+                "orders": result,
+                "alerts": alerts_summary
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -655,11 +721,17 @@ class SalesOrderFollowupAgent:
         """Process incoming command and return response"""
         message_lower = message.lower().strip()
 
-        # Extract SO name if present
+        # Extract SO name — supports both "SO-00752" (short) and "SO-00752-LEGOSAN AB" (full)
         import re
-        so_pattern = r'(SO-\d+-[\w\s]+|SAL-ORD-\d+-\d+)'
+        so_pattern = r'(SO-\d+(?:-[\w\s]+)?|SAL-ORD-\d+-\d+)'
         so_match = re.search(so_pattern, message, re.IGNORECASE)
         so_name = so_match.group(1).strip() if so_match else None
+
+        # If short SO reference (no customer suffix), resolve to full name
+        if so_name and re.match(r'^SO-\d+$', so_name):
+            matches = frappe.get_all("Sales Order", filters={"name": ["like", f"{so_name}%"]}, limit=1, pluck="name")
+            if matches:
+                so_name = matches[0]
 
         # Extract Quotation name
         qtn_pattern = r'(SAL-QTN-\d+-\d+|QTN-\d+)'
@@ -672,10 +744,26 @@ class SalesOrderFollowupAgent:
         if "pending" in message_lower or "list" in message_lower:
             result = self.get_pending_orders()
             if result["success"]:
+                alerts = result.get("alerts", {})
                 lines = [f"## Pending Sales Orders ({result['count']} found)\n"]
+
+                # Alerts summary header
+                alert_parts = []
+                if alerts.get("zero_price"):
+                    alert_parts.append(f"{alerts['zero_price']} zero-price")
+                if alerts.get("overdue"):
+                    alert_parts.append(f"{alerts['overdue']} overdue")
+                if alerts.get("stale"):
+                    alert_parts.append(f"{alerts['stale']} stale")
+                if alert_parts:
+                    lines.append(f"**Alerts:** {', '.join(alert_parts)}\n")
+
                 for order in result["orders"]:
                     lines.append(f"• {order['link']} | {order['customer']} | {order['status']}")
                     lines.append(f"  Delivery: {order['delivery_date']} | Total: {order['grand_total']}")
+                    # Show flags if any
+                    for flag in order.get("flags", []):
+                        lines.append(f"  {flag}")
                     lines.append(f"  **Next:** {order['next_action']}\n")
                 return "\n".join(lines)
             return f"❌ Error: {result['error']}"
