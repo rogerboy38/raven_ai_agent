@@ -87,11 +87,47 @@ class ManufacturingAgent:
             if bom_doc.docstatus != 1:
                 return {"success": False, "error": f"BOM '{bom}' is not submitted (docstatus={bom_doc.docstatus}). Submit it first."}
 
-            # Get warehouses from Manufacturing Settings or BOM
-            wip_warehouse = (bom_doc.get("wip_warehouse")
-                or frappe.db.get_single_value("Manufacturing Settings", "default_wip_warehouse"))
-            fg_warehouse = (bom_doc.get("fg_warehouse")
-                or frappe.db.get_single_value("Manufacturing Settings", "default_fg_warehouse"))
+            # Get warehouses — smart resolution: BOM > Item Defaults > Warehouse search > hardcoded
+            wip_warehouse = bom_doc.get("wip_warehouse")
+            fg_warehouse = bom_doc.get("fg_warehouse")
+
+            # Try Manufacturing Settings (field names vary by ERPNext version)
+            if not wip_warehouse:
+                for field in ["default_wip_warehouse", "wip_warehouse", "work_in_progress_warehouse"]:
+                    try:
+                        wip_warehouse = frappe.db.get_single_value("Manufacturing Settings", field)
+                        if wip_warehouse:
+                            break
+                    except Exception:
+                        continue
+
+            if not fg_warehouse:
+                for field in ["default_fg_warehouse", "fg_warehouse", "finished_goods_warehouse"]:
+                    try:
+                        fg_warehouse = frappe.db.get_single_value("Manufacturing Settings", field)
+                        if fg_warehouse:
+                            break
+                    except Exception:
+                        continue
+
+            # Try Item Default warehouse
+            if not fg_warehouse:
+                item_defaults = frappe.db.get_value("Item Default",
+                    {"parent": item_code, "company": frappe.db.get_default("company") or "AMB-Wellness"},
+                    "default_warehouse")
+                if item_defaults:
+                    fg_warehouse = item_defaults
+
+            # Last resort: find warehouses by name pattern
+            if not wip_warehouse:
+                wip_warehouse = frappe.db.get_value("Warehouse",
+                    {"warehouse_name": ["like", "%Work In Progress%"], "is_group": 0}, "name")
+            if not fg_warehouse:
+                fg_warehouse = frappe.db.get_value("Warehouse",
+                    {"warehouse_name": ["like", "%Finished%"], "is_group": 0}, "name")
+                if not fg_warehouse:
+                    fg_warehouse = frappe.db.get_value("Warehouse",
+                        {"warehouse_name": ["like", "%FG%"], "is_group": 0}, "name")
 
             # Build Work Order doc
             wo_data = {
