@@ -1238,6 +1238,27 @@ def handle_raven_message(doc, method):
                 query = "help"
             bot_name = "iot"
         
+        # NEW: Check for @manufacturing or @mfg bot
+        elif "manufacturing" in plain_text.lower() or "@mfg" in plain_text.lower():
+            query = re.sub(r'@(?:manufacturing|mfg)\s*', '', plain_text, flags=re.IGNORECASE).strip()
+            if not query:
+                query = "help"
+            bot_name = "manufacturing_bot"
+        
+        # NEW: Check for @payment bot
+        elif plain_text.lower().startswith("@payment"):
+            query = re.sub(r'@payment\s*', '', plain_text, flags=re.IGNORECASE).strip()
+            if not query:
+                query = "help"
+            bot_name = "payment_bot"
+        
+        # NEW: Check for @workflow or @orchestrator or @pipeline bot
+        elif any(kw in plain_text.lower() for kw in ["@workflow", "@orchestrator", "@pipeline"]):
+            query = re.sub(r'@(?:workflow|orchestrator|pipeline)\s*', '', plain_text, flags=re.IGNORECASE).strip()
+            if not query:
+                query = "help"
+            bot_name = "workflow_orchestrator"
+        
         if not query:
             return
         
@@ -1269,6 +1290,24 @@ def handle_raven_message(doc, method):
                 from raven_ai_agent.agents.iot_agent import IoTAgent
                 iot_agent = IoTAgent(user)
                 result = iot_agent.process_command(query)
+            # NEW: Manufacturing Agent
+            elif bot_name == "manufacturing_bot":
+                from raven_ai_agent.agents.manufacturing_agent import ManufacturingAgent
+                mfg_agent = ManufacturingAgent(user)
+                response = mfg_agent.process_command(query)
+                result = {"success": True, "response": response}
+            # NEW: Payment Agent
+            elif bot_name == "payment_bot":
+                from raven_ai_agent.agents.payment_agent import PaymentAgent
+                pay_agent = PaymentAgent(user)
+                response = pay_agent.process_command(query)
+                result = {"success": True, "response": response}
+            # NEW: Workflow Orchestrator
+            elif bot_name == "workflow_orchestrator":
+                from raven_ai_agent.agents.workflow_orchestrator import WorkflowOrchestrator
+                wf_agent = WorkflowOrchestrator(user)
+                response = wf_agent.process_command(query)
+                result = {"success": True, "response": response}
             else:
                 # Try SkillRouter first for specialized skills (formulation, etc.)
                 try:
