@@ -11,7 +11,7 @@ from typing import Optional, Dict, List
 class SalesMixin:
     """Mixin for _handle_sales_commands"""
 
-    def _handle_sales_commands(self, query: str, query_lower: str) -> Optional[Dict]:
+    def _handle_sales_commands(self, query: str, query_lower: str, is_confirm: bool = False) -> Optional[Dict]:
         """Dispatched from execute_workflow_command"""
         # ==================== SALES-TO-PURCHASE CYCLE SOP ====================
         
