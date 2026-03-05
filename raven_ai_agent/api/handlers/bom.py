@@ -11,8 +11,8 @@ from typing import Optional, Dict, List
 class BOMMixin:
     """Mixin for _handle_bom_commands"""
 
-    def _handle_bom_commands(self, query: str, query_lower: str) -> Optional[Dict]:
-        """Dispatched from execute_workflow_command"""
+    def _handle_bom_commands(self, query: str, query_lower: str, is_confirm: bool = False) -> Optional[Dict]:
+        """Dispatched from execute_workflow_command. is_confirm=True when user uses ! prefix or has privileged role."""
         # ==================== BOM COMMANDS ====================
         
         # Show BOM or BOM Creator details

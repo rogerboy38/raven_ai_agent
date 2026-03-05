@@ -1025,12 +1025,12 @@ class RaymondLucyAgent(
 
         # === DISPATCH TO HANDLER MODULES ===
         # Manufacturing SOP
-        result = self._handle_manufacturing_commands(query, query_lower)
+        result = self._handle_manufacturing_commands(query, query_lower, is_confirm=is_confirm)
         if result is not None:
             return result
 
         # BOM Commands
-        result = self._handle_bom_commands(query, query_lower)
+        result = self._handle_bom_commands(query, query_lower, is_confirm=is_confirm)
         if result is not None:
             return result
 
@@ -1045,7 +1045,7 @@ class RaymondLucyAgent(
             return result
 
         # Quotation Management
-        result = self._handle_quotation_commands(query, query_lower)
+        result = self._handle_quotation_commands(query, query_lower, is_confirm=is_confirm)
         if result is not None:
             return result
 

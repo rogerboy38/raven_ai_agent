@@ -11,8 +11,8 @@ from typing import Optional, Dict, List
 class ManufacturingMixin:
     """Mixin for _handle_manufacturing_commands"""
 
-    def _handle_manufacturing_commands(self, query: str, query_lower: str) -> Optional[Dict]:
-        """Dispatched from execute_workflow_command"""
+    def _handle_manufacturing_commands(self, query: str, query_lower: str, is_confirm: bool = False) -> Optional[Dict]:
+        """Dispatched from execute_workflow_command. is_confirm=True when user uses ! prefix or has privileged role."""
         # ==================== MANUFACTURING SOP COMMANDS ====================
         
         # Show Work Orders
