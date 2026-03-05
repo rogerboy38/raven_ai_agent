@@ -240,22 +240,12 @@ class ManufacturingMixin:
                             "preview": f"📊 UPDATE PROGRESS FOR {wo_name}?\n\n  Current: {wo.produced_qty or 0}/{wo.qty}\n  Adding: {produced_qty}\n  New Total: {(wo.produced_qty or 0) + produced_qty}/{wo.qty}\n\nSay 'confirm' to proceed."
                         }
                     
-                    # Create manufacture stock entry for the quantity
-                    se = frappe.get_doc({
-                        "doctype": "Stock Entry",
-                        "stock_entry_type": "Manufacture",
-                        "work_order": wo_name,
-                        "from_bom": 1,
-                        "bom_no": wo.bom_no,
-                        "fg_completed_qty": produced_qty
-                    })
-                    se.get_items()
+                    # Use ERPNext's built-in make_stock_entry for proper valuation
+                    from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
                     
-                    # Allow zero valuation rate for ALL items to prevent submission errors
-                    for item in se.items:
-                        item.allow_zero_valuation_rate = 1
-                    
-                    se.insert()
+                    se_dict = make_stock_entry(wo_name, "Manufacture", produced_qty)
+                    se = frappe.get_doc(se_dict)
+                    se.insert(ignore_permissions=True)
                     se.submit()
                     
                     return {
@@ -300,22 +290,12 @@ class ManufacturingMixin:
                         "preview": f"📤 ISSUE MATERIALS FOR {wo_name}?\n\nItems:\n" + "\n".join(items_preview) + "\n\nSay 'confirm' or use '!' prefix to proceed."
                     }
                 
-                # Create Stock Entry
-                se = frappe.get_doc({
-                    "doctype": "Stock Entry",
-                    "stock_entry_type": "Material Transfer for Manufacture",
-                    "work_order": wo_name,
-                    "from_bom": 1,
-                    "bom_no": wo.bom_no,
-                    "fg_completed_qty": wo.qty
-                })
-                se.get_items()
+                # Use ERPNext's built-in make_stock_entry for proper valuation
+                from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
                 
-                # Allow zero valuation rate for ALL items to prevent submission errors
-                for item in se.items:
-                    item.allow_zero_valuation_rate = 1
-                
-                se.insert()
+                se_dict = make_stock_entry(wo_name, "Material Transfer for Manufacture", wo.qty)
+                se = frappe.get_doc(se_dict)
+                se.insert(ignore_permissions=True)
                 se.submit()
                 
                 return {
@@ -341,22 +321,13 @@ class ManufacturingMixin:
                         "preview": f"🏭 COMPLETE PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Quantity: {remaining}\n  Target: {wo.fg_warehouse}\n\nSay 'confirm' to create Manufacture entry."
                     }
                 
-                # Create Manufacture Stock Entry
-                se = frappe.get_doc({
-                    "doctype": "Stock Entry",
-                    "stock_entry_type": "Manufacture",
-                    "work_order": wo_name,
-                    "from_bom": 1,
-                    "bom_no": wo.bom_no,
-                    "fg_completed_qty": remaining
-                })
-                se.get_items()
+                # Use ERPNext's built-in make_stock_entry (same as manufacturing_agent.py)
+                # This properly computes valuation rates from BOM and stock ledger
+                from erpnext.manufacturing.doctype.work_order.work_order import make_stock_entry
                 
-                # Allow zero valuation rate for ALL items to prevent submission errors
-                for item in se.items:
-                    item.allow_zero_valuation_rate = 1
-                
-                se.insert()
+                se_dict = make_stock_entry(wo_name, "Manufacture", remaining)
+                se = frappe.get_doc(se_dict)
+                se.insert(ignore_permissions=True)
                 se.submit()
                 
                 return {
