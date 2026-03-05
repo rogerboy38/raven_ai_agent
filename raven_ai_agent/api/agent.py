@@ -1206,7 +1206,7 @@ def handle_raven_message(doc, method):
             mfg_keywords = ["work order", "create wo", "submit wo", "manufacture", "transfer material", "check material", "mfg-wo"]
             pay_keywords = ["payment", "outstanding", "unpaid", "reconcile", "acc-sinv", "acc-pay", "sinv-"]
             orch_keywords = ["pipeline status", "run full cycle", "run pipeline", "dry run", "validate so"]
-            validator_keywords = ["diagnose", "diagnosis", "validate ", "audit pipeline", "check payment", "check pago", "pipeline health", "verify so", "verify sales order"]
+            validator_keywords = ["diagnose", "diagnosis", "validate ", "audit pipeline", "check payment", "check pago", "pipeline health", "verify so", "verify sales order", "sync so", "fix so", "sync sales order", "fix sales order", "!sync", "!fix"]
             if any(kw in q_lower for kw in validator_keywords):
                 bot_name = "task_validator"
             elif any(kw in q_lower for kw in orch_keywords):
