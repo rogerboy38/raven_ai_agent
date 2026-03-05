@@ -678,8 +678,10 @@ class ManufacturingAgent:
             return self._help_text()
 
         # ---- CREATE WO FROM SO (Step 4) ----
-        if ("create" in message_lower and "wo" in message_lower
-                and ("from so" in message_lower or "from sales" in message_lower)):
+        # Match: "create wo from so", "work order from SO-XXX", "wo from so", etc.
+        has_wo_keyword = ("wo" in message_lower or "work order" in message_lower)
+        has_so_ref = ("from so" in message_lower or "from sales" in message_lower or so_name is not None)
+        if has_wo_keyword and has_so_ref and ("create" in message_lower or so_name is not None):
             if not so_name:
                 return "❌ Please specify a Sales Order. Example: `@manufacturing create wo from so SO-00752-LEGOSAN AB`"
             bom_match = re.search(r'bom\s+(BOM-[\w-]+)', message, re.IGNORECASE)
