@@ -11,7 +11,7 @@ from typing import Optional, Dict, List
 class QuotationMixin:
     """Mixin for _handle_quotation_commands"""
 
-    def _handle_quotation_commands(self, query: str, query_lower: str) -> Optional[Dict]:
+    def _handle_quotation_commands(self, query: str, query_lower: str, is_confirm: bool = False) -> Optional[Dict]:
         """Dispatched from execute_workflow_command"""
         # ==================== FIX QUOTATION (Cancelled → Draft) ====================
         
@@ -63,6 +63,7 @@ class QuotationMixin:
                         errors.append(f"{qtn_name} ({str(e)[:30]})")
                 
                 frappe.db.commit()
+                frappe.clear_cache(doctype="Quotation")
                 
                 msg = f"🔧 **BATCH FIX QUOTATIONS** ({start_name} → {end_name})\n\n"
                 if fixed:
@@ -103,10 +104,22 @@ class QuotationMixin:
                         frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus = 0 WHERE parent = %s", qtn_name)
                         
                         frappe.db.commit()
+                        frappe.clear_cache(doctype="Quotation")
+                        
+                        # Verify the fix persisted
+                        verify = frappe.db.sql(
+                            "SELECT docstatus, status FROM `tabQuotation` WHERE name=%s",
+                            qtn_name, as_dict=1
+                        )
+                        if not verify or verify[0].docstatus != 0:
+                            return {
+                                "success": False,
+                                "error": f"Fix failed! DB still shows docstatus={verify[0].docstatus if verify else 'NOT FOUND'}"
+                            }
                         
                         return {
                             "success": True,
-                            "message": f"✅ Quotation **[{qtn_name}]({qtn_link})** fixed!\n\n  Customer: {qtn.party_name}\n  Status: Draft (docstatus=0)\n  Total: ${qtn.grand_total:,.2f}\n\n📝 You can now edit the quotation in ERPNext."
+                            "message": f"✅ Quotation **[{qtn_name}]({qtn_link})** fixed!\n\n  Customer: {qtn.party_name}\n  Status: Draft (verified ✓)\n  Total: ${qtn.grand_total:,.2f}\n\n📝 You can now edit the quotation in ERPNext.\n⚠️ Hard-refresh your browser (Ctrl+Shift+R) to see the change."
                         }
                     
                     # Case 2: Already in draft
@@ -426,7 +439,4 @@ class QuotationMixin:
                         "error": f"Failed to create supplier: {str(e)}"
                     }
         
-        return None
-    
-
         return None
