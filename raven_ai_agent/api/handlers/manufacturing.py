@@ -412,7 +412,11 @@ class ManufacturingMixin:
         
         # Material Receipt - Create stock entry to add inventory
         se_match = re.search(r'(MAT-STE-\d{4}-\d+|STE-\d+)', query, re.IGNORECASE)
-        item_match = re.search(r'(ITEM[_-]?\d+)', query, re.IGNORECASE)
+        # Match item codes: ITEM_001, LBL0334, 0334, MP-001, etc.
+        # Look for item code after 'receipt' keyword or general alphanumeric pattern
+        item_match = re.search(r'(?:receipt|receive|add stock)\s+([A-Za-z0-9_-]+\d+)', query, re.IGNORECASE)
+        if not item_match:
+            item_match = re.search(r'(ITEM[_-]?\d+|LBL\d+|\d{3,4}(?:-\w+)?)', query, re.IGNORECASE)
         
         if ("material receipt" in query_lower or "receive material" in query_lower or "add stock" in query_lower) and item_match:
             try:
