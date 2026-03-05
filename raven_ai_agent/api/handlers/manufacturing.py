@@ -250,6 +250,12 @@ class ManufacturingMixin:
                         "fg_completed_qty": produced_qty
                     })
                     se.get_items()
+                    
+                    # Allow zero valuation rate for items without a rate
+                    for item in se.items:
+                        if not item.valuation_rate and not item.basic_rate:
+                            item.allow_zero_valuation_rate = 1
+                    
                     se.insert()
                     se.submit()
                     
@@ -305,6 +311,12 @@ class ManufacturingMixin:
                     "fg_completed_qty": wo.qty
                 })
                 se.get_items()
+                
+                # Allow zero valuation rate for items without a rate
+                for item in se.items:
+                    if not item.valuation_rate and not item.basic_rate:
+                        item.allow_zero_valuation_rate = 1
+                
                 se.insert()
                 se.submit()
                 
@@ -341,6 +353,12 @@ class ManufacturingMixin:
                     "fg_completed_qty": remaining
                 })
                 se.get_items()
+                
+                # Allow zero valuation rate for items without a rate
+                for item in se.items:
+                    if not item.valuation_rate and not item.basic_rate:
+                        item.allow_zero_valuation_rate = 1
+                
                 se.insert()
                 se.submit()
                 
