@@ -949,7 +949,7 @@ class RaymondLucyAgent(
                 so_name=so_match.group(1).upper() if so_match else None
             )
         
-        # BOM Creator: submit bom creator BOM-XXXX
+        # Submit BOM: first try standard BOM doctype, then BOM Creator
         if "submit" in query_lower and "bom" in query_lower:
             bom_match = re.search(r'(BOM-[^\s]+)', query, re.IGNORECASE)
             if bom_match:
@@ -958,18 +958,43 @@ class RaymondLucyAgent(
                 import urllib.parse
                 bom_name = urllib.parse.unquote(bom_name)
                 
-                from raven_ai_agent.agents.bom_creator_agent import submit_bom_creator
-                result = submit_bom_creator(bom_name)
-                if result.get("success"):
-                    return {
-                        "success": True,
-                        "message": result.get("message", f"✅ BOM Creator '{bom_name}' submitted successfully!")
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "error": result.get("error", "Failed to submit BOM Creator")
-                    }
+                # Try standard BOM first
+                if frappe.db.exists("BOM", bom_name):
+                    try:
+                        bom_doc = frappe.get_doc("BOM", bom_name)
+                        if bom_doc.docstatus == 0:  # Draft
+                            bom_doc.submit()
+                            return {
+                                "success": True,
+                                "message": f"✅ BOM '{bom_name}' submitted successfully!\n\n"
+                                           f"  Item: {bom_doc.item}\n"
+                                           f"  Qty: {bom_doc.quantity} {bom_doc.uom}\n"
+                                           f"  Items: {len(bom_doc.items)}\n"
+                                           f"  Status: Submitted"
+                            }
+                        elif bom_doc.docstatus == 1:
+                            return {"success": False, "error": f"BOM '{bom_name}' is already submitted."}
+                        else:
+                            return {"success": False, "error": f"BOM '{bom_name}' is cancelled (docstatus=2). Cannot submit."}
+                    except Exception as e:
+                        return {"success": False, "error": f"Error submitting BOM '{bom_name}': {str(e)}"}
+                
+                # Fallback: try BOM Creator
+                try:
+                    from raven_ai_agent.agents.bom_creator_agent import submit_bom_creator
+                    result = submit_bom_creator(bom_name)
+                    if result.get("success"):
+                        return {
+                            "success": True,
+                            "message": result.get("message", f"✅ BOM Creator '{bom_name}' submitted successfully!")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "error": result.get("error", f"'{bom_name}' not found as BOM or BOM Creator.")
+                        }
+                except Exception as e:
+                    return {"success": False, "error": f"'{bom_name}' not found as standard BOM, and BOM Creator lookup failed: {str(e)}"}
         
         # Create BOM for Batch: @ai create bom for batch LOTE-XXXX
         if "create bom" in query_lower and ("batch" in query_lower or "lote" in query_lower):
