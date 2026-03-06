@@ -734,9 +734,20 @@ class SalesMixin:
         # Uses ERPNext's make_sales_invoice() which properly copies currency,
         # conversion_rate, taxes, payment_terms, debit_to, and all linked fields.
         # Then applies intelligent Mexico CFDI field discovery.
+        #
+        # POSTING DATE SUPPORT (migration):
+        #   "invoice SO-XXXX date 2024-01-15" → sets posting_date to 2024-01-15
+        #   Without date → defaults to today (nowdate)
+        #   The posting_date drives the FIX T-1 exchange rate lookup.
+        #   set_posting_time=1 tells ERPNext to respect our date instead of overriding.
         dn_match = re.search(r'(MAT-DN-\d+-\d+|DN-[^\s]+)', query, re.IGNORECASE)
         if (so_match or dn_match) and ("invoice" in query_lower or "factura" in query_lower):
             try:
+                # --- Parse optional posting_date from command ---
+                # Supports: "date 2024-01-15", "fecha 2024-01-15", "posting_date 2024-01-15"
+                date_match = re.search(r'(?:date|fecha|posting_date)\s+(\d{4}-\d{2}-\d{2})', query, re.IGNORECASE)
+                custom_posting_date = date_match.group(1) if date_match else None
+                
                 if dn_match:
                     dn_name = dn_match.group(1)
                     dn = frappe.get_doc("Delivery Note", dn_name)
@@ -746,9 +757,10 @@ class SalesMixin:
                     if not is_confirm:
                         currency = dn.currency or "USD"
                         cfdi_info = f"\n  🇲🇽 CFDI: {cfdi_fields.get('mx_payment_option','?')} | Use: {cfdi_fields.get('mx_cfdi_use','?')} | Pay: {cfdi_fields.get('mode_of_payment','?')}"
+                        date_info = f"\n  📅 Posting Date: {custom_posting_date}" if custom_posting_date else ""
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🧾 CREATE SALES INVOICE FROM {dn_name}?\n\n  Customer: {dn.customer}\n  Currency: {currency}\n  Total: {currency} {dn.grand_total:,.2f}{cfdi_info}\n\nSay 'confirm' to proceed."
+                            "preview": f"🧾 CREATE SALES INVOICE FROM {dn_name}?\n\n  Customer: {dn.customer}\n  Currency: {currency}\n  Total: {currency} {dn.grand_total:,.2f}{cfdi_info}{date_info}\n\nSay 'confirm' to proceed."
                         }
                     
                     from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
@@ -757,20 +769,25 @@ class SalesMixin:
                     # Apply discovered Mexico CFDI fields
                     for field, value in cfdi_fields.items():
                         si.set(field, value)
+                    # Apply custom posting_date if provided (migration scenario)
+                    if custom_posting_date:
+                        si.set_posting_time = 1
+                        si.posting_date = custom_posting_date
                     # Fix debit_to: ensure it's a ledger matching SI currency
                     correct_debit_to = self._discover_debit_to(si)
                     if correct_debit_to:
                         si.debit_to = correct_debit_to
-                    # Apply Banxico FIX T-1 exchange rate
+                    # Apply Banxico FIX T-1 exchange rate (uses posting_date for lookup)
                     fx_info = self._discover_conversion_rate(si)
                     si.insert()
                     site_name = frappe.local.site
                     fx_msg = ""
                     if fx_info:
                         fx_msg = f"\n  💱 TC: {fx_info['rate']} ({fx_info['source']}, FIX {fx_info.get('rate_date','')})"
+                    date_msg = f"\n  📅 Date: {si.posting_date}" if custom_posting_date else ""
                     return {
                         "success": True,
-                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}\n  🇲🇽 CFDI: {si.mx_payment_option} | Use: {si.mx_cfdi_use} | Pay: {si.mode_of_payment}{fx_msg}"
+                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}{date_msg}\n  🇲🇽 CFDI: {si.mx_payment_option} | Use: {si.mx_cfdi_use} | Pay: {si.mode_of_payment}{fx_msg}"
                     }
                 elif so_match:
                     so_name = so_match.group(1)
@@ -781,9 +798,10 @@ class SalesMixin:
                     if not is_confirm:
                         currency = so.currency or "USD"
                         cfdi_info = f"\n  🇲🇽 CFDI: {cfdi_fields.get('mx_payment_option','?')} | Use: {cfdi_fields.get('mx_cfdi_use','?')} | Pay: {cfdi_fields.get('mode_of_payment','?')}"
+                        date_info = f"\n  📅 Posting Date: {custom_posting_date}" if custom_posting_date else ""
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🧾 CREATE SALES INVOICE FROM {so_name}?\n\n  Customer: {so.customer}\n  Currency: {currency}\n  Total: {currency} {so.grand_total:,.2f}{cfdi_info}\n\nSay 'confirm' to proceed."
+                            "preview": f"🧾 CREATE SALES INVOICE FROM {so_name}?\n\n  Customer: {so.customer}\n  Currency: {currency}\n  Total: {currency} {so.grand_total:,.2f}{cfdi_info}{date_info}\n\nSay 'confirm' to proceed."
                         }
                     
                     from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
@@ -792,20 +810,25 @@ class SalesMixin:
                     # Apply discovered Mexico CFDI fields
                     for field, value in cfdi_fields.items():
                         si.set(field, value)
+                    # Apply custom posting_date if provided (migration scenario)
+                    if custom_posting_date:
+                        si.set_posting_time = 1
+                        si.posting_date = custom_posting_date
                     # Fix debit_to: ensure it's a ledger matching SI currency
                     correct_debit_to = self._discover_debit_to(si)
                     if correct_debit_to:
                         si.debit_to = correct_debit_to
-                    # Apply Banxico FIX T-1 exchange rate
+                    # Apply Banxico FIX T-1 exchange rate (uses posting_date for lookup)
                     fx_info = self._discover_conversion_rate(si)
                     si.insert()
                     site_name = frappe.local.site
                     fx_msg = ""
                     if fx_info:
                         fx_msg = f"\n  💱 TC: {fx_info['rate']} ({fx_info['source']}, FIX {fx_info.get('rate_date','')})"
+                    date_msg = f"\n  📅 Date: {si.posting_date}" if custom_posting_date else ""
                     return {
                         "success": True,
-                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}\n  🇲🇽 CFDI: {si.mx_payment_option} | Use: {si.mx_cfdi_use} | Pay: {si.mode_of_payment}{fx_msg}"
+                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}{date_msg}\n  🇲🇽 CFDI: {si.mx_payment_option} | Use: {si.mx_cfdi_use} | Pay: {si.mode_of_payment}{fx_msg}"
                     }
             except Exception as e:
                 return {"success": False, "error": str(e)}
