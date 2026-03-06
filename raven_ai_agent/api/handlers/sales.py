@@ -11,6 +11,68 @@ from typing import Optional, Dict, List
 class SalesMixin:
     """Mixin for _handle_sales_commands"""
 
+    @staticmethod
+    def _discover_mx_cfdi_fields(source_doc):
+        """Intelligently discover Mexico CFDI fields for Sales Invoice.
+        
+        Reads payment terms from the source document (SO or DN) to determine:
+        - mx_payment_option: PUE (advance/immediate) vs PPD (credit/deferred)
+        - mx_cfdi_use: From customer's last invoice, or G01 (goods) default
+        - mode_of_payment: From customer's last invoice, or Wire Transfer default
+        
+        Returns dict of field:value to set on the SI before insert.
+        """
+        cfdi = {}
+        
+        # --- 1. Payment Option: PUE vs PPD based on payment terms ---
+        payment_terms = getattr(source_doc, 'payment_terms_template', '') or ''
+        pt_lower = payment_terms.lower()
+        
+        # PUE = advance, immediate, anticipado, contado, cash
+        # PPD = credit, days, parcialidades, diferido
+        pue_keywords = ['advance', 'anticipad', 'contado', 'cash', 'immediate', 'inmediato', 'pue']
+        ppd_keywords = ['days', 'dias', 'credit', 'credito', 'net ', 'parcialidad', 'diferido', 'ppd']
+        
+        if any(kw in pt_lower for kw in pue_keywords):
+            cfdi['mx_payment_option'] = 'PUE'
+        elif any(kw in pt_lower for kw in ppd_keywords):
+            cfdi['mx_payment_option'] = 'PPD'
+        else:
+            # Check payment_schedule for credit_days > 0
+            schedule = getattr(source_doc, 'payment_schedule', [])
+            has_credit = any(getattr(row, 'credit_days', 0) > 0 for row in schedule)
+            cfdi['mx_payment_option'] = 'PPD' if has_credit else 'PUE'
+        
+        # --- 2. Discover CFDI Use + Mode of Payment from customer's last invoice ---
+        customer = getattr(source_doc, 'customer', None)
+        if customer:
+            try:
+                last_si = frappe.get_all(
+                    'Sales Invoice',
+                    filters={'customer': customer, 'docstatus': 1},
+                    fields=['mx_cfdi_use', 'mode_of_payment'],
+                    order_by='posting_date desc',
+                    limit_page_length=1
+                )
+                if last_si:
+                    if last_si[0].get('mx_cfdi_use'):
+                        cfdi['mx_cfdi_use'] = last_si[0]['mx_cfdi_use']
+                    if last_si[0].get('mode_of_payment'):
+                        cfdi['mode_of_payment'] = last_si[0]['mode_of_payment']
+            except Exception:
+                pass  # Discovery is best-effort, defaults below
+        
+        # --- 3. Smart defaults for anything not discovered ---
+        # G01 = Adquisición de mercancías (goods purchase) — most common for product sales
+        # G03 = Gastos en general — fallback for services
+        if 'mx_cfdi_use' not in cfdi:
+            cfdi['mx_cfdi_use'] = 'G01'
+        
+        if 'mode_of_payment' not in cfdi:
+            cfdi['mode_of_payment'] = 'Wire Transfer'
+        
+        return cfdi
+
     def _handle_sales_commands(self, query: str, query_lower: str, is_confirm: bool = False) -> Optional[Dict]:
         """Dispatched from execute_workflow_command"""
         # ==================== SALES-TO-PURCHASE CYCLE SOP ====================
@@ -429,48 +491,61 @@ class SalesMixin:
         # Create Sales Invoice from SO or DN
         # Uses ERPNext's make_sales_invoice() which properly copies currency,
         # conversion_rate, taxes, payment_terms, debit_to, and all linked fields.
+        # Then applies intelligent Mexico CFDI field discovery.
         dn_match = re.search(r'(MAT-DN-\d+-\d+|DN-[^\s]+)', query, re.IGNORECASE)
         if (so_match or dn_match) and ("invoice" in query_lower or "factura" in query_lower):
             try:
                 if dn_match:
                     dn_name = dn_match.group(1)
                     dn = frappe.get_doc("Delivery Note", dn_name)
+                    # Discover CFDI fields from the DN (or its linked SO)
+                    cfdi_fields = self._discover_mx_cfdi_fields(dn)
                     
                     if not is_confirm:
                         currency = dn.currency or "USD"
+                        cfdi_info = f"\n  🇲🇽 CFDI: {cfdi_fields.get('mx_payment_option','?')} | Use: {cfdi_fields.get('mx_cfdi_use','?')} | Pay: {cfdi_fields.get('mode_of_payment','?')}"
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🧾 CREATE SALES INVOICE FROM {dn_name}?\n\n  Customer: {dn.customer}\n  Currency: {currency}\n  Total: {currency} {dn.grand_total:,.2f}\n\nSay 'confirm' to proceed."
+                            "preview": f"🧾 CREATE SALES INVOICE FROM {dn_name}?\n\n  Customer: {dn.customer}\n  Currency: {currency}\n  Total: {currency} {dn.grand_total:,.2f}{cfdi_info}\n\nSay 'confirm' to proceed."
                         }
                     
                     from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
                     si_dict = make_sales_invoice(dn_name)
                     si = frappe.get_doc(si_dict)
+                    # Apply discovered Mexico CFDI fields
+                    for field, value in cfdi_fields.items():
+                        si.set(field, value)
                     si.insert()
                     site_name = frappe.local.site
                     return {
                         "success": True,
-                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}"
+                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}\n  🇲🇽 CFDI: {si.mx_payment_option} | Use: {si.mx_cfdi_use} | Pay: {si.mode_of_payment}"
                     }
                 elif so_match:
                     so_name = so_match.group(1)
                     so = frappe.get_doc("Sales Order", so_name)
+                    # Discover CFDI fields from the SO
+                    cfdi_fields = self._discover_mx_cfdi_fields(so)
                     
                     if not is_confirm:
                         currency = so.currency or "USD"
+                        cfdi_info = f"\n  🇲🇽 CFDI: {cfdi_fields.get('mx_payment_option','?')} | Use: {cfdi_fields.get('mx_cfdi_use','?')} | Pay: {cfdi_fields.get('mode_of_payment','?')}"
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🧾 CREATE SALES INVOICE FROM {so_name}?\n\n  Customer: {so.customer}\n  Currency: {currency}\n  Total: {currency} {so.grand_total:,.2f}\n\nSay 'confirm' to proceed."
+                            "preview": f"🧾 CREATE SALES INVOICE FROM {so_name}?\n\n  Customer: {so.customer}\n  Currency: {currency}\n  Total: {currency} {so.grand_total:,.2f}{cfdi_info}\n\nSay 'confirm' to proceed."
                         }
                     
                     from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
                     si_dict = make_sales_invoice(so_name)
                     si = frappe.get_doc(si_dict)
+                    # Apply discovered Mexico CFDI fields
+                    for field, value in cfdi_fields.items():
+                        si.set(field, value)
                     si.insert()
                     site_name = frappe.local.site
                     return {
                         "success": True,
-                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}"
+                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}\n  🇲🇽 CFDI: {si.mx_payment_option} | Use: {si.mx_cfdi_use} | Pay: {si.mode_of_payment}"
                     }
             except Exception as e:
                 return {"success": False, "error": str(e)}
