@@ -939,16 +939,23 @@ class TaskValidatorMixin:
                     "value": qtn_val,
                 })
 
-        # Item fields
+        # Item fields — two-pass: exact match by item_code, then positional fallback
+        # Build index of SO items matched by code
+        matched_so_idxs = set()
+        unmatched_qtn_items = []
+
         for qtn_item in qtn.items:
             matching_so_item = None
             for so_item in so.items:
-                if so_item.item_code == qtn_item.item_code:
+                if so_item.item_code == qtn_item.item_code and so_item.idx not in matched_so_idxs:
                     matching_so_item = so_item
+                    matched_so_idxs.add(so_item.idx)
                     break
             if not matching_so_item:
+                unmatched_qtn_items.append(qtn_item)
                 continue
 
+            # Compare fields for code-matched items
             for qtn_field, so_field, label in self.CRITICAL_FIELDS["items"]:
                 qtn_val = getattr(qtn_item, qtn_field, None)
                 so_val = getattr(matching_so_item, so_field, None)
@@ -978,6 +985,27 @@ class TaskValidatorMixin:
                             "value": qtn_val,
                             "so_item_idx": matching_so_item.idx,
                         })
+
+        # Pass 2: Positional fallback for unmatched QTN items (migration item replacement)
+        # When QTN has items that don't match any SO item by code, and SO has
+        # unmatched items too, pair them positionally. This handles the common
+        # migration error where SO got manufacturing item instead of sales item.
+        unmatched_so_items = [si for si in so.items if si.idx not in matched_so_idxs]
+
+        if unmatched_qtn_items and unmatched_so_items:
+            # Pair by position within unmatched lists
+            for qtn_item, so_item in zip(unmatched_qtn_items, unmatched_so_items):
+                # This is a full item REPLACEMENT — flag it distinctly
+                changes.append({
+                    "type": "item_replace",
+                    "from_item_code": so_item.item_code,
+                    "to_item_code": qtn_item.item_code,
+                    "label": "Item Replacement (migration fix)",
+                    "from": f"{so_item.item_code} — {so_item.item_name or ''}",
+                    "to": f"{qtn_item.item_code} — {qtn_item.item_name or ''}",
+                    "so_item_idx": so_item.idx,
+                    "qtn_item": qtn_item,  # carry full QTN item for apply phase
+                })
 
         # Payment schedule sync
         schedule_change = False
@@ -1014,8 +1042,11 @@ class TaskValidatorMixin:
             msg += "| # | Field | Current (SO) | New (from QTN) |\n"
             msg += "|---|-------|-------------|----------------|\n"
             for idx, c in enumerate(changes, 1):
-                item_prefix = f"`{c['item_code']}` " if c.get("item_code") else ""
-                msg += f"| {idx} | {item_prefix}**{c['label']}** | `{c['from']}` | `{c['to']}` |\n"
+                if c["type"] == "item_replace":
+                    msg += f"| {idx} | 🔄 **{c['label']}** | `{c['from']}` | `{c['to']}` |\n"
+                else:
+                    item_prefix = f"`{c['item_code']}` " if c.get("item_code") else ""
+                    msg += f"| {idx} | {item_prefix}**{c['label']}** | `{c['from']}` | `{c['to']}` |\n"
             msg += f"\n👉 Say `@ai !sync SO {so_name} from quotation` to apply these changes\n"
             return {"success": True, "message": msg}
 
@@ -1033,6 +1064,44 @@ class TaskValidatorMixin:
                         if so_item.idx == c.get("so_item_idx"):
                             setattr(so_item, c["field"], c["value"])
                             applied.append(f"Item `{c['item_code']}` `{c['label']}`: `{c['from']}` → `{c['to']}`")
+                            break
+
+                elif c["type"] == "item_replace":
+                    # Full item replacement: swap item_code + all fields from QTN item
+                    qtn_item = c["qtn_item"]
+                    for so_item in so.items:
+                        if so_item.idx == c.get("so_item_idx"):
+                            old_code = so_item.item_code
+                            # Core identity fields
+                            so_item.item_code = qtn_item.item_code
+                            so_item.item_name = qtn_item.item_name
+                            so_item.description = getattr(qtn_item, 'description', '') or ''
+                            so_item.item_group = getattr(qtn_item, 'item_group', None)
+                            so_item.brand = getattr(qtn_item, 'brand', None)
+                            so_item.image = getattr(qtn_item, 'image', None)
+                            # Quantity & pricing
+                            so_item.qty = qtn_item.qty
+                            so_item.rate = qtn_item.rate
+                            so_item.amount = getattr(qtn_item, 'amount', qtn_item.qty * qtn_item.rate)
+                            so_item.uom = qtn_item.uom
+                            so_item.stock_uom = getattr(qtn_item, 'stock_uom', qtn_item.uom)
+                            so_item.conversion_factor = getattr(qtn_item, 'conversion_factor', 1)
+                            so_item.discount_percentage = getattr(qtn_item, 'discount_percentage', 0)
+                            so_item.discount_amount = getattr(qtn_item, 'discount_amount', 0)
+                            so_item.price_list_rate = getattr(qtn_item, 'price_list_rate', qtn_item.rate)
+                            so_item.base_rate = getattr(qtn_item, 'base_rate', None)
+                            so_item.base_amount = getattr(qtn_item, 'base_amount', None)
+                            so_item.net_rate = getattr(qtn_item, 'net_rate', qtn_item.rate)
+                            so_item.net_amount = getattr(qtn_item, 'net_amount', None)
+                            so_item.base_net_rate = getattr(qtn_item, 'base_net_rate', None)
+                            so_item.base_net_amount = getattr(qtn_item, 'base_net_amount', None)
+                            # Warehouse: keep SO's warehouse (may differ from QTN)
+                            # Link back to quotation
+                            so_item.prevdoc_docname = qtn_item.parent
+                            so_item.prevdoc_doctype = "Quotation"
+                            applied.append(
+                                f"🔄 Item replaced: `{old_code}` → `{qtn_item.item_code}` ({qtn_item.item_name})"
+                            )
                             break
 
                 elif c["type"] == "payment_schedule":
