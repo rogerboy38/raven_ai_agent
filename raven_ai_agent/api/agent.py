@@ -870,8 +870,22 @@ class RaymondLucyAgent(
         query_lower = query.lower()
         executor = WorkflowExecutor(self.user)
         
-        # Check for confirmation
+        # ---- Confirmation state management (Redis-backed) ----
+        # When a preview is shown, we store the original command.
+        # When user says "confirm", we replay the stored command with is_confirm=True.
+        cache_key = f"pending_confirm:{self.user}"
+        
         is_confirm = any(word in query_lower for word in ["confirm", "yes", "proceed", "do it", "execute"])
+        
+        # If user said "confirm" and we have a pending command, replay it
+        if is_confirm and query_lower.strip() in ["confirm", "yes", "proceed", "do it", "execute", "si", "confirmar"]:
+            pending_cmd = frappe.cache().get_value(cache_key)
+            if pending_cmd:
+                frappe.cache().delete_value(cache_key)
+                frappe.logger().info(f"[Workflow] Replaying pending command: {pending_cmd}")
+                query = pending_cmd
+                query_lower = query.lower()
+                # is_confirm stays True
         
         # Force mode with ! prefix (like sudo)
         is_force = query.startswith("!")
@@ -1080,6 +1094,10 @@ class RaymondLucyAgent(
         workflow_result = self.execute_workflow_command(query)
         if workflow_result:
             if workflow_result.get("requires_confirmation"):
+                # Store the original command for later "confirm" replay
+                cache_key = f"pending_confirm:{self.user}"
+                frappe.cache().set_value(cache_key, query, expires_in_sec=300)  # 5 min TTL
+                frappe.logger().info(f"[Workflow] Stored pending command for confirm: {query}")
                 return {
                     "success": True,
                     "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{workflow_result['preview']}",
