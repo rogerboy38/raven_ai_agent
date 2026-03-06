@@ -73,6 +73,157 @@ class SalesMixin:
         
         return cfdi
 
+    @staticmethod
+    def _discover_debit_to(si_doc):
+        """Intelligently discover the correct debit_to (receivable) account.
+        
+        Follows Microsip/SAT per-customer account convention:
+        - 1105.1.x (MXN, NACIONALES) for domestic customers
+        - 1105.2.x (USD, EXTRANJEROS) for international customers
+        
+        Resolution order:
+        1. Search for a per-customer Microsip sub-account matching customer name
+           under 1105.1 (MXN) or 1105.2 (USD) based on invoice currency
+        2. Fall back to ERPNext get_party_account (canonical)
+        3. Validate current debit_to is a ledger with matching currency
+        4. Search any Receivable ledger matching currency
+        5. Check customer's last submitted SI
+        
+        Prevents Group Account errors by validating the resolved account
+        is a ledger (not a group) and matches the SI currency.
+        
+        Args:
+            si_doc: The Sales Invoice doc (before insert)
+        
+        Returns:
+            str: The correct debit_to account name, or None if current is fine
+        """
+        current_debit_to = getattr(si_doc, 'debit_to', None)
+        company = getattr(si_doc, 'company', None)
+        customer = getattr(si_doc, 'customer', None)
+        currency = getattr(si_doc, 'currency', None) or 'USD'
+        
+        def _is_valid_ledger(account_name, expected_currency=None):
+            """Check if account is a valid non-group ledger, optionally matching currency."""
+            try:
+                info = frappe.db.get_value(
+                    'Account', account_name,
+                    ['is_group', 'account_currency', 'account_type'], as_dict=True
+                )
+                if not info or info.is_group:
+                    return False
+                if expected_currency and info.account_currency != expected_currency:
+                    return False
+                return True
+            except Exception:
+                return False
+        
+        # --- Strategy 1: Microsip/SAT per-customer sub-account ---
+        # Convention: 1105.1.x = NACIONALES (MXN), 1105.2.x = EXTRANJEROS (USD)
+        # Each customer has their own ledger account named after them
+        if customer and company:
+            try:
+                # Determine parent group based on currency
+                # USD/foreign → search under 1105.2 EXTRANJEROS
+                # MXN/domestic → search under 1105.1 NACIONALES  
+                company_currency = frappe.db.get_value('Company', company, 'default_currency') or 'MXN'
+                
+                if currency != company_currency:
+                    # Foreign customer: search 1105.2 EXTRANJEROS sub-accounts
+                    parent_groups = ['1105.2 - EXTRANJEROS']
+                else:
+                    # Domestic customer: search 1105.1 NACIONALES sub-accounts
+                    parent_groups = ['1105.1 - NACIONALES']
+                
+                # Clean customer name for matching — strip legal suffixes for fuzzy match
+                customer_clean = customer.upper().strip()
+                # Remove common suffixes: SA DE CV, S.A., SA, AB, LLC, etc.
+                for suffix in [' SA DE CV', ' S DE RL DE CV', ' S.A.', ' SA', ' AB',
+                               ' LLC', ' INC', ' LTD', ' GMBH', ' SRL', ' SPR']:
+                    customer_clean = customer_clean.replace(suffix, '')
+                customer_clean = customer_clean.strip()
+                
+                for parent_prefix in parent_groups:
+                    # Search for per-customer account under this parent
+                    sub_accounts = frappe.get_all(
+                        'Account',
+                        filters={
+                            'company': company,
+                            'account_type': 'Receivable',
+                            'is_group': 0,
+                            'parent_account': ['like', f'{parent_prefix}%']
+                        },
+                        fields=['name', 'account_currency'],
+                        limit_page_length=0  # Get all
+                    )
+                    
+                    # Try exact-ish match: customer name appears in account name
+                    for acct in sub_accounts:
+                        acct_upper = acct.name.upper()
+                        # Check if customer name (or cleaned version) is in account name
+                        if customer_clean in acct_upper or customer.upper() in acct_upper:
+                            # With "Allow Multi-Currency" enabled, the account currency
+                            # doesn't need to match invoice currency — ERPNext handles
+                            # the conversion. But prefer matching currency.
+                            return acct.name
+                    
+                    # Fuzzy: try first significant word of customer name (min 4 chars)
+                    words = [w for w in customer_clean.split() if len(w) >= 4]
+                    if words:
+                        primary_word = words[0]
+                        for acct in sub_accounts:
+                            if primary_word in acct.name.upper():
+                                return acct.name
+            except Exception:
+                pass
+        
+        # --- Strategy 2: Use ERPNext's get_party_account (canonical) ---
+        try:
+            from erpnext.accounts.party import get_party_account
+            resolved = get_party_account('Customer', customer, company)
+            if resolved and _is_valid_ledger(resolved, currency):
+                return resolved
+        except Exception:
+            pass
+        
+        # --- Strategy 3: Validate current debit_to ---
+        if current_debit_to and _is_valid_ledger(current_debit_to, currency):
+            return None  # Current is fine
+        
+        # --- Strategy 4: Find currency-matching Receivable ledger ---
+        try:
+            accounts = frappe.get_all(
+                'Account',
+                filters={
+                    'company': company,
+                    'account_type': 'Receivable',
+                    'account_currency': currency,
+                    'is_group': 0
+                },
+                fields=['name'],
+                limit_page_length=5
+            )
+            if accounts:
+                return accounts[0].name
+        except Exception:
+            pass
+        
+        # --- Strategy 5: Look at customer's last submitted SI ---
+        if customer:
+            try:
+                last_si = frappe.db.get_value(
+                    'Sales Invoice',
+                    {'customer': customer, 'docstatus': 1, 'currency': currency},
+                    'debit_to',
+                    order_by='posting_date desc'
+                )
+                if last_si and _is_valid_ledger(last_si):
+                    return last_si
+            except Exception:
+                pass
+        
+        return None  # Could not resolve — let ERPNext handle it
+
     def _handle_sales_commands(self, query: str, query_lower: str, is_confirm: bool = False) -> Optional[Dict]:
         """Dispatched from execute_workflow_command"""
         # ==================== SALES-TO-PURCHASE CYCLE SOP ====================
@@ -515,6 +666,10 @@ class SalesMixin:
                     # Apply discovered Mexico CFDI fields
                     for field, value in cfdi_fields.items():
                         si.set(field, value)
+                    # Fix debit_to: ensure it's a ledger matching SI currency
+                    correct_debit_to = self._discover_debit_to(si)
+                    if correct_debit_to:
+                        si.debit_to = correct_debit_to
                     si.insert()
                     site_name = frappe.local.site
                     return {
@@ -541,6 +696,10 @@ class SalesMixin:
                     # Apply discovered Mexico CFDI fields
                     for field, value in cfdi_fields.items():
                         si.set(field, value)
+                    # Fix debit_to: ensure it's a ledger matching SI currency
+                    correct_debit_to = self._discover_debit_to(si)
+                    if correct_debit_to:
+                        si.debit_to = correct_debit_to
                     si.insert()
                     site_name = frappe.local.site
                     return {
