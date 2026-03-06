@@ -427,6 +427,8 @@ class SalesMixin:
                 return {"success": False, "error": str(e)}
         
         # Create Sales Invoice from SO or DN
+        # Uses ERPNext's make_sales_invoice() which properly copies currency,
+        # conversion_rate, taxes, payment_terms, debit_to, and all linked fields.
         dn_match = re.search(r'(MAT-DN-\d+-\d+|DN-[^\s]+)', query, re.IGNORECASE)
         if (so_match or dn_match) and ("invoice" in query_lower or "factura" in query_lower):
             try:
@@ -435,56 +437,40 @@ class SalesMixin:
                     dn = frappe.get_doc("Delivery Note", dn_name)
                     
                     if not is_confirm:
+                        currency = dn.currency or "USD"
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🧾 CREATE SALES INVOICE FROM {dn_name}?\n\n  Customer: {dn.customer}\n  Total: ${dn.grand_total:,.2f}\n\nSay 'confirm' to proceed."
+                            "preview": f"🧾 CREATE SALES INVOICE FROM {dn_name}?\n\n  Customer: {dn.customer}\n  Currency: {currency}\n  Total: {currency} {dn.grand_total:,.2f}\n\nSay 'confirm' to proceed."
                         }
                     
-                    si = frappe.get_doc({
-                        "doctype": "Sales Invoice",
-                        "customer": dn.customer,
-                        "items": [{
-                            "item_code": item.item_code,
-                            "qty": item.qty,
-                            "rate": item.rate,
-                            "warehouse": item.warehouse,
-                            "delivery_note": dn_name,
-                            "dn_detail": item.name
-                        } for item in dn.items]
-                    })
+                    from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
+                    si_dict = make_sales_invoice(dn_name)
+                    si = frappe.get_doc(si_dict)
                     si.insert()
                     site_name = frappe.local.site
                     return {
                         "success": True,
-                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})"
+                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}"
                     }
                 elif so_match:
                     so_name = so_match.group(1)
                     so = frappe.get_doc("Sales Order", so_name)
                     
                     if not is_confirm:
+                        currency = so.currency or "USD"
                         return {
                             "requires_confirmation": True,
-                            "preview": f"🧾 CREATE SALES INVOICE FROM {so_name}?\n\n  Customer: {so.customer}\n  Total: ${so.grand_total:,.2f}\n\nSay 'confirm' to proceed."
+                            "preview": f"🧾 CREATE SALES INVOICE FROM {so_name}?\n\n  Customer: {so.customer}\n  Currency: {currency}\n  Total: {currency} {so.grand_total:,.2f}\n\nSay 'confirm' to proceed."
                         }
                     
-                    si = frappe.get_doc({
-                        "doctype": "Sales Invoice",
-                        "customer": so.customer,
-                        "items": [{
-                            "item_code": item.item_code,
-                            "qty": item.qty,
-                            "rate": item.rate,
-                            "warehouse": item.warehouse,
-                            "sales_order": so_name,
-                            "so_detail": item.name
-                        } for item in so.items]
-                    })
+                    from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+                    si_dict = make_sales_invoice(so_name)
+                    si = frappe.get_doc(si_dict)
                     si.insert()
                     site_name = frappe.local.site
                     return {
                         "success": True,
-                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})"
+                        "message": f"✅ Sales Invoice created: [{si.name}](https://{site_name}/app/sales-invoice/{si.name})\n  Customer: {si.customer}\n  Currency: {si.currency}\n  Total: {si.currency} {si.grand_total:,.2f}"
                     }
             except Exception as e:
                 return {"success": False, "error": str(e)}
