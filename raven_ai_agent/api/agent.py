@@ -859,7 +859,7 @@ class RaymondLucyAgent(
         # Default to Level 1 (read-only)
         return 1
     
-    def execute_workflow_command(self, query: str) -> Optional[Dict]:
+    def execute_workflow_command(self, query: str, channel_id: str = "") -> Optional[Dict]:
         """Parse and execute workflow commands"""
         frappe.logger().info(f"[Workflow] Checking query: {query}, WORKFLOWS_ENABLED: {WORKFLOWS_ENABLED}")
         
@@ -873,7 +873,7 @@ class RaymondLucyAgent(
         # ---- Confirmation state management (Redis-backed) ----
         # When a preview is shown, we store the original command.
         # When user says "confirm", we replay the stored command with is_confirm=True.
-        cache_key = f"pending_confirm:{self.user}"
+        cache_key = f"pending_confirm:{self.user}:{channel_id}"
         
         is_confirm = any(word in query_lower for word in ["confirm", "yes", "proceed", "do it", "execute"])
         
@@ -1073,7 +1073,7 @@ class RaymondLucyAgent(
 
         return None
 
-    def process_query(self, query: str, conversation_history: List[Dict] = None) -> Dict:
+    def process_query(self, query: str, conversation_history: List[Dict] = None, channel_id: str = "") -> Dict:
         """Main processing function"""
         
         query_lower = query.lower()
@@ -1091,11 +1091,11 @@ class RaymondLucyAgent(
         suggested_autonomy = self.determine_autonomy(query)
         
         # Try workflow command first (Level 2/3 operations)
-        workflow_result = self.execute_workflow_command(query)
+        workflow_result = self.execute_workflow_command(query, channel_id=channel_id)
         if workflow_result:
             if workflow_result.get("requires_confirmation"):
                 # Store the original command for later "confirm" replay
-                cache_key = f"pending_confirm:{self.user}"
+                cache_key = f"pending_confirm:{self.user}:{channel_id}"
                 frappe.cache().set_value(cache_key, query, expires_in_sec=300)  # 5 min TTL
                 frappe.logger().info(f"[Workflow] Stored pending command for confirm: {query}")
                 return {
@@ -1405,11 +1405,11 @@ def handle_raven_message(doc, method):
                     else:
                         # Fallback to general agent
                         agent = RaymondLucyAgent(user)
-                        result = agent.process_query(query)
+                        result = agent.process_query(query, channel_id=doc.channel_id)
                 except ImportError:
                     frappe.logger().warning("[AI Agent] SkillRouter not available, using default agent")
                     agent = RaymondLucyAgent(user)
-                    result = agent.process_query(query)
+                    result = agent.process_query(query, channel_id=doc.channel_id)
         finally:
             frappe.flags.ignore_permissions = original_ignore
         
