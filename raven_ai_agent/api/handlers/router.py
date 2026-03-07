@@ -50,9 +50,12 @@ def _detect_ai_intent(query: str) -> str:
         r'submit\s+MFG',
         r'transfer\s+material',
         r'(?:manufacture|finish|produce)\s+MFG',
-        r'(?:list|show)\s+work\s*orders?\s+for',
+        r'(?:list|show)\s+work\s*orders?',
         r'(?:create|make)\s+wo\b',
         r'(?:status|check)\s+MFG-WO',
+        r'wo\s+plan\b',
+        r'create\s+batch\b',
+        r'mis\s+ordenes',
     ]
     if any(re.search(p, query, re.IGNORECASE) for p in mfg_patterns):
         return "manufacturing_bot"
