@@ -69,7 +69,7 @@ class ManufacturingMixin:
         # Create Work Order
         if "create work order" in query_lower or "crear orden de produccion" in query_lower:
             # Extract item and quantity: @ai create work order for ITEM-001 qty 100
-            item_match = re.search(r'(?:for|para)\s+([^\s]+)', query, re.IGNORECASE)
+            item_match = re.search(r'(?:for|para)\s+(.+?)(?:\s+qty\b|\s+bom\b|\s+from\b|$)', query, re.IGNORECASE)
             qty_match = re.search(r'(?:qty|quantity|cantidad)\s+(\d+)', query, re.IGNORECASE)
             
             if item_match:
