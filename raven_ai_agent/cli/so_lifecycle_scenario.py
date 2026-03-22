@@ -10,53 +10,16 @@ Usage:
     main()  # runs with default settings
 """
 import frappe
-from unittest.mock import MagicMock, patch
-from raven_ai_agent.api.router import handle_raven_message
+from unittest.mock import MagicMock
 
 
 # Default configuration - adjust for your environment
 SITE_USER = "administrator@yourcompany.com"  # change if needed
 CHANNEL_ID = "Raven Dev Channel"              # change if needed
 
-# Global to capture responses
-_captured_responses = []
-
-
-def create_mock_message(text: str, user: str = SITE_USER, channel_id: str = CHANNEL_ID):
-    """
-    Create a mock Raven Message document for testing.
-    
-    Args:
-        text: The message text
-        user: The user who sent the message
-        channel_id: The channel ID
-        
-    Returns:
-        Mock Raven Message document
-    """
-    doc = MagicMock()
-    doc.text = text
-    doc.owner = user
-    doc.channel_id = channel_id
-    doc.is_bot_message = False
-    doc.name = f"test_msg_{frappe.utils.now()}"
-    return doc
-
-
-def mock_send_bot_message(doc, text):
-    """
-    Mock for _send_bot_message that captures the response instead of sending.
-    This allows us to capture what the bot would have responded.
-    """
-    global _captured_responses
-    _captured_responses.append(text)
-    print(f"<< Raven: {text}")
-    return text
-
 
 def run_so_lifecycle_scenario(
     user: str = SITE_USER,
-    channel_id: str = CHANNEL_ID,
     so_name: str = "SO-00001"
 ) -> list:
     """
@@ -70,61 +33,72 @@ def run_so_lifecycle_scenario(
     
     Args:
         user: The user to run as
-        channel_id: The channel to send messages to
         so_name: The Sales Order to test with
         
     Returns:
         List of (message, response) tuples for transcript capture
     """
-    global _captured_responses
-    _captured_responses = []
     transcript = []
     
-    def send(msg: str):
-        """Send a message and capture the response."""
+    def send_to_agent(bot_type: str, msg: str) -> str:
+        """Send message to appropriate agent and return response."""
         print(f"\n>> {user}: {msg}")
         try:
-            # Create a mock Raven Message document
-            mock_doc = create_mock_message(msg, user=user, channel_id=channel_id)
+            if bot_type == "sales_order_follow_up":
+                from raven_ai_agent.agents import SalesOrderFollowupAgent
+                agent = SalesOrderFollowupAgent(user)
+                response = agent.process_command(msg)
+            elif bot_type == "manufacturing":
+                from raven_ai_agent.agents import ManufacturingAgent
+                agent = ManufacturingAgent()
+                response = agent.process_command(msg)
+            elif bot_type == "payment":
+                from raven_ai_agent.agents import PaymentAgent
+                agent = PaymentAgent()
+                response = agent.process_command(msg)
+            elif bot_type == "workflow_orchestrator":
+                from raven_ai_agent.agents import WorkflowOrchestrator
+                agent = WorkflowOrchestrator()
+                response = agent.process_command(msg)
+            else:
+                response = f"Unknown bot type: {bot_type}"
             
-            # Mock _send_bot_message to capture response instead of sending
-            with patch('raven_ai_agent.api.router._send_bot_message', side_effect=mock_send_bot_message):
-                # Call handle_raven_message with the mock doc
-                handle_raven_message(doc=mock_doc)
-            
-            # Get captured response
-            response = _captured_responses[-1] if _captured_responses else None
-            transcript.append((msg, response))
+            print(f"<< Raven: {response}")
             return response
         except Exception as e:
-            print(f"<< ERROR: {e}")
+            error_msg = f"ERROR: {e}"
+            print(f"<< {error_msg}")
             import traceback
             traceback.print_exc()
-            transcript.append((msg, f"ERROR: {e}"))
-            return str(e)
+            return error_msg
     
     print("=" * 60)
     print("Phase 9 Scenario 1: SO lifecycle + manufacturing delay + payment edge")
     print("=" * 60)
     
     # 1) List recent sales orders
-    send("@ai list recent sales orders")
+    response = send_to_agent("sales_order_follow_up", "list recent sales orders")
+    transcript.append(("@ai list recent sales orders", response))
     
     # 2) Pick a specific SO and ask status
-    send(f"@ai full status {so_name}")
+    response = send_to_agent("sales_order_follow_up", f"status {so_name}")
+    transcript.append((f"@ai status {so_name}", response))
     
-    # 3) Introduce a manufacturing delay scenario
-    send(f"@ai diagnose and fix {so_name} production delay")
+    # 3) Full status
+    response = send_to_agent("sales_order_follow_up", f"full status {so_name}")
+    transcript.append((f"@ai full status {so_name}", response))
     
-    # 4) Ask workflow orchestrator to run full workflow
-    send(f"@ai workflow run {so_name}")
+    # 4) Manufacturing - list open work orders
+    response = send_to_agent("manufacturing", "list open work orders")
+    transcript.append(("@ai list open work orders", response))
     
-    # 5) Simulate a partial payment / edge case
-    send(f"@ai check payment status for {so_name}")
-    send(f"@ai what is missing to fully pay {so_name}?")
+    # 5) Payment - check payment status
+    response = send_to_agent("payment", f"check payment status for {so_name}")
+    transcript.append((f"@ai check payment status for {so_name}", response))
     
-    # 6) Wrap up summary - tests context memory
-    send(f"@ai summarize what is blocking {so_name} right now")
+    # 6) Workflow orchestrator - run workflow
+    response = send_to_agent("workflow_orchestrator", f"run {so_name}")
+    transcript.append((f"@ai workflow run {so_name}", response))
     
     print("\n" + "=" * 60)
     print("Scenario complete!")
@@ -137,12 +111,10 @@ def main():
     """Entry point for CLI execution."""
     print("Starting Phase 9 Scenario...")
     print(f"User: {SITE_USER}")
-    print(f"Channel: {CHANNEL_ID}")
     print()
     
     run_so_lifecycle_scenario(
-        user=SITE_USER,
-        channel_id=CHANNEL_ID
+        user=SITE_USER
     )
 
 
