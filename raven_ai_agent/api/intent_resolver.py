@@ -166,7 +166,7 @@ DIRECT_COMMAND_PATTERNS = [
     # Document IDs
     r'SAL-QTN-\d+-\d+',        # Quotations
     r'SAL-ORD-\d+-\d+',        # Sales Orders
-    r'SO-\d{3,5}',             # Short SO format
+    r'SO-[\w\-\. ]+',          # Sales Orders (including names with spaces, e.g., SO-00754-Calipso s.r.l)
     r'SINV-\d+-\d+',           # Sales Invoices
     r'DN-\d+-\d+',             # Delivery Notes
     r'MFG-WO-\d+',             # Work Orders
@@ -471,7 +471,7 @@ Return ONLY valid JSON, no additional text:"""
             patterns = [
                 r'SAL-QTN-\d+-\d+',     # Quotations
                 r'SAL-ORD-\d+-\d+',      # Sales Orders
-                r'SO-\d{3,5}',           # Short SO format
+                r'SO-[\w\-\. ]+',        # Sales Orders (including names with spaces)
                 r'SINV-\d+-\d+',         # Sales Invoices
                 r'DN-\d+-\d+',           # Delivery Notes
                 r'MFG-WO-\d+',           # Work Orders
