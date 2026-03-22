@@ -10,17 +10,39 @@ Usage:
     main()  # runs with default settings
 """
 import frappe
+from unittest.mock import MagicMock
 from raven_ai_agent.api.router import handle_raven_message
 
 
 # Default configuration - adjust for your environment
 SITE_USER = "administrator@yourcompany.com"  # change if needed
-CHANNEL = "Raven Dev Channel"                # change if needed
+CHANNEL_ID = "Raven Dev Channel"              # change if needed
+
+
+def create_mock_message(text: str, user: str = SITE_USER, channel_id: str = CHANNEL_ID):
+    """
+    Create a mock Raven Message document for testing.
+    
+    Args:
+        text: The message text
+        user: The user who sent the message
+        channel_id: The channel ID
+        
+    Returns:
+        Mock Raven Message document
+    """
+    doc = MagicMock()
+    doc.text = text
+    doc.owner = user
+    doc.channel_id = channel_id
+    doc.is_bot_message = False
+    doc.name = f"test_msg_{frappe.utils.now()}"
+    return doc
 
 
 def run_so_lifecycle_scenario(
     user: str = SITE_USER,
-    channel: str = CHANNEL,
+    channel_id: str = CHANNEL_ID,
     so_name: str = "SO-00001"
 ) -> list:
     """
@@ -34,7 +56,7 @@ def run_so_lifecycle_scenario(
     
     Args:
         user: The user to run as
-        channel: The channel to send messages to
+        channel_id: The channel to send messages to
         so_name: The Sales Order to test with
         
     Returns:
@@ -46,16 +68,18 @@ def run_so_lifecycle_scenario(
         """Send a message and capture the response."""
         print(f"\n>> {user}: {msg}")
         try:
-            resp = handle_raven_message(
-                user=user,
-                message=msg,
-                channel=channel,
-            )
+            # Create a mock Raven Message document
+            mock_doc = create_mock_message(msg, user=user, channel_id=channel_id)
+            
+            # Call handle_raven_message with the mock doc
+            resp = handle_raven_message(doc=mock_doc)
             print(f"<< Raven: {resp}")
             transcript.append((msg, resp))
             return resp
         except Exception as e:
             print(f"<< ERROR: {e}")
+            import traceback
+            traceback.print_exc()
             transcript.append((msg, f"ERROR: {e}"))
             return str(e)
     
@@ -93,12 +117,12 @@ def main():
     """Entry point for CLI execution."""
     print("Starting Phase 9 Scenario...")
     print(f"User: {SITE_USER}")
-    print(f"Channel: {CHANNEL}")
+    print(f"Channel: {CHANNEL_ID}")
     print()
     
     run_so_lifecycle_scenario(
         user=SITE_USER,
-        channel=CHANNEL
+        channel_id=CHANNEL_ID
     )
 
 

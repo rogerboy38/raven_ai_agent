@@ -14,6 +14,7 @@ import threading
 import random
 from typing import List, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from unittest.mock import MagicMock
 
 from raven_ai_agent.api.router import handle_raven_message
 from raven_ai_agent.utils.agent_bus import get_bus, AgentEvent, EVENT_SO_UPDATED
@@ -29,6 +30,17 @@ TEST_COMMANDS = [
     "@ai check payment status",
     "@ai list pending quotations",
 ]
+
+
+def create_mock_message(text: str, user: str, channel_id: str):
+    """Create a mock Raven Message document for testing."""
+    doc = MagicMock()
+    doc.text = text
+    doc.owner = user
+    doc.channel_id = channel_id
+    doc.is_bot_message = False
+    doc.name = f"test_msg_{time.time()}"
+    return doc
 
 
 class LoadTestMetrics:
@@ -97,12 +109,9 @@ def send_test_command(
         bus = get_bus()
         bus.subscribe(EVENT_SO_UPDATED, event_handler)
         
-        # Send the command
-        response = handle_raven_message(
-            user=user,
-            message=command,
-            channel=channel,
-        )
+        # Create mock document and send the command
+        mock_doc = create_mock_message(command, user=user, channel_id=channel)
+        response = handle_raven_message(doc=mock_doc)
         
         # Record success
         response_time = time.time() - start_time

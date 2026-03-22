@@ -17,6 +17,7 @@ import frappe
 from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from raven_ai_agent.api.router import handle_raven_message
 
@@ -61,6 +62,17 @@ SCENARIOS = {
 }
 
 
+def create_mock_message(text: str, user: str, channel_id: str):
+    """Create a mock Raven Message document for testing."""
+    doc = MagicMock()
+    doc.text = text
+    doc.owner = user
+    doc.channel_id = channel_id
+    doc.is_bot_message = False
+    doc.name = f"test_msg_{datetime.now().isoformat()}"
+    return doc
+
+
 def capture_transcript(
     scenario: str,
     user: str = "administrator@yourcompany.com",
@@ -101,10 +113,9 @@ def capture_transcript(
         
         print(f"\n>> {user}: {msg}")
         try:
-            response = handle_raven_message(
-                user=user,
-                message=msg,
-                channel=channel,
+            # Create mock document
+            mock_doc = create_mock_message(msg, user=user, channel_id=channel)
+            response = handle_raven_message(doc=mock_doc)
             )
             print(f"<< Raven: {response[:200]}..." if len(str(response)) > 200 else f"<< Raven: {response}")
             
