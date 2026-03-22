@@ -10,13 +10,16 @@ Usage:
     main()  # runs with default settings
 """
 import frappe
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from raven_ai_agent.api.router import handle_raven_message
 
 
 # Default configuration - adjust for your environment
 SITE_USER = "administrator@yourcompany.com"  # change if needed
 CHANNEL_ID = "Raven Dev Channel"              # change if needed
+
+# Global to capture responses
+_captured_responses = []
 
 
 def create_mock_message(text: str, user: str = SITE_USER, channel_id: str = CHANNEL_ID):
@@ -38,6 +41,17 @@ def create_mock_message(text: str, user: str = SITE_USER, channel_id: str = CHAN
     doc.is_bot_message = False
     doc.name = f"test_msg_{frappe.utils.now()}"
     return doc
+
+
+def mock_send_bot_message(doc, text):
+    """
+    Mock for _send_bot_message that captures the response instead of sending.
+    This allows us to capture what the bot would have responded.
+    """
+    global _captured_responses
+    _captured_responses.append(text)
+    print(f"<< Raven: {text}")
+    return text
 
 
 def run_so_lifecycle_scenario(
@@ -62,6 +76,8 @@ def run_so_lifecycle_scenario(
     Returns:
         List of (message, response) tuples for transcript capture
     """
+    global _captured_responses
+    _captured_responses = []
     transcript = []
     
     def send(msg: str):
@@ -71,11 +87,15 @@ def run_so_lifecycle_scenario(
             # Create a mock Raven Message document
             mock_doc = create_mock_message(msg, user=user, channel_id=channel_id)
             
-            # Call handle_raven_message with the mock doc
-            resp = handle_raven_message(doc=mock_doc)
-            print(f"<< Raven: {resp}")
-            transcript.append((msg, resp))
-            return resp
+            # Mock _send_bot_message to capture response instead of sending
+            with patch('raven_ai_agent.api.router._send_bot_message', side_effect=mock_send_bot_message):
+                # Call handle_raven_message with the mock doc
+                handle_raven_message(doc=mock_doc)
+            
+            # Get captured response
+            response = _captured_responses[-1] if _captured_responses else None
+            transcript.append((msg, response))
+            return response
         except Exception as e:
             print(f"<< ERROR: {e}")
             import traceback
