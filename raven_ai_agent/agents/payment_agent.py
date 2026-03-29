@@ -192,23 +192,34 @@ class PaymentAgent:
                     customer_doc.customer_primary_contact = contact
                     fixed.append(f"customer_primary_contact -> {contact} (from {source})")
             
-            # Save customer if we made changes
+            # Save customer if we made changes — use db.set_value to avoid triggering
+            # full link validation (Customer may have broken CRM link fields)
             if fixed:
                 try:
-                    customer_doc.save(ignore_permissions=True)
+                    if getattr(customer_doc, 'customer_primary_address', None):
+                        frappe.db.set_value("Customer", customer_name,
+                            "customer_primary_address",
+                            customer_doc.customer_primary_address,
+                            update_modified=False)
+                    if getattr(customer_doc, 'customer_primary_contact', None):
+                        frappe.db.set_value("Customer", customer_name,
+                            "customer_primary_contact",
+                            customer_doc.customer_primary_contact,
+                            update_modified=False)
                     frappe.db.commit()
                 except Exception as cust_save_err:
                     frappe.log_error(f"Customer save error: {cust_save_err}", "PaymentAgent")
-                    # Try one more time with different approach
-                    customer_doc.reload()
-                    if not getattr(customer_doc, 'customer_primary_address', None) and 'customer_primary_address' in str(fixed):
-                        for f in fixed:
-                            if 'customer_primary_address' in f:
-                                addr = f.split('-> ')[-1].strip()
-                                frappe.db.sql("UPDATE `tabCustomer` SET customer_primary_address=%s WHERE name=%s", (addr, customer_name))
-                                frappe.db.commit()
-                                fixed.append("customer_primary_address (via SQL)")
-                                break
+                    # Try one more time with SQL UPDATE
+                    if getattr(customer_doc, 'customer_primary_address', None):
+                        frappe.db.sql("UPDATE `tabCustomer` SET customer_primary_address=%s WHERE name=%s", 
+                            (customer_doc.customer_primary_address, customer_name))
+                        frappe.db.commit()
+                        fixed.append("customer_primary_address (via SQL)")
+                    if getattr(customer_doc, 'customer_primary_contact', None):
+                        frappe.db.sql("UPDATE `tabCustomer` SET customer_primary_contact=%s WHERE name=%s", 
+                            (customer_doc.customer_primary_contact, customer_name))
+                        frappe.db.commit()
+                        fixed.append("customer_primary_contact (via SQL)")
             
             if errors and not fixed:
                 customer_link = self.make_link("Customer", customer_name)
@@ -231,7 +242,7 @@ class PaymentAgent:
                     addr, source = find_address_from_chain()
                     if addr:
                         customer_doc.customer_primary_address = addr
-                        customer_doc.save(ignore_permissions=True)
+                        frappe.db.set_value("Customer", customer_name, "customer_primary_address", addr, update_modified=False)
                         frappe.db.commit()
                         fixed.append(f"customer_primary_address FIXED -> {addr} (from {source})")
                         final_addr = addr
@@ -247,7 +258,7 @@ class PaymentAgent:
                     # Use the first available address
                     final_addr = all_addrs[0].parent
                     customer_doc.customer_primary_address = final_addr
-                    customer_doc.save(ignore_permissions=True)
+                    frappe.db.set_value("Customer", customer_name, "customer_primary_address", final_addr, update_modified=False)
                     frappe.db.commit()
                     fixed.append(f"customer_primary_address FALLBACK -> {final_addr}")
             
@@ -766,13 +777,12 @@ class PaymentAgent:
                 except:
                     pass
                 
-                # Auto-fix: Try to update the customer's tax_system
+                # Auto-fix: Try to update the customer's tax_system using db.set_value
+                # to avoid triggering full link validation on broken CRM fields
                 if customer_name:
                     try:
-                        customer = frappe.get_doc("Customer", customer_name)
-                        old_tax_system = customer.tax_system or "not set"
-                        customer.tax_system = required_tax_system
-                        customer.save()
+                        old_tax_system = frappe.db.get_value("Customer", customer_name, "tax_system") or "not set"
+                        frappe.db.set_value("Customer", customer_name, "tax_system", required_tax_system, update_modified=False)
                         frappe.db.commit()
                         
                         # Retry the payment entry submission
