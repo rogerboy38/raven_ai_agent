@@ -659,7 +659,7 @@ def handle_raven_message(doc=None, method=None):
             frappe.flags.ignore_permissions = True
 
             # Route to specialized agent based on bot_name
-            if bot_name == "sales_order_follow_up":
+            if bot_name == "sales_order_follow_up" or bot_name == "sales_order_bot":
                 from raven_ai_agent.agents import SalesOrderFollowupAgent
                 so_agent = SalesOrderFollowupAgent(user)
                 response = so_agent.process_command(query)
