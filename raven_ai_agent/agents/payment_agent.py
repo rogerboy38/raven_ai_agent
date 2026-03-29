@@ -93,103 +93,128 @@ class PaymentAgent:
             fixed = []
             errors = []
             
-            # Check if customer_primary_address is set
-            if not getattr(customer_doc, 'customer_primary_address', None):
-                # Trace to find address from PE -> SI -> SO -> QTN chain
-                qtn = self._trace_to_quotation(pe)
-                if qtn and getattr(qtn, 'customer_address', None):
-                    customer_doc.customer_primary_address = qtn.customer_address
-                    fixed.append(f"customer_primary_address -> {qtn.customer_address}")
-                else:
-                    # Try getting from Sales Order directly
-                    for ref in pe.references:
-                        if ref.reference_doctype == "Sales Invoice":
-                            si = frappe.get_doc("Sales Invoice", ref.reference_name)
-                            # Check SO for address
-                            for item in si.items or []:
-                                so_name = getattr(item, 'sales_order', None)
-                                if so_name:
+            # Helper function to find address from chain
+            def find_address_from_chain():
+                """Search PE -> SI -> SO -> QTN for address"""
+                for ref in pe.references:
+                    if ref.reference_doctype == "Sales Invoice":
+                        si = frappe.get_doc("Sales Invoice", ref.reference_name)
+                        
+                        # Check SO directly
+                        for item in (si.items or []):
+                            so_name = getattr(item, 'sales_order', None)
+                            if so_name:
+                                try:
                                     so = frappe.get_doc("Sales Order", so_name)
                                     if getattr(so, 'customer_address', None):
-                                        customer_doc.customer_primary_address = so.customer_address
-                                        fixed.append(f"customer_primary_address (from SO) -> {so.customer_address}")
-                                        break
+                                        return so.customer_address, "SO.customer_address"
                                     elif getattr(so, 'shipping_address_name', None):
-                                        customer_doc.customer_primary_address = so.shipping_address_name
-                                        fixed.append(f"customer_primary_address (from SO shipping) -> {so.shipping_address_name}")
-                                        break
-                            
-                            # Fallback to SI fields
-                            if not getattr(customer_doc, 'customer_primary_address', None):
-                                if getattr(si, 'customer_address', None):
-                                    customer_doc.customer_primary_address = si.customer_address
-                                    fixed.append(f"customer_primary_address -> {si.customer_address}")
-                                elif getattr(si, 'shipping_address_name', None):
-                                    customer_doc.customer_primary_address = si.shipping_address_name
-                                    fixed.append(f"customer_primary_address (from shipping) -> {si.shipping_address_name}")
-                            
-                            if not getattr(customer_doc, 'customer_primary_address', None):
-                                errors.append("Customer Primary Address not found in linked Quotation")
+                                        return so.shipping_address_name, "SO.shipping_address_name"
+                                except:
+                                    pass
+                        
+                        # Check SO via Delivery Note lookup (common for this project)
+                        for item in (si.items or []):
+                            dn_name = getattr(item, 'delivery_note', None)
+                            if dn_name:
+                                try:
+                                    dn = frappe.get_doc("Delivery Note", dn_name)
+                                    if getattr(dn, 'shipping_address', None):
+                                        return dn.shipping_address, "DN.shipping_address"
+                                except:
+                                    pass
+                        
+                        # Fallback to SI
+                        if getattr(si, 'customer_address', None):
+                            return si.customer_address, "SI.customer_address"
+                        elif getattr(si, 'shipping_address_name', None):
+                            return si.shipping_address_name, "SI.shipping_address_name"
+                
+                return None, None
+            
+            def find_contact_from_chain():
+                """Search PE -> SI -> SO for contact"""
+                for ref in pe.references:
+                    if ref.reference_doctype == "Sales Invoice":
+                        si = frappe.get_doc("Sales Invoice", ref.reference_name)
+                        
+                        # Check SO
+                        for item in (si.items or []):
+                            so_name = getattr(item, 'sales_order', None)
+                            if so_name:
+                                try:
+                                    so = frappe.get_doc("Sales Order", so_name)
+                                    if getattr(so, 'contact_person', None):
+                                        return so.contact_person, "SO.contact_person"
+                                except:
+                                    pass
+                        
+                        # Fallback to SI
+                        if getattr(si, 'contact_person', None):
+                            return si.contact_person, "SI.contact_person"
+                
+                return None, None
+            
+            # Check if customer_primary_address is set
+            if not getattr(customer_doc, 'customer_primary_address', None):
+                addr, source = find_address_from_chain()
+                if addr:
+                    customer_doc.customer_primary_address = addr
+                    fixed.append(f"customer_primary_address -> {addr} (from {source})")
+                else:
+                    errors.append("Customer Primary Address not found in linked documents")
             
             # Check if customer_primary_contact is set
             if not getattr(customer_doc, 'customer_primary_contact', None):
-                # Trace to find contact from PE -> SI -> SO -> QTN chain
-                qtn = self._trace_to_quotation(pe)
-                if qtn and getattr(qtn, 'contact_person', None):
-                    customer_doc.customer_primary_contact = qtn.contact_person
-                    fixed.append(f"customer_primary_contact -> {qtn.contact_person}")
-                else:
-                    # Try getting from Sales Order directly
-                    for ref in pe.references:
-                        if ref.reference_doctype == "Sales Invoice":
-                            si = frappe.get_doc("Sales Invoice", ref.reference_name)
-                            # Check SO for contact
-                            for item in si.items or []:
-                                so_name = getattr(item, 'sales_order', None)
-                                if so_name:
-                                    so = frappe.get_doc("Sales Order", so_name)
-                                    if getattr(so, 'contact_person', None):
-                                        customer_doc.customer_primary_contact = so.contact_person
-                                        fixed.append(f"customer_primary_contact (from SO) -> {so.contact_person}")
-                                        break
-                            
-                            # Fallback to SI contact
-                            if not getattr(customer_doc, 'customer_primary_contact', None):
-                                if getattr(si, 'contact_person', None):
-                                    customer_doc.customer_primary_contact = si.contact_person
-                                    fixed.append(f"customer_primary_contact -> {si.contact_person}")
+                contact, source = find_contact_from_chain()
+                if contact:
+                    customer_doc.customer_primary_contact = contact
+                    fixed.append(f"customer_primary_contact -> {contact} (from {source})")
             
-            # Save if we made changes
+            # Save customer if we made changes
             if fixed:
-                customer_doc.save(ignore_permissions=True)
-                frappe.db.commit()
+                try:
+                    customer_doc.save(ignore_permissions=True)
+                    frappe.db.commit()
+                except Exception as cust_save_err:
+                    frappe.log_error(f"Customer save error: {cust_save_err}", "PaymentAgent")
+                    # Try one more time with different approach
+                    customer_doc.reload()
+                    if not getattr(customer_doc, 'customer_primary_address', None) and 'customer_primary_address' in str(fixed):
+                        for f in fixed:
+                            if 'customer_primary_address' in f:
+                                addr = f.split('-> ')[-1].strip()
+                                frappe.db.sql("UPDATE `tabCustomer` SET customer_primary_address=%s WHERE name=%s", (addr, customer_name))
+                                frappe.db.commit()
+                                fixed.append("customer_primary_address (via SQL)")
+                                break
             
             if errors and not fixed:
-                # Construct helpful error message
                 customer_link = self.make_link("Customer", customer_name)
                 error_msg = (
                     f"Cannot submit payment: Customer {customer_link} has no Primary Address. "
-                    f"Address not found in the linked Quotation/Sales Order/Sales Invoice chain either. "
+                    f"Address not found in the linked Sales Order/Sales Invoice chain. "
                     f"Please set the address manually at: {customer_link}"
                 )
                 return {"success": False, "fixed": fixed, "error": error_msg}
             
-            # --- Fix postal code for export customers (CP = 00000) ---
-            # For foreign/export customers, SAT requires postal code "00000"
+            # Fix postal code for export customers (CP = 00000)
             if getattr(customer_doc, 'customer_primary_address', None):
-                addr = frappe.get_doc("Address", customer_doc.customer_primary_address)
-                # Check if this is a foreign address (not Mexico)
-                country = getattr(addr, 'country', '')
-                if country and country != 'Mexico':
-                    # Export customer - postal code must be 00000
-                    if getattr(addr, 'pincode', None) and addr.pincode != '00000':
-                        addr.pincode = '00000'
-                        addr.save(ignore_permissions=True)
-                        frappe.db.commit()
-                        fixed.append(f"export customer address pincode -> 00000 ({country})")
+                try:
+                    addr = frappe.get_doc("Address", customer_doc.customer_primary_address)
+                    country = getattr(addr, 'country', '')
+                    if country and country != 'Mexico':
+                        if getattr(addr, 'pincode', None) and addr.pincode != '00000':
+                            addr.pincode = '00000'
+                            addr.save(ignore_permissions=True)
+                            frappe.db.commit()
+                            fixed.append(f"export customer address pincode -> 00000 ({country})")
+                except:
+                    pass
             
-            # --- Also set party_address and contact_person on the payment entry ---
+            # Set party_address and contact_person on the payment entry
             pe_changed = False
+            
             if not getattr(pe, 'party_address', None):
                 if getattr(customer_doc, 'customer_primary_address', None):
                     pe.party_address = customer_doc.customer_primary_address
@@ -204,12 +229,24 @@ class PaymentAgent:
             
             # Save PE if party_address or contact_person changed
             if pe_changed:
-                pe.save(ignore_permissions=True)
-                frappe.db.commit()
+                try:
+                    pe.save(ignore_permissions=True)
+                    frappe.db.commit()
+                except Exception as pe_save_err:
+                    frappe.log_error(f"PE save error: {pe_save_err}", "PaymentAgent")
+                    # Try via SQL
+                    if 'party_address' in str(fixed):
+                        addr = customer_doc.customer_primary_address or ""
+                        frappe.db.sql("UPDATE `tabPayment Entry` SET party_address=%s WHERE name=%s", (addr, pe.name))
+                        frappe.db.commit()
+                        fixed.append("pe.party_address (via SQL)")
+                    if 'contact_person' in str(fixed):
+                        contact = customer_doc.customer_primary_contact or ""
+                        frappe.db.sql("UPDATE `tabPayment Entry` SET contact_person=%s WHERE name=%s", (contact, pe.name))
+                        frappe.db.commit()
+                        fixed.append("pe.contact_person (via SQL)")
             
-            # --- Multi-currency fix for Mexican companies ---
-            # If customer has USD accounting but all accounts are MXN,
-            # Frappe will complain. Set the currency fields to company currency.
+            # Multi-currency fix for Mexican companies
             company_currency = frappe.db.get_value("Company", pe.company, "default_currency") or "MXN"
             
             if not getattr(pe, 'paid_from_account_currency', None):
@@ -220,7 +257,6 @@ class PaymentAgent:
                 pe.paid_to_account_currency = company_currency
                 fixed.append(f"paid_to_account_currency -> {company_currency}")
             
-            # Save if we made currency changes
             if 'paid_from_account_currency' in str(fixed) or 'paid_to_account_currency' in str(fixed):
                 pe.save(ignore_permissions=True)
                 frappe.db.commit()
@@ -228,9 +264,10 @@ class PaymentAgent:
             return {"success": True, "fixed": fixed, "error": None}
             
         except frappe.DoesNotExistError:
-            return {"success": True, "fixed": [], "error": None}  # Customer doesn't exist, let ERPNext handle it
+            return {"success": True, "fixed": [], "error": None}
         except Exception as e:
-            return {"success": True, "fixed": [], "error": None}  # Don't block on errors, let ERPNext handle
+            frappe.log_error(f"_ensure_customer_address_and_contact error: {e}", "PaymentAgent")
+            return {"success": True, "fixed": [], "error": None}
 
     # ========== PAYMENT ENTRY OPERATIONS (Step 8) ==========
 
@@ -516,11 +553,22 @@ class PaymentAgent:
                 # Return helpful error with manual action link
                 return {"success": False, "error": preflight["error"]}
             
-            # If we fixed something, reload the PE to get updated references
-            if preflight["fixed"]:
-                frappe.db.commit()
-                pe.reload()
-
+            # Note: _ensure_customer_address_and_contact already saved the PE with party_address
+            # We should NOT reload the PE as it would discard those changes
+            # The pe object is already modified in memory
+            
+            # For safety, verify party_address is set before submit
+            if not getattr(pe, 'party_address', None):
+                # Double-check: get from customer
+                customer = frappe.get_doc("Customer", pe.party)
+                if getattr(customer, 'customer_primary_address', None):
+                    pe.party_address = customer.customer_primary_address
+            
+            if not getattr(pe, 'contact_person', None):
+                customer = frappe.get_doc("Customer", pe.party)
+                if getattr(customer, 'customer_primary_contact', None):
+                    pe.contact_person = customer.customer_primary_contact
+            
             pe.submit()
             frappe.db.commit()
 
