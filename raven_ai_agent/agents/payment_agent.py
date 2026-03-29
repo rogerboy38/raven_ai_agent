@@ -360,7 +360,8 @@ class PaymentAgent:
         """Copy taxes from Sales Order to Payment Entry's Advance Taxes and Charges.
         
         This is critical for export customers to prevent submit errors due to
-        missing tax configuration in the advance allocation.
+        missing tax configuration in the advance allocation. Also copies taxes
+        from Sales Invoice as fallback.
         
         Args:
             pe: Payment Entry document
@@ -370,33 +371,62 @@ class PaymentAgent:
             List of strings describing what was copied
         """
         copied = []
+        
+        def add_tax_to_pe(tax, pe):
+            """Helper to add tax with proper amount fields"""
+            pe.append('taxes', {
+                'doctype': 'Payment Entry Taxes',
+                'account_head': tax.account_head,
+                'rate': tax.rate,
+                'net_amount': tax.net_amount or tax.base_net_amount or 0,
+                'amount': tax.amount or tax.base_amount or 0,
+                'base_net_amount': tax.base_net_amount or 0,
+                'base_amount': tax.base_amount or 0,
+            })
+        
         try:
-            # Find Sales Order from SI
-            for item in (si.items or []):
-                so_name = getattr(item, 'sales_order', None)
-                if so_name:
-                    so = frappe.get_doc("Sales Order", so_name)
-                    
-                    # Check if SO has taxes
-                    if hasattr(so, 'taxes') and so.taxes:
-                        for tax in so.taxes:
-                            # Add to PE's taxes (Advance Taxes and Charges)
-                            pe.append('taxes', {
-                                'doctype': 'Payment Entry Taxes',
-                                'account_head': tax.account_head,
-                                'rate': tax.rate,
-                                'net_amount': tax.net_amount or 0,
-                                'amount': tax.amount or 0,
-                                'base_net_amount': tax.base_net_amount or 0,
-                                'base_amount': tax.base_amount or 0,
-                            })
-                            copied.append(f"Tax: {tax.account_head} @ {tax.rate}%")
-                    
-                    # Only process first SO with taxes
-                    if copied:
-                        break
+            # FIRST: Try to get taxes from Sales Invoice (primary source)
+            # SI taxes are the most accurate representation of what needs to be paid
+            if hasattr(si, 'taxes') and si.taxes:
+                for tax in si.taxes:
+                    if tax.amount:  # Only add if there's an amount
+                        add_tax_to_pe(tax, pe)
+                        copied.append(f"Tax from SI: {tax.account_head} @ {tax.rate}% = {tax.amount}")
+            
+            # SECOND: If no taxes from SI, try Sales Order
+            if not copied:
+                for item in (si.items or []):
+                    so_name = getattr(item, 'sales_order', None)
+                    if so_name:
+                        so = frappe.get_doc("Sales Order", so_name)
+                        
+                        # Check if SO has taxes
+                        if hasattr(so, 'taxes') and so.taxes:
+                            for tax in so.taxes:
+                                if tax.amount:
+                                    add_tax_to_pe(tax, pe)
+                                    copied.append(f"Tax from SO: {tax.account_head} @ {tax.rate}% = {tax.amount}")
+                        
+                        # Only process first SO with taxes
+                        if copied:
+                            break
+            
+            # THIRD: If still no taxes, try to get from any linked Delivery Note
+            if not copied:
+                for item in (si.items or []):
+                    dn_name = getattr(item, 'delivery_note', None)
+                    if dn_name:
+                        dn = frappe.get_doc("Delivery Note", dn_name)
+                        if hasattr(dn, 'taxes') and dn.taxes:
+                            for tax in dn.taxes:
+                                if tax.amount:
+                                    add_tax_to_pe(tax, pe)
+                                    copied.append(f"Tax from DN: {tax.account_head} @ {tax.rate}% = {tax.amount}")
+                        if copied:
+                            break
+                            
         except Exception as e:
-            frappe.log_error(f"Error copying taxes from SO: {e}", "PaymentAgent")
+            frappe.log_error(f"Error copying taxes from SO/SI: {e}", "PaymentAgent")
         
         return copied
 
