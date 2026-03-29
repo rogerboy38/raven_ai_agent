@@ -951,6 +951,69 @@ class PaymentAgent:
         except Exception as e:
             return {"success": False, "error": f"Error cancelling Payment Entry: {str(e)}"}
 
+    def generate_payment_einvoice(self, pe_name: str) -> Dict:
+        """Generate Payment Complement (CFDI for payment) for a submitted Payment Entry.
+        
+        Args:
+            pe_name: Payment Entry name
+        
+        Returns:
+            Dict with e-invoice status
+        """
+        try:
+            pe = frappe.get_doc("Payment Entry", pe_name)
+            
+            # Check if already has payment complement UUID
+            if getattr(pe, 'payment_einvoice_id', None):
+                return {
+                    "success": False,
+                    "error": f"⚠️ Payment Entry already has a Payment Complement.\n\nPayment UUID: `{pe.payment_einvoice_id}`"
+                }
+            
+            # Check docstatus - must be submitted
+            if pe.docstatus != 1:
+                return {
+                    "success": False,
+                    "error": f"❌ Payment Entry must be **Submitted** to generate Payment Complement.\n\nCurrent status: {pe.docstatus}"
+                }
+            
+            # Check if the referenced Sales Invoice has CFDI
+            if pe.references:
+                for ref in pe.references:
+                    if ref.reference_doctype == "Sales Invoice":
+                        si_uuid = frappe.db.get_value("Sales Invoice", ref.reference_name, "uuid")
+                        if not si_uuid:
+                            return {
+                                "success": False,
+                                "error": f"❌ Referenced Sales Invoice `{ref.reference_name}` has no CFDI (UUID).\n\nPlease generate the e-invoice for the Sales Invoice first with `@ai einvoice {ref.reference_name}`"
+                            }
+            
+            # Call mexico_einvoice's update_payment function
+            from mexico_einvoice.utils import update_payment
+            update_payment(pe, "before_submit")
+            
+            # Reload to get updated values
+            pe.reload()
+            
+            return {
+                "success": True,
+                "pe_name": pe.name,
+                "link": self.make_link("Payment Entry", pe.name),
+                "message": (
+                    f"✅ Payment Complement (CFDI) generated: {self.make_link('Payment Entry', pe.name)}\n\n"
+                    f"  Payment Einvoice ID: {getattr(pe, 'payment_einvoice_id', 'N/A')}\n"
+                    f"  Status: {getattr(pe, 'payment_invoice_status', 'generated')}\n\n"
+                    f"🎉 Full cycle complete! Both Sales Invoice CFDI and Payment Complement CFDI have been generated."
+                )
+            }
+
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Payment Entry '{pe_name}' not found."}
+        except Exception as e:
+            import traceback
+            frappe.logger().error(f"Error generating Payment Complement for {pe_name}: {traceback.format_exc()}")
+            return {"success": False, "error": f"Error generating Payment Complement: {str(e)}\n\nDetails: {traceback.format_exc()[:500]}"}
+
     def reconcile_payment(self, pe_name: str) -> Dict:
         """Check reconciliation status of a Payment Entry against its Sales Invoice(s).
         
@@ -1157,6 +1220,11 @@ class PaymentAgent:
         # ---- CANCEL PAYMENT ----
         if "cancel" in message_lower and pe_name:
             result = self.cancel_payment_entry(pe_name)
+            return result.get("message", result.get("error", "Unknown error"))
+
+        # ---- E-INVOICE / PAYMENT COMPLEMENT (CFDI for payment) ----
+        if "einvoice" in message_lower and pe_name:
+            result = self.generate_payment_einvoice(pe_name)
             return result.get("message", result.get("error", "Unknown error"))
 
         # ---- RECONCILE ----
