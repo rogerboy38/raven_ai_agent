@@ -502,6 +502,16 @@ def handle_raven_message(doc=None, method=None):
                 "sales invoice", "payment entry", "make payment",
                 "receive payment", "payment received"
             ]
+            
+            # PRIORITY: einvoice/e-factura commands - route to CFDI generator
+            # This MUST come before pay_keywords to avoid false positives
+            einvoice_keywords = ["einvoice", "e-factura", "cfdi", "factura electronica", "generar factura"]
+            
+            # === PRIORITY: einvoice command - BEFORE payment keywords ===
+            if any(kw in q_lower for kw in einvoice_keywords):
+                # Route to the e-invoice functionality via mexico_einvoice app
+                # For now, we handle this in sales_order_bot as it generates CFDI
+                bot_name = "sales_order_bot"
             orch_keywords = [
                 "@workflow", "pipeline status", "run full cycle", "run pipeline",
                 "dry run", "validate so", "full cycle", "complete workflow"
@@ -541,8 +551,14 @@ def handle_raven_message(doc=None, method=None):
             
             # === PRIORITY: Payment-linked commands (ACC-SINV, ACC-PAY) - BEFORE validator ===
             # This must come BEFORE validator_keywords to route payment commands to payment_bot
+            # BUT exclude einvoice commands - they go to sales_order_bot for CFDI generation
             if re.search(r'ACC-SINV-|ACC-PAY-|sinv-|acc-sinv|acc-pay', q_lower, re.IGNORECASE):
-                bot_name = "payment_bot"
+                # Exclude einvoice commands - route to sales_order_bot instead
+                if not any(kw in q_lower for kw in ["einvoice", "e-factura", "cfdi", "generar factura"]):
+                    bot_name = "payment_bot"
+                else:
+                    # einvoice command - will be handled by sales_order_bot
+                    pass
             
             # === PRIORITY: Validator keywords BEFORE SO pattern ===
             # "diagnose SAL-QTN-00752" contains "00752" matching SO-\d+, so check validator first

@@ -1008,6 +1008,58 @@ class SalesOrderFollowupAgent:
             frappe.logger().error(f"Error creating SI for {so_name}: {traceback.format_exc()}")
             return {"success": False, "error": f"Error creating Sales Invoice: {str(e)}\n\nDetails: {traceback.format_exc()[:500]}"}
 
+    def generate_einvoice(self, si_name: str) -> Dict:
+        """Generate E-Invoice (CFDI) for a Sales Invoice via mexico_einvoice app"""
+        try:
+            # Resolve partial SI name to full name
+            from raven_ai_agent.utils.doc_resolver import resolve_document_name_safe
+            resolved_si = resolve_document_name_safe("Sales Invoice", si_name)
+            if resolved_si:
+                si_name = resolved_si
+
+            si = frappe.get_doc("Sales Invoice", si_name)
+
+            # Check if already has CFDI
+            if getattr(si, 'uuid', None):
+                return {
+                    "success": False,
+                    "error": f"⚠️ Sales Invoice already has CFDI.\n\nUUID: `{si.uuid}`\nStatus: {si.invoice_status}"
+                }
+
+            # Check docstatus - must be submitted to generate e-invoice
+            if si.docstatus != 1:
+                return {
+                    "success": False,
+                    "error": f"❌ Sales Invoice must be **Submitted** to generate CFDI.\n\nCurrent status: {si.docstatus}"
+                }
+
+            # Call mexico_einvoice's generate_einvoice function
+            from mexico_einvoice.utils import generate_einvoice
+            generate_einvoice(si, "before_submit")
+
+            # Reload to get updated values
+            si.reload()
+
+            return {
+                "success": True,
+                "si_name": si.name,
+                "link": self.make_link("Sales Invoice", si.name),
+                "message": (
+                    f"✅ E-Invoice (CFDI) generated: {self.make_link('Sales Invoice', si.name)}\n\n"
+                    f"  UUID: `{si.uuid}`\n"
+                    f"  Status: {si.invoice_status}\n"
+                    f"  SAT Certificate: {si.sat_cert_number}\n\n"
+                    f"💡 Next: Create Payment Entry with `@ai payment create {si.name}`"
+                )
+            }
+
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Sales Invoice '{si_name}' not found."}
+        except Exception as e:
+            import traceback
+            frappe.logger().error(f"Error generating CFDI for {si_name}: {traceback.format_exc()}")
+            return {"success": False, "error": f"Error generating E-Invoice: {str(e)}\n\nDetails: {traceback.format_exc()[:500]}"}
+
     # ========== ORIGINAL METHODS (preserved) ==========
 
     def get_so_status(self, so_name: str) -> Dict:
@@ -1399,6 +1451,19 @@ class SalesOrderFollowupAgent:
                 or "bill" in message_lower or "si" in message_lower) and so_name:
             from_dn = "from dn" in message_lower or "from delivery" in message_lower or "dn" not in message_lower
             result = self.create_sales_invoice(so_name, from_dn=from_dn)
+            return result.get("message", result.get("error", "Unknown error"))
+
+        # ---- E-INVOICE / CFDI GENERATION ----
+        if "einvoice" in message_lower:
+            # Extract Sales Invoice name from the message
+            si_pattern = r'(ACC-SINV-[\d\-]+|SINV-[\d\-]+)'
+            si_match = re.search(si_pattern, message, re.IGNORECASE)
+            si_name = si_match.group(1) if si_match else None
+            
+            if not si_name:
+                return "❌ Please specify a Sales Invoice. Example: `@ai einvoice ACC-SINV-2026-00011`"
+            
+            result = self.generate_einvoice(si_name)
             return result.get("message", result.get("error", "Unknown error"))
 
         # ---- PENDING ORDERS ----
