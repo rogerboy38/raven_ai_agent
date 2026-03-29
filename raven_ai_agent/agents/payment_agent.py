@@ -718,9 +718,9 @@ class PaymentAgent:
                 # Return helpful error with manual action link
                 return {"success": False, "error": preflight["error"]}
             
-            # Note: _ensure_customer_address_and_contact already saved the PE with party_address
-            # We should NOT reload the PE as it would discard those changes
-            # The pe object is already modified in memory
+            # CRITICAL: Reload PE after preflight save to avoid "document modified" error
+            # The preflight check saves the PE to DB, so we need fresh data for submission
+            pe.reload()
             
             # For safety, verify party_address is set before submit
             if not getattr(pe, 'party_address', None):
