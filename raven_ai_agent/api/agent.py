@@ -507,11 +507,7 @@ def handle_raven_message(doc=None, method=None):
             # This MUST come before pay_keywords to avoid false positives
             einvoice_keywords = ["einvoice", "e-factura", "cfdi", "factura electronica", "generar factura"]
             
-            # === PRIORITY: einvoice command - BEFORE payment keywords ===
-            if any(kw in q_lower for kw in einvoice_keywords):
-                # Route to the e-invoice functionality via mexico_einvoice app
-                # For now, we handle this in sales_order_bot as it generates CFDI
-                bot_name = "sales_order_bot"
+            # Define keyword lists that are needed below
             orch_keywords = [
                 "@workflow", "pipeline status", "run full cycle", "run pipeline",
                 "dry run", "validate so", "full cycle", "complete workflow"
@@ -526,72 +522,53 @@ def handle_raven_message(doc=None, method=None):
                 "verify so", "verify sales order", "sync so", "fix so",
                 "sync sales order", "fix sales order", "!sync", "!fix",
                 "audit bom", "check bom", "validate bom",
-                # Check data commands for quotations
                 "check data ", "check data SAL-", "check data QUOT-",
-                # Fix commands - route to task_validator for actual fixes
                 "fix", "fix ", "fix SAL-", "fix QUOT-", "fix SO-",
-                # Pipeline commands - route to task_validator
                 "pipeline", "pipeline SAL-QTN-", "pipeline SAL-ORD-", "pipeline QUOT-",
-                "pipeline "  # Must be last - catches "pipeline" alone
+                "pipeline "
             ]
-
-            # === SCANNER/DATA QUALITY commands - route to SkillRouter (before SO check) ===
             scanner_keywords = [
                 "scan", "pre-flight", "preflight",
                 "quality check", "check address", "check account", "check invoice",
                 "verificar"
             ]
             
-            # DEBUG: Log the query and matching
-            frappe.logger().info(f"[AI Agent] Query: '{q_lower}' | Scanner keywords: {scanner_keywords}")
-            
+            # Check scanner keywords
             if any(kw in q_lower for kw in scanner_keywords):
-                frappe.logger().info(f"[AI Agent] MATCHED scanner keywords, bot_name=None")
-                bot_name = None  # Will route to SkillRouter in else case below
-            
-            # === PRIORITY: Payment-linked commands (ACC-SINV, ACC-PAY) - BEFORE validator ===
-            # This must come BEFORE validator_keywords to route payment commands to payment_bot
-            # BUT exclude einvoice commands - they go to sales_order_bot for CFDI generation
-            if re.search(r'ACC-SINV-|ACC-PAY-|sinv-|acc-sinv|acc-pay', q_lower, re.IGNORECASE):
-                # Exclude einvoice commands - route to sales_order_bot instead
-                if not any(kw in q_lower for kw in ["einvoice", "e-factura", "cfdi", "generar factura"]):
-                    bot_name = "payment_bot"
-                else:
-                    # einvoice command - will be handled by sales_order_bot
-                    pass
-            
-            # === PRIORITY: Validator keywords BEFORE SO pattern ===
-            # "diagnose SAL-QTN-00752" contains "00752" matching SO-\d+, so check validator first
-            if any(kw in q_lower for kw in validator_keywords):
+                bot_name = None  # Will route to SkillRouter
+            # === PRIORITY: einvoice command - FIRST before payment keywords ===
+            elif any(kw in q_lower for kw in einvoice_keywords):
+                bot_name = "sales_order_bot"
+            # === PRIORITY: Payment-linked commands (ACC-SINV, ACC-PAY) ===
+            elif re.search(r'ACC-SINV-|ACC-PAY-|sinv-|acc-sinv|acc-pay', q_lower, re.IGNORECASE):
+                bot_name = "payment_bot"
+            # === PRIORITY: Validator keywords ===
+            elif any(kw in q_lower for kw in validator_keywords):
                 bot_name = "task_validator"
-            # === PRIORITY: SO-linked commands always go to sales agent ===
+            # === PRIORITY: SO-linked commands ===
             elif re.search(r'SO-\d+', q_lower, re.IGNORECASE) or re.search(r'from\s+SO', q_lower, re.IGNORECASE):
-                # Exclude actual payment commands
                 if not re.search(r'(?:reconcile|submit\s+ACC-PAY|ACC-PAY-\d+)', q_lower, re.IGNORECASE):
                     bot_name = "sales_order_follow_up"
-                else:
-                    # It's a payment command, continue to payment routing below
-                    pass
-            # === BATCH commands - route to BatchOrchestrator for generic batch processing ===
+            # === BATCH commands ===
             elif q_lower.strip().startswith("batch "):
                 bot_name = "batch_orchestrator"
-            # === Batch commands via keywords ===
             elif any(kw in q_lower for kw in batch_keywords):
                 bot_name = "batch_orchestrator"
             # === Legacy: Specific batch invoice/delivery commands go to sales agent ===
             elif "batch" in q_lower and ("invoice" in q_lower or "factura" in q_lower or "delivery" in q_lower):
                 bot_name = "sales_order_follow_up"
-            # Route by priority (more specific first) — skip if analytics already matched
+            # === Analytics fallback ===
             elif is_analytics:
                 pass  # Already set to sales_order_bot → RaymondLucyAgent
-            elif any(kw in q_lower for kw in validator_keywords):
-                bot_name = "task_validator"
-            elif any(kw in q_lower for kw in orch_keywords):
-                bot_name = "workflow_orchestrator"
+            # === Manufacturing keywords ===
             elif any(kw in q_lower for kw in mfg_keywords):
                 bot_name = "manufacturing_bot"
+            # === Payment keywords ===
             elif any(kw in q_lower for kw in pay_keywords):
                 bot_name = "payment_bot"
+            # === Workflow keywords ===
+            elif any(kw in q_lower for kw in orch_keywords):
+                bot_name = "workflow_orchestrator"
             else:
                 bot_name = "sales_order_bot"  # Default bot
 
