@@ -952,8 +952,8 @@ class PaymentAgent:
             if for_match:
                 si_name = for_match.group(1)
         
-        # BUG-88: Add "cancel" to the exclusion list so cancel command is not treated as create
-        if si_name and not any(kw in message_lower for kw in ["submit", "reconcile", "status", "estado", "cancel"]):
+        # BUG-88: Add "cancel" and "einvoice" to exclusion list so these commands work
+        if si_name and not any(kw in message_lower for kw in ["submit", "reconcile", "status", "estado", "cancel", "einvoice"]):
             amount_match = re.search(r'(?:amount|monto)\s+(\d+\.?\d*)', message, re.IGNORECASE)
             amount = float(amount_match.group(1)) if amount_match else None
             mode_match = re.search(r'(?:mode|modo)\s+(.+?)(?:\s|$)', message, re.IGNORECASE)
