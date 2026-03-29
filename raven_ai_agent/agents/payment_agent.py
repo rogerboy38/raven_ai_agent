@@ -261,6 +261,19 @@ class PaymentAgent:
                 pe.save(ignore_permissions=True)
                 frappe.db.commit()
             
+            # Also ensure SAT payment method is set correctly for export customers
+            customer_country = frappe.db.get_value("Customer", customer_name, "country") or ""
+            is_export = customer_country and customer_country != "Mexico"
+            
+            if is_export and not getattr(pe, 'mx_payment_mode', None):
+                pe.mx_payment_mode = "PPD"
+                fixed.append("mx_payment_mode -> PPD (export customer)")
+                if not getattr(pe, 'payment_form', None) or pe.payment_form == "03":
+                    pe.payment_form = "99"
+                    fixed.append("payment_form -> 99 (for PPD)")
+                pe.save(ignore_permissions=True)
+                frappe.db.commit()
+            
             return {"success": True, "fixed": fixed, "error": None}
             
         except frappe.DoesNotExistError:
@@ -270,6 +283,50 @@ class PaymentAgent:
             return {"success": True, "fixed": [], "error": None}
 
     # ========== PAYMENT ENTRY OPERATIONS (Step 8) ==========
+
+    def _copy_taxes_from_sales_order(self, pe: object, si: object) -> List[str]:
+        """Copy taxes from Sales Order to Payment Entry's Advance Taxes and Charges.
+        
+        This is critical for export customers to prevent submit errors due to
+        missing tax configuration in the advance allocation.
+        
+        Args:
+            pe: Payment Entry document
+            si: Sales Invoice document
+        
+        Returns:
+            List of strings describing what was copied
+        """
+        copied = []
+        try:
+            # Find Sales Order from SI
+            for item in (si.items or []):
+                so_name = getattr(item, 'sales_order', None)
+                if so_name:
+                    so = frappe.get_doc("Sales Order", so_name)
+                    
+                    # Check if SO has taxes
+                    if hasattr(so, 'taxes') and so.taxes:
+                        for tax in so.taxes:
+                            # Add to PE's taxes (Advance Taxes and Charges)
+                            pe.append('taxes', {
+                                'doctype': 'Payment Entry Taxes',
+                                'account_head': tax.account_head,
+                                'rate': tax.rate,
+                                'net_amount': tax.net_amount or 0,
+                                'amount': tax.amount or 0,
+                                'base_net_amount': tax.base_net_amount or 0,
+                                'base_amount': tax.base_amount or 0,
+                            })
+                            copied.append(f"Tax: {tax.account_head} @ {tax.rate}%")
+                    
+                    # Only process first SO with taxes
+                    if copied:
+                        break
+        except Exception as e:
+            frappe.log_error(f"Error copying taxes from SO: {e}", "PaymentAgent")
+        
+        return copied
 
     def create_payment_entry(self, si_name: str, amount: float = None,
                              mode_of_payment: str = None,
@@ -427,6 +484,26 @@ class PaymentAgent:
                     pe.payment_form = "04"  # Tarjeta
                 else:
                     pe.payment_form = "01"  # Default to Efectivo
+            
+            # CRITICAL: Set SAT Payment Method (mx_payment_mode) for export customers
+            # PPD (Pago en parcialidades diferido) for export/foreign customers
+            # PUE (Pago en una sola exhibición) for domestic paid-at-invoice
+            # Check if customer is foreign/export
+            customer_country = frappe.db.get_value("Customer", si.customer, "country") or ""
+            is_export = customer_country and customer_country != "Mexico"
+            
+            if is_export:
+                # Export customers typically pay later -> PPD
+                pe.mx_payment_mode = "PPD"
+                # For PPD, payment_form should be 99 (Por definir)
+                pe.payment_form = "99"
+            else:
+                # Domestic customers
+                pe.mx_payment_mode = pe.mx_payment_mode or "PUE"
+            
+            # Copy taxes from Sales Order to Payment Entry's "Advance Taxes and Charges" child table
+            # This is critical for foreign customers to prevent submit errors
+            self._copy_taxes_from_sales_order(pe, si)
 
             # --- Banxico FIX T-1 Exchange Rate for Payment Date ---
             fx_info = None
@@ -494,6 +571,13 @@ class PaymentAgent:
                         f"  ({exchange_gl_info['type_es']})"
                     )
 
+            # Include SAT payment info in message
+            sat_msg = ""
+            if getattr(pe, 'mx_payment_mode', None):
+                sat_msg = f"\n  SAT Payment Method: {pe.mx_payment_mode}"
+            if getattr(pe, 'payment_form', None):
+                sat_msg += f" (FormaPago: {pe.payment_form})"
+            
             return {
                 "success": True,
                 "pe_name": pe.name,
@@ -507,6 +591,7 @@ class PaymentAgent:
                     f"  Amount: {payment_amount} {company_currency}\n"
                     f"  Outstanding After: {flt(si.outstanding_amount) - payment_amount} {company_currency}\n"
                     f"  Status: Draft"
+                    f"{sat_msg}"
                     f"{fx_msg}\n\n"
                     f"💡 Review and submit: `@ai payment submit {pe.name}`"
                 )
