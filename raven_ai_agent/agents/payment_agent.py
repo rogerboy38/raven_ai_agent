@@ -263,11 +263,14 @@ class PaymentAgent:
             
             # Also ensure SAT payment method is set correctly for export customers
             # Get country from customer's primary address (not from Customer table directly)
+            customer_country = ""
             try:
                 addr_name = frappe.db.get_value("Customer", customer_name, "customer_primary_address")
-                customer_country = frappe.db.get_value("Address", addr_name, "country") if addr_name else ""
+                if addr_name:
+                    # Address might have country as 'country' field
+                    customer_country = frappe.db.get_value("Address", addr_name, "country") or ""
             except Exception:
-                customer_country = ""
+                pass  # Silently ignore - customer_country stays empty
             is_export = customer_country and customer_country != "Mexico"
             
             if is_export and not getattr(pe, 'mx_payment_mode', None):
@@ -495,11 +498,14 @@ class PaymentAgent:
             # PUE (Pago en una sola exhibición) for domestic paid-at-invoice
             # Check if customer is foreign/export
             # Get country from customer's primary address (not from Customer table directly)
+            customer_country = ""
             try:
                 addr_name = frappe.db.get_value("Customer", si.customer, "customer_primary_address")
-                customer_country = frappe.db.get_value("Address", addr_name, "country") if addr_name else ""
+                if addr_name:
+                    # Address might have country as 'country' field
+                    customer_country = frappe.db.get_value("Address", addr_name, "country") or ""
             except Exception:
-                customer_country = ""
+                pass  # Silently ignore - customer_country stays empty
             is_export = customer_country and customer_country != "Mexico"
             
             if is_export:
