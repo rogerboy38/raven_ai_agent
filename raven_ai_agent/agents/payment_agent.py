@@ -155,8 +155,20 @@ class PaymentAgent:
                 
                 return None, None
             
-            # Check if customer_primary_address is set
-            if not getattr(customer_doc, 'customer_primary_address', None):
+            # Check if customer_primary_address is set AND valid
+            customer_primary_addr = getattr(customer_doc, 'customer_primary_address', None)
+            addr_valid = False
+            if customer_primary_addr:
+                # Verify the address actually exists
+                try:
+                    addr_doc = frappe.get_doc("Address", customer_primary_addr)
+                    addr_valid = True
+                except:
+                    # Address doesn't exist or is invalid
+                    addr_valid = False
+            
+            # If not set or invalid, try to find from chain
+            if not customer_primary_addr or not addr_valid:
                 addr, source = find_address_from_chain()
                 if addr:
                     customer_doc.customer_primary_address = addr
@@ -164,8 +176,17 @@ class PaymentAgent:
                 else:
                     errors.append("Customer Primary Address not found in linked documents")
             
-            # Check if customer_primary_contact is set
-            if not getattr(customer_doc, 'customer_primary_contact', None):
+            # Check if customer_primary_contact is set AND valid
+            customer_primary_contact = getattr(customer_doc, 'customer_primary_contact', None)
+            contact_valid = False
+            if customer_primary_contact:
+                try:
+                    contact_doc = frappe.get_doc("Contact", customer_primary_contact)
+                    contact_valid = True
+                except:
+                    contact_valid = False
+            
+            if not customer_primary_contact or not contact_valid:
                 contact, source = find_contact_from_chain()
                 if contact:
                     customer_doc.customer_primary_contact = contact
@@ -197,6 +218,38 @@ class PaymentAgent:
                     f"Please set the address manually at: {customer_link}"
                 )
                 return {"success": False, "fixed": fixed, "error": error_msg}
+            
+            # CRITICAL: After saving, verify the customer_primary_address is valid and exists
+            # This is the key fix - the field might be set but the address might not exist
+            customer_doc.reload()  # Reload to get the latest from DB
+            final_addr = getattr(customer_doc, 'customer_primary_address', None)
+            if final_addr:
+                try:
+                    addr_doc = frappe.get_doc("Address", final_addr)
+                except:
+                    # Address doesn't exist - try to find a valid one from chain
+                    addr, source = find_address_from_chain()
+                    if addr:
+                        customer_doc.customer_primary_address = addr
+                        customer_doc.save(ignore_permissions=True)
+                        frappe.db.commit()
+                        fixed.append(f"customer_primary_address FIXED -> {addr} (from {source})")
+                        final_addr = addr
+            
+            # If still no valid address, try all customer addresses as last resort
+            if not final_addr or final_addr != getattr(customer_doc, 'customer_primary_address', None):
+                # Try to find ANY address linked to this customer
+                all_addrs = frappe.db.get_all("Dynamic Link", 
+                    filters={"link_doctype": "Customer", "link_name": customer_name},
+                    fields=["parent"]
+                )
+                if all_addrs:
+                    # Use the first available address
+                    final_addr = all_addrs[0].parent
+                    customer_doc.customer_primary_address = final_addr
+                    customer_doc.save(ignore_permissions=True)
+                    frappe.db.commit()
+                    fixed.append(f"customer_primary_address FALLBACK -> {final_addr}")
             
             # Fix postal code for export customers (CP = 00000)
             if getattr(customer_doc, 'customer_primary_address', None):
