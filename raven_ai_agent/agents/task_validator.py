@@ -1555,11 +1555,58 @@ The invoice **{sinv_name}** is now marked as **Paid**.
         # Summary + INTELLIGENT ACTIONS
         if not issues and not warnings:
             msg += "### ✅ All checks passed — pipeline is healthy.\n"
+            
+            # ═══════════════════════════════════════════════════════════════════
+            # ENHANCED: Generate actionable command hyperlinks for full workflow
+            # ═══════════════════════════════════════════════════════════════════
+            sis = pipeline.get("sales_invoices", [])
+            for si in sis:
+                outstanding = si.get("outstanding")
+                si_name = si.get("name", "")
+                
+                if outstanding and float(outstanding) > 0:
+                    # Generate comprehensive workflow commands
+                    msg += f"\n🎯 **Next Actions for {si_name}:**\n\n"
+                    
+                    # Step 1: Generate e-invoice for Sales Invoice
+                    msg += f"**Step 1:** Generate CFDI e-invoice for the Sales Invoice\n"
+                    msg += f"> `@ai einvoice {si_name}`\n\n"
+                    
+                    # Step 2: Create Payment Entry
+                    msg += f"**Step 2:** Create Payment Entry\n"
+                    msg += f"> `@ai payment create {si_name}`\n\n"
+                    
+                    # Step 3: Submit Payment Entry (we need to get the PE name)
+                    # Check for existing draft PE
+                    draft_pes = si.get("draft_payment_entries", [])
+                    submitted_pes = si.get("payment_entries", [])
+                    
+                    if draft_pes:
+                        pe_name = draft_pes[0].get("name", "")
+                        msg += f"**Step 3:** Submit Payment Entry\n"
+                        msg += f"> `@ai payment submit {pe_name}`\n\n"
+                        
+                        # Step 4: Generate Payment Complement
+                        msg += f"**Step 4:** Generate Payment Complement (CFDI for payment)\n"
+                        msg += f"> `@ai payment einvoice {pe_name}`\n\n"
+                    elif submitted_pes:
+                        pe_name = submitted_pes[0].get("name", "")
+                        msg += f"**Step 3:** Payment already submitted ({pe_name})\n\n"
+                        msg += f"**Step 4:** Generate Payment Complement\n"
+                        msg += f"> `@ai payment einvoice {pe_name}`\n\n"
+                    else:
+                        msg += f"**Step 3:** Run `@ai payment create {si_name}` first, then submit\n\n"
+                    
+                    msg += f"💡 **Copy each command above and paste in chat to execute**\n"
+                    msg += f"\n---\n"
         else:
             msg += f"---\n**Summary:** {len(issues)} issue(s), {len(warnings)} warning(s)\n\n"
             
             # Generate actionable recommendations
             msg += "### 🤖 Recommended Actions\n"
+            
+            # Build a list of pending actions for the full workflow
+            pending_actions = []
             
             # If SO exists with issues, offer to sync
             sos = pipeline.get("sales_orders", [])
@@ -1619,10 +1666,33 @@ The invoice **{sinv_name}** is now marked as **Paid**.
                     if draft_pes:
                         for pe in draft_pes:
                             msg += f"\n💰 Draft Payment Entry exists: {pe.get('name', '')} — submit it:\n"
-                            msg += f"👉 Run: `@ai payment submit {pe.get('name', '')}`\n"
+                            msg += f"> `@ai payment submit {pe.get('name', '')}`\n"
                     else:
                         msg += f"\n💰 Invoice has outstanding amount ({float(outstanding):,.2f} {currency}) — record payment:\n"
-                        msg += f"👉 Run: `@ai create payment for {si_name}`\n"
+                        msg += f"> `@ai payment create {si_name}`\n"
+
+            # ═══════════════════════════════════════════════════════════════════
+            # ENHANCED: Add actionable workflow commands even when there are issues
+            # ═══════════════════════════════════════════════════════════════════
+            # Check if there's a submitted Sales Invoice with outstanding amount
+            for si in pipeline.get("sales_invoices", []):
+                if si.get("docstatus") == 1 and si.get("outstanding") and float(si.get("outstanding", 0)) > 0:
+                    si_name = si.get("name", "")
+                    msg += f"\n---\n"
+                    msg += f"### 📋 Available Commands for {si_name}\n\n"
+                    msg += f"**Generate e-invoice:**\n"
+                    msg += f"> `@ai einvoice {si_name}`\n\n"
+                    msg += f"**Create payment:**\n"
+                    msg += f"> `@ai payment create {si_name}`\n\n"
+                    # Check for existing PE
+                    draft_pes = si.get("draft_payment_entries", [])
+                    if draft_pes:
+                        pe_name = draft_pes[0].get("name", "")
+                        msg += f"**Submit payment:**\n"
+                        msg += f"> `@ai payment submit {pe_name}`\n\n"
+                        msg += f"**Generate payment complement:**\n"
+                        msg += f"> `@ai payment einvoice {pe_name}`\n"
+                    break
 
         return {"success": True, "message": msg}
 
