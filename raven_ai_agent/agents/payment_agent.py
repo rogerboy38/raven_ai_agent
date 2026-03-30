@@ -311,17 +311,28 @@ class PaymentAgent:
                         fixed.append("pe.contact_person (via SQL)")
             
             # Multi-currency fix for Mexican companies
-            company_currency = frappe.db.get_value("Company", pe.company, "default_currency") or "MXN"
+            # FORCE currency to MXN - account "1310 - Debtors - AMB-W" can only accept MXN
+            company_currency = "MXN"  # Force to MXN for Mexican accounting
             
-            if not getattr(pe, 'paid_from_account_currency', None):
+            # Always ensure currency is MXN (force fix, not just check for None)
+            if getattr(pe, 'paid_from_account_currency', None) != company_currency:
                 pe.paid_from_account_currency = company_currency
                 fixed.append(f"paid_from_account_currency -> {company_currency}")
             
-            if not getattr(pe, 'paid_to_account_currency', None):
+            if getattr(pe, 'paid_to_account_currency', None) != company_currency:
                 pe.paid_to_account_currency = company_currency
                 fixed.append(f"paid_to_account_currency -> {company_currency}")
             
-            if 'paid_from_account_currency' in str(fixed) or 'paid_to_account_currency' in str(fixed):
+            # Also fix the target往来账户 currency if set differently
+            if getattr(pe, 'target_exchange_rate', None) and pe.target_exchange_rate != 1:
+                pe.target_exchange_rate = 1
+                fixed.append("target_exchange_rate -> 1")
+            
+            if getattr(pe, 'source_exchange_rate', None) and pe.source_exchange_rate != 1:
+                pe.source_exchange_rate = 1
+                fixed.append("source_exchange_rate -> 1")
+            
+            if fixed:
                 pe.save(ignore_permissions=True)
                 frappe.db.commit()
             
