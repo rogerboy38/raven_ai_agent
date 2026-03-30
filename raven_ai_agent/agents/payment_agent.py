@@ -551,24 +551,61 @@ class PaymentAgent:
             # - paid_from: Bank/Cash account (where money goes INTO)
             # - paid_to: Receivable account ( customer's debt to us)
             
-            # Get the customer's receivable account
+            # Get the customer's receivable account - PREFER MXN currency account
             if not pe.paid_from:
-                # This should be set by get_payment_entry but ensure it
-                party_account = frappe.db.get_value("Party Account", 
-                    {"parent": si.customer, "parenttype": "Customer", "company": si.company},
-                    "account")
-                if party_account:
-                    pe.paid_from = party_account
+                # First try to get MXN-specific receivable account
+                party_account = frappe.db.sql("""
+                    SELECT pa.account 
+                    FROM `tabParty Account` pa
+                    INNER JOIN `tabAccount` a ON a.name = pa.account
+                    WHERE pa.parent = %(customer)s 
+                    AND pa.parenttype = 'Customer' 
+                    AND pa.company = %(company)s
+                    AND a.account_currency = 'MXN'
+                    LIMIT 1
+                """, {"customer": si.customer, "company": si.company}, as_dict=1)
+                
+                if party_account and party_account[0]:
+                    pe.paid_from = party_account[0].account
                 else:
-                    # Fallback to company default receivable
-                    pe.paid_from = frappe.db.get_value("Company", si.company, "default_receivable_account")
+                    # Fallback: get any receivable account for this company that accepts MXN
+                    mx_account = frappe.db.sql("""
+                        SELECT name FROM `tabAccount` 
+                        WHERE company = %(company)s 
+                        AND account_type = 'Receivable'
+                        AND account_currency = 'MXN'
+                        LIMIT 1
+                    """, {"company": si.company})
+                    if mx_account and mx_account[0]:
+                        pe.paid_from = mx_account[0][0]
+                    else:
+                        # Last fallback to company default
+                        pe.paid_from = frappe.db.get_value("Company", si.company, "default_receivable_account")
             
-            #paid_to should be our bank/cash account
+            #paid_to should be our bank/cash account - ensure MXN currency
             if not pe.paid_to:
-                # Get default cash or bank account from company
-                cash_account = frappe.db.get_value("Company", si.company, "default_cash_account")
-                bank_account = frappe.db.get_value("Company", si.company, "default_bank_account")
-                pe.paid_to = cash_account or bank_account or "Cash - AMB-W"
+                # Get MXN-compatible cash or bank account from company
+                cash_account = frappe.db.sql("""
+                    SELECT name FROM `tabAccount` 
+                    WHERE company = %(company)s 
+                    AND account_type = 'Cash'
+                    AND account_currency = 'MXN'
+                    LIMIT 1
+                """, {"company": si.company})
+                if cash_account and cash_account[0]:
+                    pe.paid_to = cash_account[0][0]
+                else:
+                    bank_account = frappe.db.sql("""
+                        SELECT name FROM `tabAccount` 
+                        WHERE company = %(company)s 
+                        AND account_type = 'Bank'
+                        AND account_currency = 'MXN'
+                        LIMIT 1
+                    """, {"company": si.company})
+                    if bank_account and bank_account[0]:
+                        pe.paid_to = bank_account[0][0]
+                    else:
+                        pe.paid_to = "Cash - AMB-W"
             
             # Ensure we have a valid mode of payment with proper account
             if not pe.mode_of_payment:
