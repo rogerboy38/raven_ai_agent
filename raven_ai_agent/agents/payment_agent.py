@@ -311,8 +311,10 @@ class PaymentAgent:
                         fixed.append("pe.contact_person (via SQL)")
             
             # Multi-currency fix for Mexican companies
-            # FORCE currency to MXN - account "1310 - Debtors - AMB-W" can only accept MXN
-            company_currency = "MXN"  # Force to MXN for Mexican accounting
+            # For Mexican companies, payments are in MXN
+            # Exchange differences (USD invoice vs MXN payment) go to "Perdidas y Ganancias" - tipo cambio account
+            # ERPNext handles this automatically with its exchange gain/loss posting
+            company_currency = "MXN"
             
             # Always ensure currency is MXN (force fix, not just check for None)
             if getattr(pe, 'paid_from_account_currency', None) != company_currency:
@@ -323,7 +325,7 @@ class PaymentAgent:
                 pe.paid_to_account_currency = company_currency
                 fixed.append(f"paid_to_account_currency -> {company_currency}")
             
-            # Also fix the target往来账户 currency if set differently
+            # Fix exchange rates - set to 1 for MXN base currency
             if getattr(pe, 'target_exchange_rate', None) and pe.target_exchange_rate != 1:
                 pe.target_exchange_rate = 1
                 fixed.append("target_exchange_rate -> 1")
