@@ -841,7 +841,31 @@ Pre-flight validation for ERPNext documents before operations.
         - Check for invalid Territory/CRM Territory/Country Region values
         """
         try:
-            so = frappe.get_doc("Sales Order", so_name)
+            # Smart lookup: Try direct first, then fuzzy match by customer name
+            try:
+                so = frappe.get_doc("Sales Order", so_name)
+            except frappe.DoesNotExistError:
+                # Try fuzzy lookup - extract SO number and search
+                import re
+                so_match = re.search(r'(SO-\d+)', so_name, re.IGNORECASE)
+                if so_match:
+                    so_prefix = so_match.group(1)
+                    # Search for SOs with this prefix
+                    matching_sos = frappe.get_all(
+                        "Sales Order",
+                        filters={"name": ["like", f"{so_prefix}%"]},
+                        fields=["name", "customer", "docstatus"],
+                        order_by="creation desc",
+                        limit=5
+                    )
+                    if matching_sos and len(matching_sos) > 0:
+                        # Use the most recent one
+                        so = frappe.get_doc("Sales Order", matching_sos[0].name)
+                        frappe.logger().info(f"[DataQualityScanner] Found SO via fuzzy lookup: {matching_sos[0].name}")
+                    else:
+                        raise frappe.DoesNotExistError(f"Sales Order '{so_name}' not found")
+                else:
+                    raise frappe.DoesNotExistError(f"Sales Order '{so_name}' not found")
             
             issues = []
             customer = so.customer
