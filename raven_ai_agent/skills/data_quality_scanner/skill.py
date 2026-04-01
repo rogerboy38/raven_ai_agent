@@ -563,7 +563,8 @@ Pre-flight validation for ERPNext documents before operations.
         """Extract document name from query"""
         import re
         patterns = [
-            r'(SO-[\w-]+)',
+            r'(SO-\d+-[A-Za-z\s\-]+)',  # Match full SO name like SO-00759-ALBAAD DEUTSCHLAND G
+            r'(SO-[\w-]+)',  # Simple SO-XXXXX format
             r'(SAL-QTN-\d+-\d+)',
             r'(QUOT-\d+-\d+)',
             r'(ACC-SINV-\d+-\d+)',
