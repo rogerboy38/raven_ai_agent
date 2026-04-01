@@ -692,44 +692,6 @@ Pre-flight validation for ERPNext documents before operations.
             return {"success": False, "error": str(e)}
 
 
-    def _apply_fixes(self, doc_name, doc_type, scan_result):
-        import frappe
-        applied = []
-        errors = []
-        try:
-            doc = frappe.get_doc(doc_type, doc_name)
-            if doc.docstatus == 1:
-                return {"applied": [], "error": "Cannot fix " + doc_name + " - submitted doc."}
-            issues = scan_result.get("issues", []) if isinstance(scan_result, dict) else []
-            fixes_needed = [i for i in issues if i.get("auto_fix")]
-            if not fixes_needed:
-                return {"applied": [], "message": "No auto-fixable issues found"}
-            for issue in fixes_needed:
-                field = issue.get("field")
-                fix_value = issue.get("auto_fix_value", "")
-                if not field:
-                    continue
-                try:
-                    if hasattr(doc, field):
-                        setattr(doc, field, fix_value)
-                        applied.append(f"Set {field} = {fix_value}")
-                    else:
-                        errors.append(f"Field {field} not found on {doc_type}")
-                except Exception as e:
-                    errors.append(f"Error fixing {field}: {str(e)}")
-            if applied:
-                try:
-                    doc.flags.ignore_validate = True
-                    doc.save()
-                    frappe.db.commit()
-                except Exception as save_err:
-                    frappe.db.rollback()
-                    errors.append(f"Save error: {str(save_err)}")
-            return {"applied": applied, "errors": errors, "message": f"Applied {len(applied)} fixes" if applied else "No fixes applied"}
-        except Exception as e:
-            frappe.logger().error(f"[DataQualityScanner] _apply_fixes error: {str(e)}")
-            return {"applied": [], "error": str(e)}
-
     def _store_validation_pattern(self, *args, **kwargs):
         """Store validation pattern"""
         return True
@@ -765,6 +727,59 @@ Pre-flight validation for ERPNext documents before operations.
                 fix_value = issue.get("auto_fix_value", "")
                 
                 if not field:
+                    continue
+                
+                # BUG 95: Handle auto-fix for addresses
+                if fix_value == "auto":
+                    if field == "customer_address":
+                        # Auto-find customer address
+                        customer = doc.customer
+                        if customer:
+                            address = frappe.db.sql("""
+                                SELECT a.name FROM `tabAddress` a
+                                INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                                WHERE dl.link_doctype = 'Customer' 
+                                AND dl.link_name = %(customer)s
+                                AND a.address_type = 'Billing'
+                                AND (a.disabled IS NULL OR a.disabled = 0)
+                                LIMIT 1
+                            """, {"customer": customer})
+                            if address and address[0]:
+                                doc.customer_address = address[0][0]
+                                applied.append(f"Auto-set customer_address: {address[0][0]}")
+                            else:
+                                errors.append(f"No Billing address found for customer '{customer}'")
+                    elif field == "shipping_address_name":
+                        # Auto-find shipping address
+                        customer = doc.customer
+                        if customer:
+                            address = frappe.db.sql("""
+                                SELECT a.name FROM `tabAddress` a
+                                INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                                WHERE dl.link_doctype = 'Customer' 
+                                AND dl.link_name = %(customer)s
+                                AND a.is_shipping_address = 1
+                                AND (a.disabled IS NULL OR a.disabled = 0)
+                                LIMIT 1
+                            """, {"customer": customer})
+                            if address and address[0]:
+                                doc.shipping_address_name = address[0][0]
+                                applied.append(f"Auto-set shipping_address_name: {address[0][0]}")
+                            else:
+                                # Fallback: try to get default address
+                                fallback = frappe.db.sql("""
+                                    SELECT a.name FROM `tabAddress` a
+                                    INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                                    WHERE dl.link_doctype = 'Customer' 
+                                    AND dl.link_name = %(customer)s
+                                    AND (a.disabled IS NULL OR a.disabled = 0)
+                                    LIMIT 1
+                                """, {"customer": customer})
+                                if fallback and fallback[0]:
+                                    doc.shipping_address_name = fallback[0][0]
+                                    applied.append(f"Auto-set shipping_address_name (fallback): {fallback[0][0]}")
+                                else:
+                                    errors.append(f"No address found for customer '{customer}'")
                     continue
                 
                 try:
@@ -811,6 +826,318 @@ Pre-flight validation for ERPNext documents before operations.
                 "applied": [],
                 "error": str(e)
             }
+
+    def scan_sales_order(self, so_name: str) -> Dict:
+        """
+        Scan a Sales Order for data quality issues.
+        Enhanced with BUG 95 learnings: Address validation for shipping/billing.
+        
+        BUG 95 Lessons Learned:
+        - Check if customer has addresses linked via Dynamic Link
+        - Check if address is marked as is_shipping_address = 1
+        - Check if customer has customer_primary_address set
+        - Check for duplicate addresses (billing-billing-billing pattern from migration)
+        - Check for invalid Territory/CRM Territory/Country Region values
+        """
+        try:
+            so = frappe.get_doc("Sales Order", so_name)
+            
+            issues = []
+            customer = so.customer
+            
+            # ═══════════════════════════════════════════════════════════════════════
+            # BUG 95: Enhanced Address Validation
+            # ═══════════════════════════════════════════════════════════════════════
+            
+            # 1. Check if customer has any address linked
+            addresses = frappe.db.sql("""
+                SELECT a.name, a.address_type, a.is_shipping_address, a.is_primary_address, a.disabled
+                FROM `tabAddress` a
+                INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                WHERE dl.link_doctype = 'Customer' 
+                AND dl.link_name = %(customer)s
+                AND (a.disabled IS NULL OR a.disabled = 0)
+            """, {"customer": customer})
+            
+            if not addresses or len(addresses) == 0:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "customer_address",
+                    "message": f"Customer '{customer}' has no linked addresses",
+                    "auto_fix": False,
+                    "auto_fix_value": None
+                })
+            
+            # 2. Check for duplicate addresses pattern (billing-billing-billing)
+            # This is the signature pattern from migration issues
+            billing_addresses = [a for a in addresses if a[1] == "Billing"] if addresses else []
+            shipping_addresses = [a for a in addresses if a[2] == 1] if addresses else []
+            
+            if len(billing_addresses) > 1:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "customer_address",
+                    "message": f"Customer '{customer}' has {len(billing_addresses)} duplicate Billing addresses (migration issue)",
+                    "auto_fix": False,
+                    "auto_fix_value": None,
+                    "details": "Multiple 'Billing' addresses found - likely from migration. Should be merged.",
+                    "duplicate_count": len(billing_addresses)
+                })
+            
+            # 3. Check if customer has shipping address
+            if addresses and len(shipping_addresses) == 0:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "shipping_address",
+                    "message": f"Customer '{customer}' has no address marked as Shipping",
+                    "auto_fix": False,
+                    "auto_fix_value": None
+                })
+            
+            # 4. Check Sales Order address fields
+            if not so.customer_address:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "customer_address",
+                    "message": f"Sales Order has no customer_address (billing)",
+                    "auto_fix": True,
+                    "auto_fix_value": "auto"
+                })
+            elif addresses:
+                # Verify the linked address exists and is valid
+                valid_addresses = [a[0] for a in addresses]
+                if so.customer_address not in valid_addresses:
+                    issues.append({
+                        "severity": "HIGH",
+                        "field": "customer_address",
+                        "message": f"Customer address '{so.customer_address}' is not linked to customer",
+                        "auto_fix": True,
+                        "auto_fix_value": "auto"
+                    })
+            
+            if not so.shipping_address_name:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "shipping_address_name",
+                    "message": f"Sales Order has no shipping_address_name",
+                    "auto_fix": True,
+                    "auto_fix_value": "auto"
+                })
+            
+            # 5. Check Customer record for customer_primary_address field
+            customer_doc = frappe.get_doc("Customer", customer)
+            if hasattr(customer_doc, 'customer_primary_address'):
+                if not customer_doc.customer_primary_address:
+                    issues.append({
+                        "severity": "MEDIUM",
+                        "field": "customer_primary_address",
+                        "message": f"Customer '{customer}' has no customer_primary_address set",
+                        "auto_fix": False,
+                        "auto_fix_value": None
+                    })
+            
+            # ═══════════════════════════════════════════════════════════════════════
+            # Territory/CRM Territory Validation (from BUG 95 learnings)
+            # ═══════════════════════════════════════════════════════════════════════
+            
+            # Check standard Territory
+            if so.customer:
+                customer_territory = frappe.db.get_value("Customer", customer, "territory")
+                if customer_territory:
+                    # Verify territory exists
+                    if not frappe.db.exists("Territory", customer_territory):
+                        issues.append({
+                            "severity": "HIGH",
+                            "field": "territory",
+                            "message": f"Customer has invalid Territory: '{customer_territory}'",
+                            "auto_fix": False,
+                            "auto_fix_value": None
+                        })
+                
+                # Check custom CRM Territory field
+                if hasattr(customer_doc, 'custom_crm_territory'):
+                    crm_territory = customer_doc.custom_crm_territory
+                    if crm_territory:
+                        if not frappe.db.exists("CRM Territory", crm_territory):
+                            issues.append({
+                                "severity": "HIGH",
+                                "field": "custom_crm_territory",
+                                "message": f"Customer has invalid CRM Territory: '{crm_territory}'",
+                                "auto_fix": False,
+                                "auto_fix_value": None
+                            })
+                
+                # Check custom Country Region field
+                if hasattr(customer_doc, 'custom_crm_countryregion'):
+                    country_region = customer_doc.custom_crm_countryregion
+                    if country_region:
+                        # Verify it exists in Country doctype
+                        if not frappe.db.exists("Country", country_region):
+                            issues.append({
+                                "severity": "HIGH",
+                                "field": "custom_crm_countryregion",
+                                "message": f"Customer has invalid Country/Region: '{country_region}' (should be a Country)",
+                                "auto_fix": False,
+                                "auto_fix_value": None
+                            })
+            
+            # ═══════════════════════════════════════════════════════════════════════
+            # Standard validation (kept from original)
+            # ═══════════════════════════════════════════════════════════════════════
+            
+            if not customer:
+                issues.append({
+                    "severity": "CRITICAL",
+                    "field": "customer",
+                    "message": "Sales Order has no customer assigned"
+                })
+            
+            if not so.items or len(so.items) == 0:
+                issues.append({
+                    "severity": "CRITICAL",
+                    "field": "items",
+                    "message": "Sales Order has no items"
+                })
+            
+            company_currency = frappe.db.get_value("Company", so.company, "default_currency")
+            if so.currency != company_currency:
+                issues.append({
+                    "severity": "INFO",
+                    "field": "currency",
+                    "message": f"Multi-currency: SO in '{so.currency}', company in {company_currency}"
+                })
+            
+            # Check for party accounts
+            if customer:
+                party_account = frappe.db.get_value(
+                    "Party Account",
+                    {"party_type": "Customer", "party": customer, "company": so.company},
+                    "account"
+                )
+                if not party_account:
+                    issues.append({
+                        "severity": "HIGH",
+                        "field": "party_account",
+                        "message": f"Customer '{customer}' has no Party Account for company '{so.company}'",
+                        "auto_fix": False,
+                        "auto_fix_value": None
+                    })
+            
+            return {
+                "success": True,
+                "document_type": "Sales Order",
+                "document_name": so.name,
+                "customer": customer,
+                "date": str(so.transaction_date) if so.transaction_date else None,
+                "items_count": len(so.items),
+                "total": so.total or 0,
+                "currency": so.currency,
+                "status": so.status,
+                "issues": issues,
+                "issue_counts": {
+                    "CRITICAL": len([i for i in issues if i["severity"] == "CRITICAL"]),
+                    "HIGH": len([i for i in issues if i["severity"] == "HIGH"]),
+                    "MEDIUM": len([i for i in issues if i["severity"] == "MEDIUM"]),
+                    "INFO": len([i for i in issues if i["severity"] == "INFO"])
+                },
+                "address_info": {
+                    "total_addresses": len(addresses) if addresses else 0,
+                    "billing_count": len(billing_addresses) if addresses else 0,
+                    "shipping_count": len(shipping_addresses) if addresses else 0
+                }
+            }
+            
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Sales Order '{so_name}' not found"}
+        except Exception as e:
+            frappe.logger().error(f"[DataQualityScanner] scan_sales_order error: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    def scan_sales_invoice(self, sinv_name: str) -> Dict:
+        """Scan a Sales Invoice for data quality issues"""
+        try:
+            sinv = frappe.get_doc("Sales Invoice", sinv_name)
+            
+            issues = []
+            customer = sinv.customer
+            
+            # Address validation (same as SO)
+            addresses = frappe.db.sql("""
+                SELECT a.name, a.address_type, a.is_shipping_address, a.is_primary_address
+                FROM `tabAddress` a
+                INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                WHERE dl.link_doctype = 'Customer' 
+                AND dl.link_name = %(customer)s
+                AND (a.disabled IS NULL OR a.disabled = 0)
+            """, {"customer": customer})
+            
+            if not addresses or len(addresses) == 0:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "customer_address",
+                    "message": f"Customer '{customer}' has no linked addresses"
+                })
+            
+            # Check shipping address
+            shipping_addresses = [a for a in addresses if a[2] == 1] if addresses else []
+            if addresses and len(shipping_addresses) == 0:
+                issues.append({
+                    "severity": "MEDIUM",
+                    "field": "shipping_address",
+                    "message": f"Customer '{customer}' has no address marked as Shipping"
+                })
+            
+            # Check fields
+            if not sinv.customer_address:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "customer_address",
+                    "message": "Sales Invoice has no customer_address"
+                })
+            
+            if not sinv.shipping_address_name:
+                issues.append({
+                    "severity": "HIGH",
+                    "field": "shipping_address_name",
+                    "message": "Sales Invoice has no shipping_address_name"
+                })
+            
+            # Standard checks
+            if not customer:
+                issues.append({
+                    "severity": "CRITICAL",
+                    "field": "customer",
+                    "message": "Sales Invoice has no customer assigned"
+                })
+            
+            if not sinv.items or len(sinv.items) == 0:
+                issues.append({
+                    "severity": "CRITICAL",
+                    "field": "items",
+                    "message": "Sales Invoice has no items"
+                })
+            
+            return {
+                "success": True,
+                "document_type": "Sales Invoice",
+                "document_name": sinv.name,
+                "customer": customer,
+                "date": str(sinv.posting_date) if sinv.posting_date else None,
+                "items_count": len(sinv.items),
+                "total": sinv.total or 0,
+                "currency": sinv.currency,
+                "status": sinv.status,
+                "issues": issues,
+                "issue_counts": {
+                    "CRITICAL": len([i for i in issues if i["severity"] == "CRITICAL"]),
+                    "HIGH": len([i for i in issues if i["severity"] == "HIGH"]),
+                    "MEDIUM": len([i for i in issues if i["severity"] == "MEDIUM"]),
+                    "INFO": len([i for i in issues if i["severity"] == "INFO"])
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _format_scan_result(self, *args, **kwargs):
         """Format scan result"""

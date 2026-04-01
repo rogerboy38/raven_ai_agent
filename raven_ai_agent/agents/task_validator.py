@@ -395,6 +395,53 @@ class TaskValidator:
             if not item.qty or item.qty == 0:
                 issues.append(f"Row {idx}: Item '{item.item_code}' has qty = 0")
 
+        # ── BUG 95: Address Validation for Customer ──
+        # This validates address issues that cause shipping address to be empty on documents
+        customer_name = qtn.party_name
+        if customer_name:
+            # 1. Check if customer has any addresses linked via Dynamic Link
+            addresses = frappe.db.sql("""
+                SELECT a.name, a.address_type, a.is_shipping_address, a.is_primary_address, a.disabled
+                FROM `tabAddress` a
+                INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                WHERE dl.link_doctype = 'Customer' 
+                AND dl.link_name = %(customer)s
+                AND (a.disabled IS NULL OR a.disabled = 0)
+            """, {"customer": customer_name})
+            
+            if not addresses or len(addresses) == 0:
+                issues.append(f"Customer '{customer_name}' has no linked addresses")
+            else:
+                # 2. Check for duplicate addresses (billing-billing-billing pattern from migration)
+                billing_addresses = [a for a in addresses if a[1] == "Billing"]
+                if len(billing_addresses) > 1:
+                    issues.append(f"Customer '{customer_name}' has {len(billing_addresses)} duplicate Billing addresses (migration issue - should be merged)")
+                
+                # 3. Check if customer has shipping address
+                shipping_addresses = [a for a in addresses if a[2] == 1]
+                if len(shipping_addresses) == 0:
+                    warnings.append(f"Customer '{customer_name}' has no address marked as Shipping")
+                
+                # 4. Check Customer record for customer_primary_address field
+                try:
+                    customer_doc = frappe.get_doc("Customer", customer_name)
+                    if hasattr(customer_doc, 'customer_primary_address'):
+                        if not customer_doc.customer_primary_address:
+                            warnings.append(f"Customer '{customer_name}' has no customer_primary_address set")
+                    
+                    # 5. Check for invalid Territory/CRM Territory values
+                    if hasattr(customer_doc, 'custom_crm_territory'):
+                        crm_territory = customer_doc.custom_crm_territory
+                        if crm_territory and not frappe.db.exists("CRM Territory", crm_territory):
+                            issues.append(f"Customer has invalid CRM Territory: '{crm_territory}'")
+                    
+                    if hasattr(customer_doc, 'custom_crm_countryregion'):
+                        country_region = customer_doc.custom_crm_countryregion
+                        if country_region and not frappe.db.exists("Country", country_region):
+                            issues.append(f"Customer has invalid Country/Region: '{country_region}' (should be a Country)")
+                except Exception:
+                    pass  # Customer doc might not exist
+
         # ── Step 2: Find linked Sales Orders ──
         linked_sos = frappe.get_all(
             "Sales Order Item",
