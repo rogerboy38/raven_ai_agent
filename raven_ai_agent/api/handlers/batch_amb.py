@@ -103,6 +103,56 @@ class BatchAMBMixin:
                 return self._handle_batch_pipeline(batch_name, new_status)
             return {"success": False, "error": "Usage: @ai batch pipeline <batch_name> <new_status>"}
         
+        # ==================== BATCH ADVANCE ====================
+        # @ai batch advance <batch_name>
+        if query_lower.startswith("batch advance"):
+            match = re.search(r'batch advance\s+(\S+)', query, re.IGNORECASE)
+            if match:
+                batch_name = match.group(1)
+                return self._handle_batch_advance(batch_name)
+            return {"success": False, "error": "Usage: @ai batch advance <batch_name>"}
+        
+        # ==================== BATCH INSPECT ====================
+        # @ai batch inspect <batch_name>
+        if query_lower.startswith("batch inspect"):
+            match = re.search(r'batch inspect\s+(\S+)', query, re.IGNORECASE)
+            if match:
+                batch_name = match.group(1)
+                return self._handle_batch_inspect(batch_name)
+            return {"success": False, "error": "Usage: @ai batch inspect <batch_name>"}
+        
+        # ==================== BATCH COA ====================
+        # @ai batch coa <batch_name>
+        if query_lower.startswith("batch coa"):
+            match = re.search(r'batch coa\s+(\S+)', query, re.IGNORECASE)
+            if match:
+                batch_name = match.group(1)
+                return self._handle_batch_coa(batch_name)
+            return {"success": False, "error": "Usage: @ai batch coa <batch_name>"}
+        
+        # ==================== BATCH DELIVER ====================
+        # @ai batch deliver <batch_name>
+        if query_lower.startswith("batch deliver"):
+            match = re.search(r'batch deliver\s+(\S+)', query, re.IGNORECASE)
+            if match:
+                batch_name = match.group(1)
+                return self._handle_batch_deliver(batch_name)
+            return {"success": False, "error": "Usage: @ai batch deliver <batch_name>"}
+        
+        # ==================== BATCH BOM ====================
+        # @ai batch bom <batch_name>
+        if query_lower.startswith("batch bom"):
+            match = re.search(r'batch bom\s+(\S+)', query, re.IGNORECASE)
+            if match:
+                batch_name = match.group(1)
+                return self._handle_batch_bom(batch_name)
+            return {"success": False, "error": "Usage: @ai batch bom <batch_name>"}
+        
+        # ==================== BATCH DASHBOARD ====================
+        # @ai batch dashboard
+        if query_lower.strip() == "batch dashboard":
+            return self._handle_batch_dashboard()
+        
         return None
 
     def _handle_batch_help(self) -> Dict:
@@ -496,3 +546,241 @@ class BatchAMBMixin:
         except Exception as e:
             frappe.db.rollback()
             return {"success": False, "error": f"Error updating status: {str(e)}"}
+
+    def _handle_batch_advance(self, batch_name: str) -> Dict:
+        """Advance pipeline status to next stage"""
+        try:
+            batch = frappe.get_doc("Batch AMB", batch_name)
+            
+            # Import and call the controller method
+            from amb_w_tds.amb_w_tds.doctype.batch_amb.batch_amb import BatchAMB
+            controller = BatchAMB(batch)
+            result = controller.advance_pipeline_status()
+            
+            if result.get("status") == "success":
+                new_status = result.get("new_status")
+                return {
+                    "success": True,
+                    "message": f"✅ **Pipeline Advanced**\n\n"
+                               f"**Batch:** {batch_name}\n"
+                               f"**New Status:** {new_status}"
+                }
+            else:
+                return {"success": False, "error": result.get("message", "Could not advance pipeline")}
+        except ImportError:
+            return {"success": False, "error": "amb_w_tds app not installed"}
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Batch '{batch_name}' not found"}
+        except Exception as e:
+            frappe.db.rollback()
+            return {"success": False, "error": f"Error advancing pipeline: {str(e)}"}
+
+    def _handle_batch_inspect(self, batch_name: str) -> Dict:
+        """Create or view quality inspection for a batch"""
+        try:
+            batch = frappe.get_doc("Batch AMB", batch_name)
+            
+            # Check if QI already exists
+            existing_qi = frappe.get_all(
+                "Quality Inspection",
+                filters={"custom_batch_amb": batch_name},
+                fields=["name", "status", "inspection_type"],
+                limit=1
+            )
+            
+            if existing_qi:
+                site_name = frappe.local.site
+                qi_link = f"https://{site_name}/app/quality-inspection/{existing_qi[0].name}"
+                return {
+                    "success": True,
+                    "message": f"📋 **Quality Inspection Exists**\n\n"
+                               f"**Name:** [{existing_qi[0].name}]({qi_link})\n"
+                               f"**Status:** {existing_qi[0].status}\n"
+                               f"**Type:** {existing_qi[0].inspection_type or 'N/A'}"
+                }
+            
+            # Create new QI
+            qi = frappe.new_doc("Quality Inspection")
+            qi.inspection_type = "Incoming"
+            qi.custom_batch_amb = batch_name
+            qi.item = batch.item_to_manufacture
+            qi.sample_size = 1
+            qi.insert(ignore_permissions=True)
+            frappe.db.commit()
+            
+            site_name = frappe.local.site
+            qi_link = f"https://{site_name}/app/quality-inspection/{qi.name}"
+            
+            return {
+                "success": True,
+                "message": f"✅ **Quality Inspection Created**\n\n"
+                           f"**Name:** [{qi.name}]({qi_link})\n"
+                           f"**Batch:** {batch_name}"
+            }
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Batch '{batch_name}' not found"}
+        except Exception as e:
+            frappe.db.rollback()
+            return {"success": False, "error": f"Error creating inspection: {str(e)}"}
+
+    def _handle_batch_coa(self, batch_name: str) -> Dict:
+        """View or create Certificate of Analysis for a batch"""
+        try:
+            batch = frappe.get_doc("Batch AMB", batch_name)
+            
+            # Check if COA already exists
+            existing_coa = frappe.get_all(
+                "COA AMB",
+                filters={"batch_amb": batch_name},
+                fields=["name", "status", "certificate_date"],
+                limit=1
+            )
+            
+            site_name = frappe.local.site
+            
+            if existing_coa:
+                coa_link = f"https://{site_name}/app/coa-amb/{existing_coa[0].name}"
+                return {
+                    "success": True,
+                    "message": f"📄 **COA Exists**\n\n"
+                               f"**Name:** [{existing_coa[0].name}]({coa_link})\n"
+                               f"**Status:** {existing_coa[0].status}\n"
+                               f"**Date:** {existing_coa[0].certificate_date or 'N/A'}"
+                }
+            
+            # Check pipeline status allows COA
+            if batch.pipeline_status not in ["QI Passed", "COA Ready"]:
+                return {
+                    "success": False,
+                    "error": f"Cannot create COA. Batch status must be 'QI Passed' or 'COA Ready', got '{batch.pipeline_status}'"
+                }
+            
+            # Create new COA
+            coa = frappe.new_doc("COA AMB")
+            coa.batch_amb = batch_name
+            coa.item = batch.item_to_manufacture
+            coa.batch_id = batch.custom_golden_number
+            coa.insert(ignore_permissions=True)
+            frappe.db.commit()
+            
+            coa_link = f"https://{site_name}/app/coa-amb/{coa.name}"
+            
+            return {
+                "success": True,
+                "message": f"✅ **COA Created**\n\n"
+                           f"**Name:** [{coa.name}]({coa_link})\n"
+                           f"**Batch:** {batch_name}"
+            }
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Batch '{batch_name}' not found"}
+        except Exception as e:
+            frappe.db.rollback()
+            return {"success": False, "error": f"Error creating COA: {str(e)}"}
+
+    def _handle_batch_deliver(self, batch_name: str) -> Dict:
+        """Create delivery note for a batch"""
+        try:
+            batch = frappe.get_doc("Batch AMB", batch_name)
+            
+            # Check pipeline status
+            if batch.pipeline_status not in ["Ready for Delivery", "COA Ready"]:
+                return {
+                    "success": False,
+                    "error": f"Cannot deliver. Batch status must be 'Ready for Delivery' or 'COA Ready', got '{batch.pipeline_status}'"
+                }
+            
+            # Get child containers (Level 3)
+            child_batches = frappe.get_all(
+                "Batch AMB",
+                filters={"parent_batch_amb": batch_name, "custom_batch_level": "3"},
+                fields=["name"]
+            )
+            
+            if not child_batches:
+                return {"success": False, "error": "No Level 3 containers found under this batch"}
+            
+            # Create Delivery Note
+            dn = frappe.new_doc("Delivery Note")
+            dn.custom_batch_amb = batch_name
+            dn.company = batch.company
+            
+            # Add items from child batches
+            for child in child_batches:
+                child_batch = frappe.get_doc("Batch AMB", child.name)
+                total_qty = sum((b.net_weight or 0) for b in child_batch.container_barrels)
+                
+                if total_qty > 0:
+                    dn.append("items", {
+                        "item_code": child_batch.item_to_manufacture,
+                        "qty": total_qty,
+                        "custom_batch_amb": child.name,
+                        "uom": "Kg"
+                    })
+            
+            dn.insert(ignore_permissions=True)
+            frappe.db.commit()
+            
+            site_name = frappe.local.site
+            dn_link = f"https://{site_name}/app/delivery-note/{dn.name}"
+            
+            return {
+                "success": True,
+                "message": f"✅ **Delivery Note Created**\n\n"
+                           f"**Name:** [{dn.name}]({dn_link})\n"
+                           f"**Batch:** {batch_name}\n"
+                           f"**Items:** {len(dn.items)}"
+            }
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Batch '{batch_name}' not found"}
+        except Exception as e:
+            frappe.db.rollback()
+            return {"success": False, "error": f"Error creating delivery: {str(e)}"}
+
+    def _handle_batch_bom(self, batch_name: str) -> Dict:
+        """Get BOM context for a batch's item"""
+        try:
+            batch = frappe.get_doc("Batch AMB", batch_name)
+            
+            # Get BOM context from controller
+            from amb_w_tds.amb_w_tds.doctype.batch_amb.batch_amb import BatchAMB
+            controller = BatchAMB(batch)
+            bom_context = controller.get_bom_context()
+            
+            if bom_context.get("status") == "success":
+                data = bom_context.get("data", {})
+                
+                info = f"📦 **BOM Context**\n\n"
+                info += f"**Batch:** {batch_name}\n"
+                info += f"**Item:** {batch.item_to_manufacture}\n\n"
+                
+                if data.get("bom"):
+                    info += f"**BOM:** {data['bom']}\n"
+                    info += f"**Total Cost:** {data.get('total_cost', 0)}\n"
+                    info += f"**Operations:** {data.get('operation_count', 0)}\n"
+                else:
+                    info += "_No BOM found for this item_"
+                
+                return {"success": True, "message": info}
+            else:
+                return {"success": False, "error": bom_context.get("message", "Could not get BOM context")}
+        except ImportError:
+            return {"success": False, "error": "amb_w_tds app not installed"}
+        except frappe.DoesNotExistError:
+            return {"success": False, "error": f"Batch '{batch_name}' not found"}
+        except Exception as e:
+            return {"success": False, "error": f"Error: {str(e)}"}
+
+    def _handle_batch_dashboard(self) -> Dict:
+        """Open manufacturing dashboard"""
+        try:
+            site_name = frappe.local.site
+            dashboard_url = f"https://{site_name}/app/page/amb-manufacturing-dashboard"
+            
+            return {
+                "success": True,
+                "message": f"📊 **Manufacturing Dashboard**\n\n"
+                           f"[Open Dashboard]({dashboard_url})\n\n"
+                           f"View real-time batch status, pipeline metrics, and production analytics."
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Error: {str(e)}"}
