@@ -297,4 +297,9 @@ class CommandRouterMixin:
         if result is not None:
             return result
 
+        # Phase 12.3: Batch AMB Commands
+        result = self._handle_batch_commands(query, query_lower, is_confirm=is_confirm)
+        if result is not None:
+            return result
+
         return None

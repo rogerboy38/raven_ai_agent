@@ -9,6 +9,7 @@ from .sales import SalesMixin
 from .quotation import QuotationMixin
 from .quality_management import QualityManagementMixin
 from .analytics import AnalyticsMixin
+from .batch_amb import BatchAMBMixin
 
 __all__ = [
     "ManufacturingMixin",
@@ -18,4 +19,5 @@ __all__ = [
     "QuotationMixin",
     "QualityManagementMixin",
     "AnalyticsMixin",
+    "BatchAMBMixin",
 ]

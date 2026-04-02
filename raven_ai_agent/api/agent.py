@@ -44,6 +44,7 @@ from raven_ai_agent.api.handlers import (
     QuotationMixin,
     QualityManagementMixin,
     AnalyticsMixin,
+    BatchAMBMixin,
 )
 
 SYSTEM_PROMPT = """
@@ -131,6 +132,7 @@ class RaymondLucyAgent(
     QuotationMixin,
     QualityManagementMixin,
     AnalyticsMixin,
+    BatchAMBMixin,
 ):
     """
     Raymond-Lucy AI Agent - ERPNext AI Assistant
