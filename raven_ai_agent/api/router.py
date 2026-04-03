@@ -59,6 +59,7 @@ def _detect_ai_intent(query: str) -> str:
 
     # === PRIORITY: Data Quality Scanner / Diagnosis commands ===
     # These commands should ALWAYS go to the skills system, NOT sales_order_follow_up
+    # FIX BUG95: Extended patterns to handle SO names with customer suffix (e.g., SO-00759-ALBAAD...)
     diagnosis_commands = [
         r'^scan\s+SO-',          # @ai scan SO-00752
         r'^scan\s+SAL-QTN-',     # @ai scan SAL-QTN-2024-00752
@@ -67,6 +68,10 @@ def _detect_ai_intent(query: str) -> str:
         r'pipeline\s+SO-',       # @ai pipeline SO-00752
         r'pipeline\s+SAL-QTN-',  # @ai pipeline SAL-QTN-2024-00752
         r'full\s+scan\s+SO-',    # @ai full scan SO-00752
+        # BUG95 fix: Add broader patterns for SO with customer suffix
+        r'^scan\s+SO-[A-Z0-9\-]+',   # @ai scan SO-00759-ALBAAD
+        r'^validate\s+SO-[A-Z0-9\-]+',  # @ai validate SO-00759-ALBAAD
+        r'pipeline\s+SO-[A-Z0-9\-]+',  # @ai pipeline SO-00759-ALBAAD
         # === Quotation Diagnostics (NEW) ===
         r'diagnose\s+pipeline\s+of\s+quotation',  # @ai diagnose pipeline of quotation
         r'diagnose\s+quotation',   # @ai diagnose quotation QUOT-XXX or SAL-QTN-XXX
@@ -84,9 +89,11 @@ def _detect_ai_intent(query: str) -> str:
     
     # === PRIORITY: SO-linked commands always go to sales agent ===
     # BUT: pipeline/diagnose commands for SAL-QTN should go to data_quality_scanner
-    if re.search(r'SO-\d+', query, re.IGNORECASE) or re.search(r'from\s+SO', query, re.IGNORECASE):
+    # FIX BUG95: Use broader pattern to match SO names with customer suffix (e.g., SO-00759-ALBAAD...)
+    if re.search(r'SO-\d+', query, re.IGNORECASE) or re.search(r'SO-[A-Z0-9\-]+', query, re.IGNORECASE) or re.search(r'from\s+SO', query, re.IGNORECASE):
         # Exception: if it's a pipeline/diagnose command, send to scanner instead
-        if re.search(r'(?:pipeline|diagnose|scan)\s+SO-', query, re.IGNORECASE):
+        # FIX BUG95: Handle SO names with customer suffix
+        if re.search(r'(?:pipeline|diagnose|scan)\s+SO-[A-Z0-9\-]+', query, re.IGNORECASE) or re.search(r'(?:pipeline|diagnose|scan)\s+SO-', query, re.IGNORECASE):
             return "data_quality_scanner"
         elif not re.search(r'(?:reconcile|submit\s+ACC-PAY|ACC-PAY-\d+)', query, re.IGNORECASE):
             return "sales_order_follow_up"
