@@ -170,22 +170,28 @@ def validate_barrel_serial(serial: str) -> bool:
     return True
 
 
-def submit_to_erpnext(barrel_serial: str, gross_weight: float) -> Dict:
-    """Submit weight to ERPNext API.
+def submit_to_erpnext(barrel_serial: str, gross_weight: float, work_order: str = None) -> Dict:
+    """Submit weight to ERPNext API using Weight Event Contract.
 
     Args:
         barrel_serial: Barrel serial number.
         gross_weight: Weight in kg.
+        work_order: Optional Work Order reference.
 
     Returns:
         Result dictionary with status.
     """
     timestamp = datetime.now().isoformat()
+
+    # Weight Event Contract payload
     payload = {
         'barrel_serial': barrel_serial,
         'gross_weight': gross_weight,
         'device_id': CONFIG['device_id'],
-        'tara_weight': None
+        'tara_weight': None,
+        'work_order': work_order,
+        'event_timestamp': timestamp,
+        'event_type': 'Weight Capture'
     }
 
     if not CONFIG['api_key'] or not CONFIG['api_secret']:
@@ -193,6 +199,34 @@ def submit_to_erpnext(barrel_serial: str, gross_weight: float) -> Dict:
         buffer_submission(barrel_serial, gross_weight)
         return {'status': 'error', 'message': 'API credentials not configured'}
 
+    # Try new Weight Event endpoint first (amb_w_spc PH13.1)
+    url = f"{CONFIG['erpnext_url']}/api/method/amb_w_spc.system_integration.doctype.weight_event.weight_event.receive_weight_event"
+    try:
+        resp = requests.post(
+            url,
+            json=payload,
+            headers=get_auth_headers(),
+            timeout=10
+        )
+
+        if resp.status_code == 200:
+            result = resp.json()
+            if result.get('status') == 'success':
+                save_submission(barrel_serial, gross_weight, 'success')
+                return {
+                    'status': 'success',
+                    'barrel_serial': barrel_serial,
+                    'weight': gross_weight,
+                    'timestamp': timestamp,
+                    'event_id': result.get('event_id'),
+                    'quality_status': result.get('quality_status')
+                }
+
+        logger.warning(f"Weight Event API failed, trying legacy endpoint: {resp.status_code}")
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Weight Event API unavailable: {e}")
+
+    # Fallback to legacy amb_w_tds endpoint
     url = f"{CONFIG['erpnext_url']}/api/method/amb_w_tds.api.batch_api.receive_weight"
     try:
         resp = requests.post(
@@ -210,10 +244,11 @@ def submit_to_erpnext(barrel_serial: str, gross_weight: float) -> Dict:
                     'status': 'success',
                     'barrel_serial': barrel_serial,
                     'weight': gross_weight,
-                    'timestamp': timestamp
+                    'timestamp': timestamp,
+                    'fallback': True
                 }
 
-        logger.error(f"API error: {resp.status_code} - {resp.text}")
+        logger.error(f"Legacy API error: {resp.status_code} - {resp.text}")
         buffer_submission(barrel_serial, gross_weight)
         return {'status': 'error', 'message': 'API error'}
 
