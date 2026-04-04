@@ -9,10 +9,10 @@ Detects serial devices and their data format:
 
 Features:
 - Hardware presence detection (DTR/RTS signals)
+- Active polling/probing for devices
 - Multi-baud rate scanning
 - Temperature sensor detection
 - Auto-config suggestions
-- Port status overview
 
 Run: python3 port_sniffer.py [--port /dev/ttyUSB3] [--verbose]
 """
@@ -59,6 +59,10 @@ class PortInfo:
     suggested_driver: Optional[str] = None
     suggested_config: Dict[str, Any] = field(default_factory=dict)
 
+    # Polling results
+    polled: bool = False
+    polled_at_baud: int = 0
+
     # Error if any
     error: Optional[str] = None
 
@@ -69,6 +73,14 @@ class IntelligentPortSniffer:
     # Common baud rates to try
     BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 2400, 4800]
 
+    # Commands to try polling with
+    POLL_COMMANDS = {
+        'scale': [b'W\r', b'w\r', b'RD\r', b'?\r', b'P\r', b'S\r'],
+        'temp': [b'\xff\xfe\x01\x00', b'\x01\x04\x00\x00\x00\x01\x31\xca', b'RD\r'],
+        'modbus': [b'\x01\x03\x00\x00\x00\x01\x84\x0a', b'\x01\x04\x00\x00\x00\x01\xB0\x0C'],
+        'generic': [b'\r', b'\n', b'?', b'ID\r', b'V\r', b'*IDN?\r'],
+    }
+
     # Temperature sensor patterns
     TEMP_PATTERNS = [
         (r'(\d+\.\d+)\s*[°°C]', 'celsius'),
@@ -76,7 +88,8 @@ class IntelligentPortSniffer:
         (r'Temp[:\s]+(\d+\.\d+)', 'celsius'),
         (r't=(\d+)', 'raw_celsius'),
         (r'T=(\d+\.\d+)', 'celsius'),
-        (r'(\d{2}:\d{2}:\d{2})', 'time'),
+        (r'.*?(\d{2}:\d{2}:\d{2}).*?', 'time'),
+        (r'Sensor\s*(\d+)', 'sensor_id'),
     ]
 
     # Weight patterns
@@ -86,11 +99,13 @@ class IntelligentPortSniffer:
         (r'S\s*W[:\s]+(\d+\.?\d*)', 'stable_weight'),
         (r'W[:\s]+(\d+\.?\d*)', 'weight'),
         (r's(\d+)', 'scale_value'),
+        (r'[+-]?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)', 'number'),
     ]
 
-    def __init__(self, ports=None, timeout=2.0, verbose=False):
+    def __init__(self, ports=None, timeout=2.0, verbose=False, probe=True):
         self.timeout = timeout
         self.verbose = verbose
+        self.probe = probe
         self.ports = ports or self._list_all_ports()
         self.results: Dict[str, PortInfo] = {}
 
@@ -131,12 +146,13 @@ class IntelligentPortSniffer:
             return 'temperature_sensor'
 
         # Scale/weight indicators
-        if any(kw in text for kw in ['kg', 'weight', 'scale', 'balance', 'gram']):
+        if any(kw in text for kw in ['kg', 'weight', 'scale', 'balance', 'gram', 'g\r', 'kg\r']):
             return 'scale'
 
-        # GPS indicators
-        if any(kw in text for kw in ['$gpgll', '$gprmc', 'gps', 'latitude', 'longitude']):
-            return 'gps'
+        # Modbus response
+        if len(samples) > 0 and all(len(s) <= 10 for s in samples if isinstance(s, str)):
+            # Short responses could be modbus binary
+            return 'modbus_device'
 
         # Generic serial device
         return 'unknown'
@@ -156,7 +172,7 @@ class IntelligentPortSniffer:
                 for pattern, unit in self.TEMP_PATTERNS:
                     match = re.search(pattern, text)
                     if match:
-                        return 'temperature', f"{match.group(1)} {unit}"
+                        return 'temperature', f"{match.group(0)[:50]}"
 
                 # Check for weight
                 for pattern, unit in self.WEIGHT_PATTERNS:
@@ -204,12 +220,44 @@ class IntelligentPortSniffer:
             pass
         return signals
 
-    def _probe_port(self, port_name: str, baudrate: int = 9600) -> PortInfo:
-        """Probe a port for device and data."""
-        info = self._get_port_info(port_name)
+    def _poll_port(self, ser: serial.Serial, device_hints: List[str] = None) -> List[str]:
+        """Poll a port with various commands to get response."""
+        samples = []
+        hints = device_hints or ['generic', 'scale', 'temp', 'modbus']
+
+        for hint in hints:
+            commands = self.POLL_COMMANDS.get(hint, self.POLL_COMMANDS['generic'])
+            for cmd in commands:
+                try:
+                    # Clear buffer
+                    ser.reset_input_buffer()
+                    ser.reset_output_buffer()
+
+                    # Send command
+                    ser.write(cmd)
+                    ser.flush()
+
+                    # Wait for response
+                    time.sleep(0.3)
+
+                    if ser.in_waiting:
+                        data = ser.read(ser.in_waiting)
+                        if data:
+                            fmt, parsed = self._parse_data_format(data)
+                            samples.append(parsed)
+                            return samples
+                except Exception as e:
+                    pass
+
+        return samples
+
+    def _probe_port_at_baud(self, port_name: str, baudrate: int) -> tuple:
+        """Probe a port at specific baud rate."""
+        info = PortInfo(device=port_name)
+        info.polled = True
+        info.polled_at_baud = baudrate
 
         try:
-            # Open port
             ser = serial.Serial(
                 port=port_name,
                 baudrate=baudrate,
@@ -223,84 +271,81 @@ class IntelligentPortSniffer:
             info.connected = True
             info.signals = self._check_hardware_signals(ser)
 
-            print(f"  {port_name:<15} [{baudrate} baud] ", end="", flush=True)
-
-            # Check bytes in buffer
-            info.bytes_available = ser.in_waiting
-
-            if info.bytes_available > 0:
+            # Check if data already in buffer
+            if ser.in_waiting > 0:
+                data = ser.read(ser.in_waiting)
+                fmt, parsed = self._parse_data_format(data)
                 info.has_data = True
-                print(f"DATA ({info.bytes_available} bytes)", end="")
-            else:
-                print("No data     ", end="")
+                info.format_type = fmt
+                info.data_samples.append(parsed)
+                return info, f"DATA: {parsed[:40]}"
 
-            # Hardware status
-            if info.signals.get('dtr') or info.signals.get('rts'):
-                print(" [HW DETECTED]", end="")
+            # Poll the device
+            if self.probe:
+                samples = self._poll_port(ser)
+                if samples:
+                    info.has_data = True
+                    info.format_type = info._detect_device_type(samples) if hasattr(info, '_detect_device_type') else 'unknown'
+                    info.data_samples.extend(samples)
+                    return info, f"RESPONDED: {samples[0][:40]}"
 
-            # Try to read data
-            samples = []
-            start_time = time.time()
-            max_samples = 10
-            sample_count = 0
-
-            while time.time() - start_time < self.timeout and sample_count < max_samples:
-                if ser.in_waiting:
-                    data = ser.read(ser.in_waiting)
-                    if data:
-                        info.has_data = True
-                        fmt, parsed = self._parse_data_format(data)
-
-                        if info.format_type is None:
-                            info.format_type = fmt
-
-                        samples.append(parsed)
-                        print(f"\n    └─ {parsed[:60]}", end="")
-                        sample_count += 1
-                time.sleep(0.1)
-
-            info.data_samples = samples
-
-            # Detect device type from samples
-            if samples:
-                info.device_type = self._detect_device_type(samples)
-
-                # Set suggested config based on type
-                if info.format_type == 'modbus_rtu':
-                    info.suggested_driver = 'ModbusRTU'
-                    info.suggested_config = {'slave_id': 1, 'scale_factor': 0.01}
-                elif info.device_type == 'temperature_sensor':
-                    info.suggested_driver = 'TemperatureSensor'
-                    info.suggested_config = {'poll_interval': 60, 'unit': 'celsius'}
-                elif info.format_type in ['weight', 'plain_text']:
-                    info.suggested_driver = 'SerialCommand'
-                    info.suggested_config = {'command': 'W', 'response_format': 'DECIMAL'}
-                else:
-                    info.suggested_driver = 'GenericSerial'
-                    info.suggested_config = {}
-
-            print()
             ser.close()
 
         except serial.SerialException as e:
             info.error = str(e)
-            print(f"  {port_name:<15} ERROR: {e}")
-        except Exception as e:
-            info.error = str(e)
-            print(f"  {port_name:<15} ERROR: {e}")
 
-        return info
+        return info, None
+
+    def _probe_port(self, port_name: str) -> PortInfo:
+        """Probe a port at multiple baud rates."""
+        best_info = self._get_port_info(port_name)
+        best_info.connected = True
+
+        # Check hardware signals first (no need to open port)
+        try:
+            ser = serial.Serial(port_name, baudrate=9600, timeout=0.1)
+            best_info.signals = self._check_hardware_signals(ser)
+            ser.close()
+        except:
+            pass
+
+        has_hw = best_info.signals.get('dtr') or best_info.signals.get('rts')
+        hw_status = "HW" if has_hw else ""
+
+        print(f"  {port_name:<15} [9600]  {hw_status:>3}  ", end="", flush=True)
+
+        # Try each baud rate
+        for baudrate in self.BAUD_RATES:
+            info, response = self._probe_port_at_baud(port_name, baudrate)
+
+            if info.has_data:
+                best_info = info
+                print(f"{baudrate} baud -> {response}")
+                break
+            elif info.error:
+                print(f"\n    └─ Error at {baudrate}: {info.error}")
+        else:
+            # No response at any baud rate
+            if has_hw:
+                print(f"No response (has hardware)")
+            else:
+                print(f"Empty port")
+
+        return best_info
 
     def sniff(self) -> Dict[str, PortInfo]:
         """Scan all ports and detect devices."""
         print()
         print("╔══════════════════════════════════════════════════════════════╗")
-        print("║           SERIAL PORT SNIFFER - Intelligent Mode             ║")
+        print("║           SERIAL PORT SNIFFER - Active Probing Mode          ║")
         print("╚══════════════════════════════════════════════════════════════╝")
         print()
-        print(f"  Timeout: {self.timeout}s | Baud rates: {self.BAUD_RATES}")
-        print(f"  Ports to scan: {len(self.ports)}")
+        print(f"  Timeout: {self.timeout}s | Probing: {'Yes' if self.probe else 'No'}")
+        print(f"  Baud rates: {self.BAUD_RATES}")
+        print(f"  Ports found: {len(self.ports)}")
         print()
+        print("─" * 65)
+        print("  Port           Baud  HW  Status")
         print("─" * 65)
 
         for port in self.ports:
@@ -309,104 +354,142 @@ class IntelligentPortSniffer:
 
         print("─" * 65)
 
+        # Analyze results
+        self._analyze_devices()
+
         return self.results
+
+    def _analyze_devices(self):
+        """Analyze detected devices and set types."""
+        for port, info in self.results.items():
+            if not info.data_samples:
+                continue
+
+            text_samples = ' '.join(str(s) for s in info.data_samples).lower()
+
+            # Detect device type
+            if any(kw in text_samples for kw in ['temp', 't=', 'celsius', 'fahrenheit']):
+                info.device_type = 'temperature_sensor'
+                info.suggested_driver = 'TemperatureSensor'
+                info.suggested_config = {'poll_interval': 60, 'unit': 'celsius'}
+            elif any(kw in text_samples for kw in ['kg', 'weight', 'g\r', 'gram', 'balance']):
+                info.device_type = 'scale'
+                if info.format_type == 'modbus_rtu':
+                    info.suggested_driver = 'ModbusRTU'
+                    info.suggested_config = {'slave_id': 1, 'scale_factor': 0.01}
+                else:
+                    info.suggested_driver = 'SerialCommand'
+                    info.suggested_config = {'command': 'W', 'response_format': 'DECIMAL'}
+            else:
+                info.device_type = 'unknown_serial'
+                info.suggested_driver = 'GenericSerial'
+                info.suggested_config = {}
 
     def print_summary(self):
         """Print intelligent summary."""
         print()
         print("╔══════════════════════════════════════════════════════════════╗")
-        print("║                     ANALYSIS SUMMARY                          ║")
+        print("║                     ANALYSIS SUMMARY                       ║")
         print("╚══════════════════════════════════════════════════════════════╝")
 
-        # Categorize ports
-        has_data = [p for p, i in self.results.items() if i.has_data]
-        no_data = [p for p, i in self.results.items() if not i.has_data and i.connected]
+        # Categorize
+        responding = [p for p, i in self.results.items() if i.has_data]
+        hw_no_data = [p for p, i in self.results.items() if not i.has_data and (i.signals.get('dtr') or i.signals.get('rts'))]
+        empty = [p for p, i in self.results.items() if not i.has_data and not i.signals.get('dtr') and not i.signals.get('rts')]
         errors = [p for p, i in self.results.items() if i.error]
 
-        # Check for specific device types
+        # Find device types
         scales = [p for p, i in self.results.items() if i.device_type == 'scale']
         temps = [p for p, i in self.results.items() if i.device_type == 'temperature_sensor']
+        unknown = [p for p, i in self.results.items() if i.device_type == 'unknown_serial']
 
         print()
 
-        if has_data:
-            print("  📊 PORTS WITH ACTIVE DATA:")
-            print()
-            for port in has_data:
+        if responding:
+            print("  ✓ DEVICES RESPONDING:")
+            for port in responding:
                 info = self.results[port]
-                print(f"    ✓ {port}")
-                print(f"      └─ Type: {info.device_type or info.format_type or 'Unknown'}")
+                print(f"    {port}")
+                print(f"      └─ Type: {info.device_type or 'Unknown'}")
                 print(f"      └─ Format: {info.format_type}")
+                print(f"      └─ Baud: {info.polled_at_baud}")
                 print(f"      └─ Driver: {info.suggested_driver}")
                 if info.data_samples:
-                    print(f"      └─ Sample: {info.data_samples[0][:50]}")
+                    sample = info.data_samples[0][:50]
+                    print(f"      └─ Sample: {sample}")
                 print()
         else:
-            print("  ⚠️  NO ACTIVE DATA DETECTED")
+            print("  ⚠️  NO DEVICES RESPONDING TO POLL")
             print()
 
-            if no_data:
-                print("  Ports with hardware present but no data:")
-                for port in no_data:
-                    info = self.results[port]
-                    signals = info.signals
-                    hw_status = []
-                    if signals.get('dtr'): hw_status.append("DTR")
-                    if signals.get('rts'): hw_status.append("RTS")
-                    status = ", ".join(hw_status) if hw_status else "No signals"
-                    print(f"    • {port}: {status}")
-                print()
+        if hw_no_data:
+            print("  📦 HARDWARE DETECTED (no data):")
+            for port in hw_no_data:
+                info = self.results[port]
+                sigs = []
+                if info.signals.get('dtr'): sigs.append('DTR')
+                if info.signals.get('rts'): sigs.append('RTS')
+                print(f"    • {port}: {', '.join(sigs) if sigs else 'unknown signal'}")
+            print()
+            print("  Possible issues:")
+            print("    1. Device is sleeping, needs wake-up command")
+            print("    2. Wrong serial settings (8N1 may not match)")
+            print("    3. Device needs special initialization")
+            print("    4. TX/RX wires might be swapped")
+            print()
 
-                print("  Possible reasons:")
-                print("    1. Device not configured to output data")
-                print("    2. Wrong baud rate (try different speed)")
-                print("    3. Device needs to be polled first")
-                print("    4. Scale is in 'hold' mode, press a button")
-                print()
+        if empty:
+            print("  🔌 EMPTY PORTS (no hardware):")
+            for port in empty:
+                print(f"    • {port}")
+            print()
 
         if errors:
-            print("  ❌ PORTS WITH ERRORS:")
+            print("  ❌ ERRORS:")
             for port in errors:
                 print(f"    • {port}: {self.results[port].error}")
             print()
 
         # Recommendations
         print("╔══════════════════════════════════════════════════════════════╗")
-        print("║                    RECOMMENDATIONS                            ║")
+        print("║                    RECOMMENDATIONS                           ║")
         print("╚══════════════════════════════════════════════════════════════╝")
         print()
 
         if scales:
             print(f"  🔧 Found SCALE on: {', '.join(scales)}")
             print()
-            print("  To configure:")
             for port in scales:
                 info = self.results[port]
-                if info.suggested_config:
-                    print(f"    doc = frappe.get_doc('Sensor Skill', 'scale_plant')")
-                    print(f"    doc.port = '{port}'")
-                    if info.suggested_driver == 'ModbusRTU':
-                        print(f"    doc.driver = 'ModbusRTU'")
-                    else:
-                        print(f"    doc.driver = 'SerialCommand'")
-                    print(f"    doc.python_config = '{json.dumps(info.suggested_config)}'")
-                    print(f"    doc.save(); frappe.db.commit()")
-            print()
+                print(f"    doc = frappe.get_doc('Sensor Skill', 'scale_plant')")
+                print(f"    doc.port = '{port}'")
+                print(f"    doc.driver = '{info.suggested_driver}'")
+                print(f"    doc.python_config = '{json.dumps(info.suggested_config)}'")
+                print(f"    doc.baudrate = {info.polled_at_baud}")
+                print(f"    doc.save(); frappe.db.commit()")
+                print()
+            return
 
         if temps:
             print(f"  🌡️  Found TEMPERATURE SENSOR on: {', '.join(temps)}")
             print()
 
-        if not has_data and not scales and not temps:
+        if unknown:
+            print(f"  ❓ Unknown devices on: {', '.join(unknown)}")
+            for port in unknown:
+                info = self.results[port]
+                if info.data_samples:
+                    print(f"    {port}: {info.data_samples[0][:50]}")
+            print()
+
+        if not responding:
             print("  📝 NEXT STEPS:")
             print()
-            print("    1. Connect your scale to a USB port")
-            print("    2. Make sure scale is powered ON")
-            print("    3. Check scale is set to 'transmit' or 'continuous' mode")
-            print("    4. Re-run: python3 rpi_client/port_sniffer.py")
-            print()
-            print("    For testing without real scale, use simulator:")
-            print("    python3 rpi_client/tester.py --mode simulator")
+            print("    1. Check physical connections")
+            print("    2. Verify device power is ON")
+            print("    3. Try pressing a button on the device")
+            print("    4. Check TX/RX are not reversed")
+            print("    5. For testing, use: python3 rpi_client/tester.py --mode simulator")
             print()
 
         print("─" * 65)
@@ -416,7 +499,6 @@ class IntelligentPortSniffer:
         for port, info in self.results.items():
             if info.device_type == 'scale' and info.has_data:
                 return info
-        # Fallback to any port with data
         for port, info in self.results.items():
             if info.has_data:
                 return info
@@ -425,14 +507,14 @@ class IntelligentPortSniffer:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Intelligent Serial Port Sniffer',
+        description='Intelligent Serial Port Sniffer with Active Probing',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 port_sniffer.py                    # Scan all ports
+  python3 port_sniffer.py                    # Scan all ports with probing
   python3 port_sniffer.py --port /dev/ttyUSB3  # Scan specific port
   python3 port_sniffer.py --timeout 5        # Longer timeout
-  python3 port_sniffer.py --verbose          # Verbose output
+  python3 port_sniffer.py --no-probe         # Passive mode only (no polling)
         """
     )
     parser.add_argument('--port', '-p', help='Specific port to check')
@@ -440,11 +522,18 @@ Examples:
                        help='Timeout per port (seconds, default: 2)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Verbose output')
+    parser.add_argument('--no-probe', action='store_true',
+                       help='Disable active probing (passive mode only)')
     args = parser.parse_args()
 
     ports = [args.port] if args.port else None
 
-    sniffer = IntelligentPortSniffer(ports=ports, timeout=args.timeout, verbose=args.verbose)
+    sniffer = IntelligentPortSniffer(
+        ports=ports,
+        timeout=args.timeout,
+        verbose=args.verbose,
+        probe=not args.no_probe
+    )
     results = sniffer.sniff()
     sniffer.print_summary()
 
@@ -453,7 +542,7 @@ Examples:
     if best:
         print()
         print("╔══════════════════════════════════════════════════════════════╗")
-        print("║                 AUTO-GENERATE SCRIPT                         ║")
+        print("║                 AUTO-GENERATE SCRIPT                        ║")
         print("╚══════════════════════════════════════════════════════════════╝")
         print()
         print("Run this on your ERPNext server:")
@@ -463,8 +552,9 @@ Examples:
         print("import json")
         print()
         print(f"doc = frappe.get_doc('Sensor Skill', 'scale_plant')")
-        print(f"doc.port = '{best.port}'")
+        print(f"doc.port = '{best.device}'")
         print(f"doc.driver = '{best.suggested_driver}'")
+        print(f"doc.baudrate = {best.polled_at_baud}")
         print(f"doc.python_config = '{json.dumps(best.suggested_config)}'")
         print("doc.save()")
         print("frappe.db.commit()")
