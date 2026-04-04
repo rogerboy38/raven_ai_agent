@@ -30,6 +30,10 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Flag indicating sensor_skill_client is available
+# This is used by scale_reader.py to check if Sensor Skill integration is available
+SENSOR_SKILL_AVAILABLE = True
+
 
 class SensorSkillError(Exception):
     """Base exception for Sensor Skill client errors."""
