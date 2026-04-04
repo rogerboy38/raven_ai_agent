@@ -5,9 +5,15 @@ Scale Reader Diagnostic Tester
 Tests each component of the scale reading pipeline to identify where data is lost.
 
 Run: python3 tester.py
+
+For ModbusRTU loopback test (requires two terminal windows):
+  Terminal 1: python3 dummy_scale.py /dev/ttyUSB3 9600 1 25.0
+  Terminal 2: python3 tester.py --modbus-loopback /dev/ttyUSB3
 """
 import sys
 import os
+import time
+import threading
 
 # Add rpi_client to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,47 +53,8 @@ try:
 except Exception as e:
     print(f"  FAIL: {e}")
 
-# Test 4: Create ScaleReader instance
-print("\n[TEST 4] Creating ScaleReader instance...")
-try:
-    reader = ScaleReader(backend='sensor_skill', skill_id='scale_plant')
-    print(f"  backend_name: {reader.backend_name}")
-    print(f"  skill_id: {reader.skill_id}")
-    print("  PASS: ScaleReader created")
-except Exception as e:
-    print(f"  FAIL: {e}")
-
-# Test 5: Check connection
-print("\n[TEST 5] Checking scale connection...")
-try:
-    is_connected = reader.is_connected()
-    print(f"  is_connected() = {is_connected}")
-    if is_connected:
-        print("  PASS: Scale is connected")
-    else:
-        print("  WARN: Scale not connected (check port/baudrate)")
-except Exception as e:
-    print(f"  FAIL: {e}")
-
-# Test 6: Read weight
-print("\n[TEST 6] Reading weight from scale...")
-try:
-    weight = reader.read_weight()
-    print(f"  Weight: {weight} kg")
-    print("  PASS: Weight read successfully")
-except Exception as e:
-    print(f"  FAIL: {e}")
-
-# Test 7: Close connection
-print("\n[TEST 7] Closing connection...")
-try:
-    reader.close()
-    print("  PASS: Connection closed")
-except Exception as e:
-    print(f"  FAIL: {e}")
-
-# Test 8: Test with simulator backend
-print("\n[TEST 8] Testing with simulator backend...")
+# Test 4: Test with simulator backend
+print("\n[TEST 4] Testing with simulator backend...")
 try:
     sim_reader = ScaleReader(backend='simulator', skill_id='scale_plant')
     print(f"  is_connected() = {sim_reader.is_connected()}")
@@ -95,6 +62,82 @@ try:
     print(f"  Weight: {weight} kg")
     sim_reader.close()
     print("  PASS: Simulator works")
+except Exception as e:
+    print(f"  FAIL: {e}")
+
+# Test 5: Import dummy_scale
+print("\n[TEST 5] Importing dummy_scale...")
+try:
+    from dummy_scale import DummyModbusScale
+    print("  PASS: dummy_scale imported")
+except Exception as e:
+    print(f"  FAIL: {e}")
+
+# Test 6: Test ModbusRTU loopback (requires dummy_scale running)
+print("\n[TEST 6] Testing ModbusRTU loopback...")
+print("  NOTE: Run 'python3 dummy_scale.py <port> 9600' in another terminal first!")
+print("  Or use: python3 tester.py --modbus-loopback /dev/ttyUSB3")
+
+# Parse command line for loopback test
+import argparse
+parser = argparse.ArgumentParser(description='Scale Reader Diagnostic')
+parser.add_argument('--modbus-loopback', metavar='PORT',
+                    help='Test ModbusRTU loopback with dummy_scale on PORT')
+args = parser.parse_args()
+
+if args.modbus_loopback:
+    # Test with specified port
+    test_port = args.modbus_loopback
+    print(f"\n  Testing with port: {test_port}")
+
+    try:
+        import serial
+        # Check if port exists
+        try:
+            ser = serial.Serial(test_port, 9600, timeout=0.5)
+            ser.close()
+            print(f"  Port {test_port} is accessible")
+        except serial.SerialException:
+            print(f"  WARN: Port {test_port} not accessible")
+            print("  Make sure dummy_scale.py is running on this port")
+
+        reader = ScaleReader(backend='sensor_skill', skill_id='scale_plant')
+        print(f"  ScaleReader created with backend={reader.backend_name}")
+
+        # Override port from sensor skill config
+        reader._backend._config['port'] = test_port
+        print(f"  Port overridden to: {test_port}")
+
+        print("  Attempting to read weight...")
+        is_connected = reader.is_connected()
+        print(f"  is_connected() = {is_connected}")
+
+        if is_connected:
+            weight = reader.read_weight()
+            print(f"  Weight: {weight} kg")
+            print("  PASS: ModbusRTU loopback successful!")
+        else:
+            print("  WARN: Not connected - check if dummy_scale is running")
+
+        reader.close()
+
+    except Exception as e:
+        print(f"  FAIL: {e}")
+        import traceback
+        traceback.print_exc()
+else:
+    print("  SKIP: --modbus-loopback not specified")
+    print("  To test ModbusRTU, run in two terminals:")
+    print("    Terminal 1: python3 dummy_scale.py /dev/ttyUSB3 9600")
+    print("    Terminal 2: python3 tester.py --modbus-loopback /dev/ttyUSB3")
+
+# Test 7: Create ScaleReader instance
+print("\n[TEST 7] Creating ScaleReader instance...")
+try:
+    reader = ScaleReader(backend='sensor_skill', skill_id='scale_plant')
+    print(f"  backend_name: {reader.backend_name}")
+    print(f"  skill_id: {reader.skill_id}")
+    print("  PASS: ScaleReader created")
 except Exception as e:
     print(f"  FAIL: {e}")
 
@@ -120,3 +163,7 @@ print("  4. Scale not connected:")
 print("     - Check USB cable")
 print("     - Verify port matches Sensor Skill config")
 print("     - Try different port (ttyUSB0, ttyUSB1, etc.)")
+print("")
+print("  5. ModbusRTU test (loopback):")
+print("     Terminal 1: python3 dummy_scale.py /dev/ttyUSB3 9600 1 25.0")
+print("     Terminal 2: python3 tester.py --modbus-loopback /dev/ttyUSB3")
