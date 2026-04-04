@@ -11,6 +11,7 @@ Features:
 - Real-time status display
 - Submission history
 - Offline buffering with retry
+- PH13.2.0 Sensor Skill integration
 
 Usage:
     python3 web_app.py
@@ -22,6 +23,8 @@ Environment variables:
     ERPNEXT_API_KEY: API key
     ERPNEXT_API_SECRET: API secret
     DEVICE_ID: Scale device ID (default: SCALE-L01)
+    SENSOR_SKILL_ID: Sensor Skill ID (default: scale_plant)
+    SCALE_BACKEND: Backend type (keyboard, simulator, sensor_skill)
 """
 import os
 import json
@@ -47,6 +50,8 @@ CONFIG = {
     'api_key': os.getenv('ERPNEXT_API_KEY', ''),
     'api_secret': os.getenv('ERPNEXT_API_SECRET', ''),
     'device_id': os.getenv('DEVICE_ID', 'SCALE-L01'),
+    'sensor_skill_id': os.getenv('SENSOR_SKILL_ID', 'scale_plant'),
+    'scale_backend': os.getenv('SCALE_BACKEND', 'sensor_skill'),
 }
 
 # Database path
@@ -170,22 +175,33 @@ def validate_barrel_serial(serial: str) -> bool:
     return True
 
 
-def submit_to_erpnext(barrel_serial: str, gross_weight: float) -> Dict:
-    """Submit weight to ERPNext API.
+def submit_to_erpnext(barrel_serial: str, gross_weight: float, tara_weight: float = None) -> Dict:
+    """Submit weight to ERPNext via PH13.2.0 Sensor Skill API.
 
     Args:
         barrel_serial: Barrel serial number.
         gross_weight: Weight in kg.
+        tara_weight: Tare weight in kg (optional).
 
     Returns:
         Result dictionary with status.
     """
     timestamp = datetime.now().isoformat()
+
+    # Calculate net weight
+    net_weight = gross_weight - (tara_weight or 0)
+
+    # PH13.2.0 payload format
     payload = {
+        'device_id': CONFIG['device_id'],
+        'mode': 'production',
+        'batch_name': None,
         'barrel_serial': barrel_serial,
         'gross_weight': gross_weight,
-        'device_id': CONFIG['device_id'],
-        'tara_weight': None
+        'tara_weight': tara_weight,
+        'net_weight': net_weight,
+        'unit': 'kg',
+        'tolerance_profile': 'PLANT',
     }
 
     if not CONFIG['api_key'] or not CONFIG['api_secret']:
@@ -193,7 +209,8 @@ def submit_to_erpnext(barrel_serial: str, gross_weight: float) -> Dict:
         buffer_submission(barrel_serial, gross_weight)
         return {'status': 'error', 'message': 'API credentials not configured'}
 
-    url = f"{CONFIG['erpnext_url']}/api/method/amb_w_tds.api.batch_api.receive_weight"
+    # PH13.2.0 API endpoint
+    url = f"{CONFIG['erpnext_url']}/api/method/amb_w_spc.api.sensor_skill.receive_weight_event"
     try:
         resp = requests.post(
             url,
@@ -209,7 +226,9 @@ def submit_to_erpnext(barrel_serial: str, gross_weight: float) -> Dict:
                 return {
                     'status': 'success',
                     'barrel_serial': barrel_serial,
-                    'weight': gross_weight,
+                    'gross_weight': gross_weight,
+                    'net_weight': net_weight,
+                    'device_id': CONFIG['device_id'],
                     'timestamp': timestamp
                 }
 
@@ -386,17 +405,35 @@ def api_status():
     """Get device status.
 
     Returns:
-        JSON with device status information.
+        JSON with device status information including Sensor Skill config.
     """
     last = get_last_submission()
     pending = get_pending_count()
+
+    # Try to get Sensor Skill config
+    sensor_config = None
+    try:
+        from sensor_skill_client import SensorSkillClient, SENSOR_SKILL_AVAILABLE
+        if SENSOR_SKILL_AVAILABLE:
+            client = SensorSkillClient(skill_id=CONFIG['sensor_skill_id'])
+            sensor_config = client.get_config()
+    except Exception as e:
+        logger.warning(f"Failed to load Sensor Skill config: {e}")
 
     return jsonify({
         'device_id': CONFIG['device_id'],
         'connected': True,
         'last_submission': last,
         'pending_count': pending,
-        'erpnext_url': CONFIG['erpnext_url']
+        'erpnext_url': CONFIG['erpnext_url'],
+        'sensor_skill_id': CONFIG['sensor_skill_id'],
+        'scale_backend': CONFIG['scale_backend'],
+        'sensor_config': {
+            'port': sensor_config.get('port') if sensor_config else None,
+            'baud_rate': sensor_config.get('baud_rate') if sensor_config else None,
+            'max_value': sensor_config.get('max_value') if sensor_config else None,
+            'driver': sensor_config.get('python_config', {}).get('driver') if sensor_config else None,
+        } if sensor_config else None
     })
 
 
@@ -443,6 +480,52 @@ def api_history():
         'count': len(history),
         'items': history
     })
+
+
+@app.route('/api/read-weight', methods=['POST'])
+def api_read_weight():
+    """Read weight from scale using Sensor Skill backend.
+
+    Returns:
+        JSON with weight reading.
+    """
+    try:
+        from scale_reader import ScaleReader, ScaleReaderError
+
+        backend = CONFIG['scale_backend']
+        skill_id = CONFIG['sensor_skill_id']
+
+        reader = ScaleReader(backend=backend, skill_id=skill_id)
+
+        if not reader.is_connected():
+            return jsonify({
+                'status': 'error',
+                'message': 'Scale not connected'
+            }), 503
+
+        weight = reader.read_weight()
+        reader.close()
+
+        return jsonify({
+            'status': 'success',
+            'weight': weight,
+            'unit': 'kg',
+            'sensor_skill_id': skill_id,
+            'backend': backend
+        })
+
+    except ScaleReaderError as e:
+        logger.error(f"Scale read error: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+    except Exception as e:
+        logger.error(f"Weight read failed: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Weight read failed: {str(e)}'
+        }), 500
 
 
 @app.route('/api/cleanup-duplicates', methods=['POST'])
@@ -503,6 +586,21 @@ def main():
     logger.info(f"Starting Flask server on {host}:{port}")
     logger.info(f"ERPNext URL: {CONFIG['erpnext_url']}")
     logger.info(f"Device ID: {CONFIG['device_id']}")
+    logger.info(f"Sensor Skill ID: {CONFIG['sensor_skill_id']}")
+    logger.info(f"Scale Backend: {CONFIG['scale_backend']}")
+
+    # Log sensor config if available
+    try:
+        from sensor_skill_client import SensorSkillClient, SENSOR_SKILL_AVAILABLE
+        if SENSOR_SKILL_AVAILABLE:
+            client = SensorSkillClient(skill_id=CONFIG['sensor_skill_id'])
+            config = client.get_config()
+            logger.info(f"Scale Port: {config.get('port')}")
+            logger.info(f"Scale Baud: {config.get('baud_rate')}")
+            driver = config.get('python_config', {}).get('driver', 'Unknown')
+            logger.info(f"Scale Driver: {driver}")
+    except Exception as e:
+        logger.warning(f"Sensor Skill config not available: {e}")
 
     app.run(host=host, port=port, debug=False)
 

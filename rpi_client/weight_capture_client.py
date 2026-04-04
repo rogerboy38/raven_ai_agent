@@ -5,10 +5,14 @@ Terminal-based workflow for capturing barrel weights and submitting to ERPNext.
 
 Features:
 - Barrel serial scanning/entry
-- Weight reading from keyboard or scale simulator
-- Submission to ERPNext API
+- Weight reading from keyboard, scale simulator, or Sensor Skill-configured serial
+- Submission to amb_w_spc API (receive_weight_event)
 - Offline buffering for failed submissions
 - Raven notification on success
+
+Integration with PH13.2.0:
+    Uses 'sensor_skill' backend to read configuration from amb_w_spc's
+    Sensor Skill DocType (scale_plant or scale_lab).
 
 Usage:
     python3 weight_capture_client.py
@@ -20,7 +24,8 @@ Environment variables:
     RAVEN_URL: Raven server URL
     RAVEN_CHANNEL: Raven channel for notifications (default: iot-lab)
     DEVICE_ID: Scale device ID (default: SCALE-L01)
-    SCALE_BACKEND: Backend type (keyboard, simulator, serial)
+    SCALE_BACKEND: Backend type (keyboard, simulator, serial, sensor_skill)
+    SENSOR_SKILL_ID: Sensor Skill ID to use (scale_plant, scale_lab)
 """
 import os
 import sys
@@ -210,22 +215,34 @@ class WeightCaptureClient:
             logger.warning(f"Barrel validation request failed: {e}")
         return True  # Allow on network error
 
-    def submit_weight(self, barrel_serial: str, gross_weight: float) -> bool:
-        """Submit weight to ERPNext API.
+    def submit_weight(self, barrel_serial: str, gross_weight: float,
+                      tara_weight: float = None, batch_name: str = None,
+                      mode: str = "production") -> bool:
+        """Submit weight to amb_w_spc API (receive_weight_event).
 
         Args:
             barrel_serial: Barrel serial number.
             gross_weight: Weight in kg.
+            tara_weight: Tara weight in kg (optional).
+            batch_name: Batch name for the submission (optional).
+            mode: Operation mode - 'production', 'audit', or 'calibration'.
 
         Returns:
             True if successful, False otherwise.
         """
         timestamp = datetime.now().isoformat()
+
+        # Build payload for receive_weight_event API
         payload = {
+            'device_id': CONFIG['device_id'],
+            'mode': mode,
+            'batch_name': batch_name,
             'barrel_serial': barrel_serial,
             'gross_weight': gross_weight,
-            'device_id': CONFIG['device_id'],
-            'tara_weight': None
+            'tara_weight': tara_weight,
+            'net_weight': gross_weight - (tara_weight or 0),
+            'unit': 'kg',
+            'tolerance_profile': 'PLANT',  # or 'LAB' based on device_id
         }
 
         if not CONFIG['api_key'] or not CONFIG['api_secret']:
@@ -233,7 +250,9 @@ class WeightCaptureClient:
             self.buffer.add(barrel_serial, gross_weight, CONFIG['device_id'], timestamp)
             return False
 
-        url = f"{CONFIG['erpnext_url']}/api/method/amb_w_tds.api.batch_api.receive_weight"
+        # Use receive_weight_event from amb_w_spc (PH13.2.0)
+        url = f"{CONFIG['erpnext_url']}/api/method/amb_w_spc.api.sensor_skill.receive_weight_event"
+
         try:
             resp = requests.post(
                 url,
@@ -244,16 +263,25 @@ class WeightCaptureClient:
 
             if resp.status_code == 200:
                 result = resp.json()
-                if result.get('message') or result.get('status') == 'success':
+                message = result.get('message', {})
+
+                if message.get('status') == 'success':
                     self.last_submission = {
                         'barrel_serial': barrel_serial,
                         'gross_weight': gross_weight,
+                        'tara_weight': tara_weight,
+                        'net_weight': message.get('net_weight', gross_weight),
+                        'event_id': message.get('event_id'),
                         'timestamp': timestamp,
                         'status': 'success'
                     }
                     self.submission_history.append(self.last_submission)
-                    self._send_raven_notification(barrel_serial, gross_weight)
-                    logger.info(f"Submitted: {barrel_serial} = {gross_weight} kg")
+                    self._send_raven_notification(
+                        barrel_serial,
+                        message.get('net_weight', gross_weight)
+                    )
+                    logger.info(f"Submitted: {barrel_serial} = {gross_weight} kg "
+                               f"(event_id: {message.get('event_id')})")
                     return True
 
             logger.error(f"API error: {resp.status_code} - {resp.text}")

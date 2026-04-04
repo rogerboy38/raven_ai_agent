@@ -2,6 +2,8 @@
 
 Raspberry Pi client for AMB Batch manufacturing workflow weight capture.
 
+**PH13.2.0 Integration**: This version integrates with `amb_w_spc` Sensor Skill configuration for automatic scale setup.
+
 ## Features
 
 - **Terminal Mode**: Type barrel serial and weight directly
@@ -9,6 +11,7 @@ Raspberry Pi client for AMB Batch manufacturing workflow weight capture.
 - **Multiple Backends**: Keyboard, serial scale, camera barcode (stubs)
 - **Offline Buffer**: SQLite-based buffering for failed submissions
 - **Raven Notifications**: Success alerts to iot-lab channel
+- **PH13.2.0 Sensor Skill**: Auto-configures scale from ERPNext settings
 
 ## Architecture
 
@@ -26,8 +29,13 @@ Raspberry Pi client for AMB Batch manufacturing workflow weight capture.
          └───────────┬───────────┘
                      │
          ┌───────────▼───────────┐
-         │     ERPNext API      │
-         │  amb_w_tds.api        │
+         │  Sensor Skill Client │
+         │  sensor_skill_client │
+         └───────────┬───────────┘
+                     │
+         ┌───────────▼───────────┐
+         │     ERPNext API       │
+         │  amb_w_spc.api        │
          └───────────────────────┘
 ```
 
@@ -121,9 +129,10 @@ Access: https://bot1.sysmayal.ngrok.io
 | ERPNEXT_API_SECRET | - | API secret for authentication |
 | DEVICE_ID | SCALE-L01 | Scale device identifier |
 | RAVEN_CHANNEL | iot-lab | Raven channel for notifications |
-| SCALE_BACKEND | keyboard | Scale backend (keyboard/serial/simulator) |
-| SCALE_PORT | /dev/ttyUSB0 | Serial port for scale |
-| SCALE_BAUD | 9600 | Serial baud rate |
+| SCALE_BACKEND | sensor_skill | Scale backend (keyboard/serial/simulator/sensor_skill) |
+| SENSOR_SKILL_ID | scale_plant | Sensor Skill ID for scale config |
+| SCALE_PORT | /dev/ttyUSB0 | Serial port for scale (fallback) |
+| SCALE_BAUD | 9600 | Serial baud rate (fallback) |
 | SCALE_MIN_WEIGHT | 0.5 | Minimum valid weight (kg) |
 | SCALE_MAX_WEIGHT | 500 | Maximum valid weight (kg) |
 | BARCODE_BACKEND | keyboard | Barcode backend (keyboard/camera) |
@@ -137,6 +146,19 @@ Access: https://bot1.sysmayal.ngrok.io
 - **KeyboardBackend**: Type weight manually
 - **SimulatorBackend**: Generate random weights (20-30 kg) for testing
 - **SerialBackend**: STUB - read from Arduino/industrial scale via /dev/ttyUSB0
+- **SensorSkillBackend**: **RECOMMENDED** - Reads from serial port using PH13.2.0 Sensor Skill config
+
+### Sensor Skill Backend
+
+The `sensor_skill` backend is recommended for production use. It fetches scale configuration from `amb_w_spc` Sensor Skill DocType:
+
+**Available Sensor Skills:**
+- `scale_plant`: Plant Production Scale (max 500kg, ModbusRTU, /dev/ttyUSB0)
+- `scale_lab`: Laboratory Precision Scale (max 30kg, SerialCommand, /dev/ttyUSB1)
+
+**Supported Drivers:**
+- `ModbusRTU`: For industrial scales via RS485
+- `SerialCommand`: For precision balances with command protocol
 
 ### Barcode Backends
 
@@ -156,10 +178,12 @@ Pattern: `[A-Z]{3}[0-9]+-[0-9]+-C[0-9]+-[0-9]+`
 | / | GET | Main weight capture page |
 | /api/submit-weight | POST | Submit barrel + weight |
 | /api/barrels/\<serial\> | GET | Validate barrel serial |
-| /api/status | GET | Device status |
+| /api/read-weight | POST | Read weight from scale (sensor_skill backend) |
+| /api/status | GET | Device status with Sensor Skill info |
 | /api/pending | GET | List pending submissions |
 | /api/retry-pending | POST | Retry pending submissions |
 | /api/history | GET | Submission history |
+| /api/cleanup-duplicates | POST | Remove duplicate entries |
 
 ## Offline Buffering
 
@@ -194,6 +218,7 @@ stty -F /dev/ttyUSB0 9600
 ```
 rpi_client/
 ├── __init__.py
+├── sensor_skill_client.py  # PH13.2.0 Sensor Skill config client
 ├── scale_reader.py       # Scale reading with backends
 ├── barcode_handler.py    # Barcode scanning
 ├── weight_capture_client.py  # Terminal client
@@ -204,3 +229,13 @@ rpi_client/
 ├── start_all.sh          # Start all services
 └── requirements.txt      # Python dependencies
 ```
+
+## PH13.2.0 Requirements
+
+For `sensor_skill` backend to work, ensure:
+
+1. `amb_w_spc` v15+ is installed on ERPNext
+2. Sensor Skill records exist in ERPNext:
+   - `scale_plant`: Plant Production Scale
+   - `scale_lab`: Laboratory Precision Scale
+3. API credentials are configured (ERPNEXT_API_KEY, ERPNEXT_API_SECRET)

@@ -351,6 +351,14 @@
                 <span class="value success" id="connectionStatus">Connected</span>
             </div>
             <div class="status-row">
+                <span class="label">Sensor Skill:</span>
+                <span class="value" id="sensorSkillId">-</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Scale Backend:</span>
+                <span class="value" id="scaleBackend">-</span>
+            </div>
+            <div class="status-row">
                 <span class="label">Last Submission:</span>
                 <span class="value" id="lastSubmission">-</span>
             </div>
@@ -383,7 +391,7 @@
 
         <footer>
             <div>AMB Manufacturing Workflow</div>
-            <div id="version">v12.7.0</div>
+            <div id="version">v12.7.0 + PH13.2.0</div>
         </footer>
     </div>
 
@@ -413,6 +421,10 @@
                 .then(data => {
                     document.getElementById('deviceId').textContent = 'Device: ' + data.device_id;
                     document.getElementById('pendingCount').textContent = data.pending_count;
+
+                    // Show sensor skill info
+                    document.getElementById('sensorSkillId').textContent = data.sensor_skill_id || '-';
+                    document.getElementById('scaleBackend').textContent = data.scale_backend || '-';
 
                     const pendingEl = document.getElementById('pendingCount');
                     if (data.pending_count > 0) {
@@ -567,7 +579,30 @@
         }
 
         function readScale() {
-            alert('Scale reader coming in next version');
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Reading...';
+
+            fetch('/api/read-weight', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    setWeight(data.weight);
+                    showMessage('Scale: ' + data.weight + ' kg', 'success');
+                } else {
+                    showMessage('Scale error: ' + (data.message || 'Unknown error'), 'error');
+                }
+            })
+            .catch(err => {
+                showMessage('Scale read failed', 'error');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = 'Read Scale';
+            });
         }
 
         function cleanupDuplicates() {
