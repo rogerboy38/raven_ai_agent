@@ -117,7 +117,7 @@ class SensorSkillClient:
             logger.warning("API credentials not configured, using defaults")
             return self._get_default_config()
 
-        url = f"{self.erpnext_url}/api/method/amb_w_spc.api.sensor_skill.get_sensor_skill"
+        url = f"{self.erpnext_url}/api/method/amb_w_spc.api.sensor_skill.get_sensor_skill_config"
         try:
             resp = requests.get(
                 url,
