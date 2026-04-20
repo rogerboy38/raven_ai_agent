@@ -78,10 +78,8 @@ scheduler_events = {
 # Website
 website_route_rules = []
 
-# Fixtures (disabled temporarily)
-# fixtures = ["AI Agent Settings"]
+# Fixtures (module-filtered for V13.5-P2)
 fixtures = [
-    "IoT Ollama Settings",
     {"doctype": "Custom Field",    "filters": [["module", "=", "Raven AI Agent"]]},
     {"doctype": "Property Setter", "filters": [["module", "=", "Raven AI Agent"]]},
 ]
