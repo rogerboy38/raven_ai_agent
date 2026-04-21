@@ -49,4 +49,4 @@ override_doctype_class = {
 }
 
 # Run workspace orphan fix before migration
-before_migrate = ["amb_w_tds.patches.fix_workspace_orphan.apply_patch"]
+before_migrate = ["amb_w_tds.patches.v13_5.restore_amb_workspaces.execute"]
