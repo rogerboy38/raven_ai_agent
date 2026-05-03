@@ -50,6 +50,16 @@ def _install_stubs():
 
         fake.enqueue = _enqueue
 
+        # frappe.whitelist decorator stub (no-op).
+        def _whitelist(*dargs, **dkwargs):
+            def _decorator(fn):
+                return fn
+            if dargs and callable(dargs[0]):
+                return dargs[0]
+            return _decorator
+
+        fake.whitelist = _whitelist
+
         class _DB:
             def get_single_value(self, *a, **k):
                 return None
@@ -233,6 +243,60 @@ def test_capture_strips_secrets_in_payload():
     print("test_capture_strips_secrets_in_payload OK")
 
 
+# --------------------------- setup._sync_fork_to_sha --------------------- #
+def test_sync_fork_uses_plural_git_refs_url():
+    from raven_ai_agent.bug_reporter import setup as setup_mod
+
+    captured = {"get_urls": [], "patch_urls": []}
+
+    class _Resp:
+        def __init__(self, status_code=200, payload=None):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    def fake_get(url, headers=None, timeout=None):
+        captured["get_urls"].append(url)
+        return _Resp(200, {"object": {"sha": "oldsha"}})
+
+    def fake_patch(url, headers=None, json=None, timeout=None):
+        captured["patch_urls"].append(url)
+        return _Resp(200, {"ref": "refs/heads/main"})
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        return _Resp(201, {})
+
+    real_get = setup_mod.requests.get
+    real_patch = setup_mod.requests.patch
+    real_post = setup_mod.requests.post
+    setup_mod.requests.get = fake_get
+    setup_mod.requests.patch = fake_patch
+    setup_mod.requests.post = fake_post
+    try:
+        setup_mod._sync_fork_to_sha(
+            fork_owner="rogerboy38bis",
+            repo="raven_ai_agent",
+            upstream_owner="rogerboy38",
+            sha="newsha",
+            snapshot_branch="prod-snapshot-2026-05-02-abcd1234",
+            headers={},
+        )
+    finally:
+        setup_mod.requests.get = real_get
+        setup_mod.requests.patch = real_patch
+        setup_mod.requests.post = real_post
+
+    assert captured["get_urls"], "expected at least one GET"
+    assert captured["patch_urls"], "expected at least one PATCH"
+    for url in captured["get_urls"] + captured["patch_urls"]:
+        assert "/git/refs/heads/" in url, f"expected plural /git/refs/heads/ in {url!r}"
+        assert "/git/ref/heads/" not in url, f"singular /git/ref/heads/ leaked in {url!r}"
+    print("test_sync_fork_uses_plural_git_refs_url OK")
+
+
 # --------------------------- main ---------------------------------------- #
 if __name__ == "__main__":
     test_redact_secrets_strips_openai_key()
@@ -248,4 +312,5 @@ if __name__ == "__main__":
     test_capture_disabled_returns_none()
     test_capture_enabled_logs_and_enqueues()
     test_capture_strips_secrets_in_payload()
+    test_sync_fork_uses_plural_git_refs_url()
     print("\nAll bug reporter smoke tests passed.")

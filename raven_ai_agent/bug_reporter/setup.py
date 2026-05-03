@@ -191,7 +191,7 @@ def _sync_fork_to_sha(
     out: dict = {}
 
     # 1. Read the current main SHA on the fork.
-    main_ref_url = f"{_GITHUB_API}/repos/{fork_owner}/{repo}/git/ref/heads/main"
+    main_ref_url = f"{_GITHUB_API}/repos/{fork_owner}/{repo}/git/refs/heads/main"
     cur = requests.get(main_ref_url, headers=headers, timeout=10)
     out["current_main_sha"] = (cur.json() or {}).get("object", {}).get("sha") if cur.status_code == 200 else None
 
