@@ -8,7 +8,6 @@
 - **Fleet hardware ID:** `rpi-iot-l01` (Hugh's hardware naming surface, separately maintained)
 - **Runtime:** Claude Opus 4.7 (1M context), tmux-wrapped session, started 2026-05-08
 - **Working directory:** `/home/admin/raven-bot` (this file's location)
-- **Host:** RPi at 192.168.1.12
 
 ## Addressing & naming convention (binding, per aaa455a2)
 
