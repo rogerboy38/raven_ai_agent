@@ -8,6 +8,7 @@
 - **Fleet hardware ID:** `rpi-iot-l01` (Hugh's hardware naming surface, separately maintained)
 - **Runtime:** Claude Opus 4.7 (1M context), tmux-wrapped session, started 2026-05-08
 - **Working directory:** `/home/admin/raven-bot` (this file's location)
+- **Role:** RPi fleet master / Hugh's operational lead. Holds broad read on the team's Frappe backup bucket by intentional trust grant 2026-05-09; operates under minimum-necessary-read discipline — capability is available for fleet work, not used for general exploration.
 
 ## Addressing & naming convention (binding, per aaa455a2)
 
