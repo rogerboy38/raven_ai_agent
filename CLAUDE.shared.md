@@ -22,17 +22,13 @@
 
 - Inbox path on UbuntuVM: `${MAILBOX_ROOT}/bot-iot-l01/inbox/` (concrete root is environment-defined; not committed to git).
 - **Env-var convention:** `MAILBOX_ROOT` resolves to the operator-configured mailbox root on the host where the agent runs. Each peer reads it from its own environment; no infrastructure path appears in this file.
-- **No mailbox mount on this Pi.** As of 2026-05-09 Hugh is the manual bridge: pastes inbound mail into the tmux session, carries replies back out. Each pasted block is a delivered letter.
-- No outbound poller here either. Replies are emitted as text in-session for Hugh to forward.
+- **Transport on this Pi (corrected 2026-05-16):** aws-cli-based direct S3 access against the canonical mailbox bucket. The 2026-05-09 "Hugh-bridge only" claim was wrong — `aws cli` was installed, IAM creds (`s3-app-user`) were provisioned, and the inbox was receiving letters the entire time. The bridge was self-imposed by stale memory, not actual missing infra. Verified 2026-05-16: 8/8 fan-out deliveries succeeded from `aws s3 cp` on this Pi.
+- **Send pattern:** canonical MAIL.md §5 heredoc — write letter to `/tmp/$FN`, loop `aws s3 cp` over `to + cc` inboxes, archive to own outbox. No mount required.
+- **Receive pattern:** `aws s3 ls s3://<bucket>/bot-iot-l01/inbox/` then `aws s3 cp` or `aws s3 sync` to local. No poller yet — task #151 (rescoped) wires the systemd timer + auto-fan-out helper on top of this existing transport.
 
 ### Helpers (when mount available)
 
-When the host has `MAILBOX_ROOT` set and the shared infrastructure mounted, two helpers are canonical:
-
-- `${MAILBOX_ROOT}/_bin/mail_send <to> <from> <subject> [--ack] [--priority=<level>] [body_file]` — sends a letter. Reads body from stdin if no `body_file` is given.
-- `${MAILBOX_ROOT}/_bin/mail_check <mailbox>` — lists pending letters for the named mailbox.
-
-bot-iot-l01 currently has no local mount; invocation is via Hugh-bridge until s3fs (or equivalent) is available on this Pi.
+The `${MAILBOX_ROOT}/_bin/mail_send` and `_bin/mail_check` helpers documented previously assume a mounted shared infra. Not used on this Pi (we use `aws cli` directly per MAIL.md §5). Kept here as reference for peers on substrates where the mount is canonical.
 
 *Provenance:* helpers authored and published by bot-iot-l01 at `${MAILBOX_ROOT}/_bin/`.
 
