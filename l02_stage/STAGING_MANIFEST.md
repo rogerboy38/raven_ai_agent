@@ -1,8 +1,15 @@
 # L02 weight-capture clone — local staging manifest
 
 **Staged:** 2026-06-04 by bot-iot-l01, on the L01 host, into `~/raven-bot/l02_stage/`.
-**Status:** LOCAL ONLY. Nothing written to the L02 disk (`/dev/sda`); no PROD wiring; creds blank.
-**Gated on:** ratification of the corrected (two-tier) architecture + answers to the 4 open questions.
+
+> **CLOSEOUT 2026-06-05 — DEPLOYED then PAUSED on hardware.** This tree was deployed onto the L02
+> SD card (files + `raven-env` venv + sandbox `.env` + `raven-weight.service` pre-enabled). All 4 open
+> questions answered; PROD creds verified working. Then PAUSED: L01 and L02 are the same physical Pi for
+> now, and the card became unreadable on L01's USB (card-reader reset loop — not data loss; card reads on
+> laptop). **Resume runbook is in the memory store: `project_l02_scale_integration.md`.** This staging tree
+> remains the committed source-of-truth copy; the L02 card holds the deployed copy.
+
+**Original status (pre-deploy):** LOCAL ONLY, creds blank, gated on ratification + 4 open questions.
 
 ## What this is
 A clean, parametrized copy of L01's **submission tier** (`web_app.py` + `templates/` + the
