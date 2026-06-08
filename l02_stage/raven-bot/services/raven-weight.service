@@ -22,7 +22,11 @@ Environment=SENSOR_SKILL_ID=scale_plant
 ExecStart=/home/admin/raven-bot/raven-env/bin/python3 /home/admin/raven-bot/rpi_client/web_app.py
 Restart=always
 RestartSec=5
-WatchdogSec=120
+# NO WatchdogSec — web_app.py does not implement sd_notify keepalives, so a
+# WatchdogSec here makes systemd SIGABRT-kill the healthy app every interval
+# (L01 hit this: ~1295 watchdog-kill restarts, scale dropping offline every ~120s,
+# fixed 2026-06-08). Restart=always covers real crashes. Add WatchdogSec back ONLY
+# if web_app.py is taught to send WATCHDOG=1 via sd_notify.
 
 # Hardening
 NoNewPrivileges=true
