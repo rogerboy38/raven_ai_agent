@@ -83,7 +83,8 @@ None. All scheduling is via systemd timers (Lesson 121 — systemd-over-user-cro
 | `raven-ngrok.service`         | system | ngrok tunnel exposing the local Flask weight UI to operator-facing URL |
 | `raven-weight.service`        | system | Flask app on local port 5000 — weight-capture UI for the scale |
 | `raven-watchdog.timer`        | system | Periodic health check                                        |
-| `wayvnc.service`              | system | (Disabled in favor of RealVNC `vncserver-virtuald` on localhost:5999, SSH-tunnel access; left enabled by Pi-Connect default but not the canonical VNC path on this host) |
+| `wayvnc.service`              | system | wayvnc 0.9.1 serving VNC on port 5900 (Hugh's direct-VNC path; SSH-tunnel reach). Canonical VNC path on this host — older memory claiming RealVNC `vncserver-virtuald` was here was wrong (corrected 2026-06-01). |
+| `rpi-connect-wayvnc.service`  | system | Second wayvnc instance for Raspberry Pi Connect cloud relay (separate socket; not Hugh's path) |
 
 Sensor-reader service references in older memory (`sensor-reader.service`, `iot-sensor.service`) — verify live state before relying on them; not in current `systemctl is-enabled` output.
 
@@ -128,7 +129,7 @@ Sensor-reader service references in older memory (`sensor-reader.service`, `iot-
 - [x] `raven-watchdog.timer` (system) — systemd-enabled
 - [x] AWS profile + IAM creds — `~/.aws/credentials` is a regular file under admin's home; survives reboot trivially
 - [x] Auto-memory store — `~/.claude/projects/-home-admin-raven-bot/memory/` is a regular directory; survives reboot
-- [x] VNC access path — RealVNC `vncserver-virtuald` on localhost:5999, SSH-tunnel reach; verified post-autostart-wiring 2026-05-15
+- [x] VNC access path — `wayvnc.service` on port 5900, SSH-tunnel reach; verified post-autostart-wiring 2026-05-15 (older entry mis-attributed this to RealVNC `vncserver-virtuald`; corrected 2026-06-01)
 - [ ] **Off-host backup of auto-memory + .env** — not currently in place; flagged as future work, not a hard gap
 
 Recovery ritual (after reboot or session loss): VNC connect (or local terminal) → tmux session is already attached via `claude-bot.service` → type "Hi I'm Hugh, load context and memories" → if no response, `systemctl --user restart claude-bot`.
