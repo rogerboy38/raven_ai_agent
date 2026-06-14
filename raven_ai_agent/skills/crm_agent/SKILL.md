@@ -34,7 +34,7 @@ patterns:
   - "(?:show|list|view)\\s+(?:my\\s+)?(?:pipeline|leads|opportunities|deals)"
   - "(?:next|best)\\s+(?:step|action|move)\\s+(?:on|for)\\s+\\S+"
   - "(?:draft|write|compose)\\s+(?:a\\s+)?(?:follow[-\\s]?up|email|seguimiento)"
-  - "(?:move|advance|set)\\s+(?:opp|opportunity|deal)\\s+\\S+\\s+to\\s+\\S+"
+  - "(?:move|advance|set)\\s+(?:(?:opp|opportunity|deal|oportunidad)\\s+)?\\S+\\s+to\\s+.+"
   - "(?:enrich|complete|completa)\\s+(?:lead|contact|prospect|prospecto)"
   - "(?:pipeline|deal)\\s+(?:summary|digest|status|report)"
   - "(?:qu[eé]\\s+sigue\\s+con|qu[eé]\\s+hacer\\s+con)\\s+\\S+"

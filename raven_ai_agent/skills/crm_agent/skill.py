@@ -48,8 +48,11 @@ INTENTS: List[Tuple[str, str, str]] = [
      "_handle_follow_up_draft"),
 
     # --- stage move ----------------------------------------------------------
+    # Accepts: "move Opp-0042 to Quotation", "set deal CRM-OPP-001 to Lost"
+    # Both forms supported: "move <id>" (where id starts with Opp/CRM/etc.)
+    # and "move opportunity <id>" with an explicit doctype word.
     ("stage_move",
-     r"(?:move|advance|set)\s+(?:opp|opportunity|deal|oportunidad)\s+(\S+)\s+to\s+(.+)$",
+     r"(?:move|advance|set)\s+(?:(?:opp|opportunity|deal|oportunidad)\s+)?(\S+)\s+to\s+(.+?)\s*$",
      "_handle_stage_move"),
 
     # --- enrichment ----------------------------------------------------------

@@ -34,7 +34,17 @@ doc_events = {
     },
     "File": {
         "after_insert": "raven_ai_agent.api.po_extractor.on_file_added"
-    }
+    },
+    # --- crm_agent skill ---------------------------------------------------
+    "Lead": {
+        "after_insert": "raven_ai_agent.skills.crm_agent.agents.lead_enricher.on_lead_after_insert"
+    },
+    "Opportunity": {
+        "on_update": "raven_ai_agent.skills.crm_agent.agents.opportunity_mover.on_opportunity_update"
+    },
+    "Communication": {
+        "after_insert": "raven_ai_agent.skills.crm_agent.agents.meeting_capturer.on_communication_after_insert"
+    },
 }
 
 # App lifecycle hooks
@@ -71,8 +81,14 @@ def app_uninstall():
 # Scheduler
 scheduler_events = {
     "daily": [
-        "raven_ai_agent.utils.memory.generate_daily_summaries"
-    ]
+        "raven_ai_agent.utils.memory.generate_daily_summaries",
+        # crm_agent: daily pipeline digest into Raven channel
+        "raven_ai_agent.skills.crm_agent.agents.pipeline_summarizer.run_daily_digest",
+    ],
+    "hourly": [
+        # crm_agent: stage-advance scan for open opportunities
+        "raven_ai_agent.skills.crm_agent.agents.opportunity_mover.scan_stalled_opportunities",
+    ],
 }
 
 # Website
