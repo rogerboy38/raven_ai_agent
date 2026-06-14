@@ -65,9 +65,15 @@ def add_note(
     content: str,
     title: Optional[str] = None,
 ) -> Dict:
-    """Use ERPNext 'CRM Note' if present, else a Comment."""
+    """Use ERPNext 'CRM Note' if present, else a Comment.
+
+    Fix (M2, PR #16 review): replaced bogus ``frappe.get_meta_module_list()``
+    call (no such API in Frappe v15/v16) with the documented existence check.
+    The original line evaluated to ``True`` unconditionally because of the
+    ``hasattr`` guard, so the fallback branch was unreachable.
+    """
     try:
-        if "CRM Note" in frappe.get_meta_module_list() if hasattr(frappe, "get_meta_module_list") else True:
+        if frappe.db.exists("DocType", "CRM Note"):
             try:
                 doc = frappe.get_doc({
                     "doctype": "CRM Note",
@@ -76,7 +82,7 @@ def add_note(
                     "reference_doctype": reference_doctype,
                     "reference_name": reference_name,
                 })
-                doc.insert()
+                doc.insert(ignore_permissions=False)
                 return {"ok": True, "name": doc.name, "kind": "CRM Note"}
             except Exception:
                 pass

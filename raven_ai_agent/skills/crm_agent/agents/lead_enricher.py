@@ -15,6 +15,8 @@ from typing import Dict, Optional
 import frappe
 from .base import CRMAgentBase
 
+__all__ = ['LeadEnricherAgent', 'enrich_async', 'on_lead_after_insert']
+
 
 SYSTEM_PROMPT = """You are a CRM data enrichment agent.
 Given a lead's name, email, and any notes, infer structured fields:
@@ -130,13 +132,18 @@ def on_lead_after_insert(doc, method=None):
     """Bind to Lead.after_insert in hooks.py:
         doc_events = {"Lead": {"after_insert":
             "raven_ai_agent.skills.crm_agent.agents.lead_enricher.on_lead_after_insert"}}
+
+    Note (S2, PR #16 review): ``enqueue_after_commit=True`` requires Frappe
+    ≥ v15. Sandbox is v16 so this is fine. If backporting to v13/v14, drop
+    the kwarg and accept the small risk of the worker picking up the job
+    before the parent transaction commits.
     """
     try:
         frappe.enqueue(
             "raven_ai_agent.skills.crm_agent.agents.lead_enricher.enrich_async",
             queue="long",
             lead=doc.name,
-            enqueue_after_commit=True,
+            enqueue_after_commit=True,   # Frappe ≥ v15
         )
     except Exception:
         # As a fallback, run synchronously (don't break Lead creation).
@@ -144,4 +151,4 @@ def on_lead_after_insert(doc, method=None):
             enrich_async(lead=doc.name)
         except Exception:
             frappe.log_error(message=frappe.get_traceback(),
-                             title="[crm_agent] lead_enricher hook failed")
+                             title="[crm-agent] lead_enricher hook failed")

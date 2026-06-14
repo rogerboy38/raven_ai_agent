@@ -143,19 +143,44 @@ spec.loader.exec_module(crm_agent_pkg)
 # 4. Now load the test module and run.
 # ---------------------------------------------------------------------
 if __name__ == "__main__":
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+
+    # Original intent routing tests
     test_path = os.path.join(HERE, "test_intent_routing.py")
     spec = importlib.util.spec_from_file_location(
         "test_intent_routing_smoke", test_path
     )
     tmod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tmod)
-
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite()
     for cls_name in ("IntentRoutingTests", "SkillHandleTests", "ParsingTests"):
         cls = getattr(tmod, cls_name, None)
         if cls:
             suite.addTests(loader.loadTestsFromTestCase(cls))
+
+    # New B/M/S/N cleanup tests
+    cleanup_path = os.path.join(HERE, "test_cleanup_fixes.py")
+    if os.path.exists(cleanup_path):
+        cspec = importlib.util.spec_from_file_location(
+            "test_cleanup_fixes_smoke", cleanup_path
+        )
+        cmod = importlib.util.module_from_spec(cspec)
+        cspec.loader.exec_module(cmod)
+        for cls_name in (
+            "TestSkillNameKebabCase",
+            "TestMeetingCapturerScalarFix",
+            "TestParsingCurrencyAndNameFallback",
+            "TestDealCoachWithoutPreposition",
+            "TestStageMovePolitenessStrip",
+            "TestAutonomyEnforcement",
+            "TestAuditLogWrites",
+            "TestHookEntrypoints",
+            "TestMoveStageAliases",
+            "TestBilingualIntents",
+        ):
+            cls = getattr(cmod, cls_name, None)
+            if cls:
+                suite.addTests(loader.loadTestsFromTestCase(cls))
 
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)

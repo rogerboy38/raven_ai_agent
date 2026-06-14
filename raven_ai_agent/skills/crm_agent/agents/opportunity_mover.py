@@ -14,6 +14,8 @@ import frappe
 from frappe.utils import nowdate, add_days
 from .base import CRMAgentBase
 
+__all__ = ['OpportunityMoverAgent', 'scan_stalled_opportunities', 'on_opportunity_update']
+
 
 class OpportunityMoverAgent(CRMAgentBase):
     agent_name = "opportunity_mover"
@@ -30,7 +32,7 @@ class OpportunityMoverAgent(CRMAgentBase):
                 self._evaluate(o["name"])
             except Exception:
                 frappe.log_error(
-                    title=f"[crm_agent] opportunity_mover {o['name']}",
+                    title=f"[crm-agent.opportunity_mover] {o['name']}",
                     message=frappe.get_traceback(),
                 )
 
@@ -83,4 +85,4 @@ def on_opportunity_update(doc, method=None):
         OpportunityMoverAgent()._evaluate(doc.name)
     except Exception:
         frappe.log_error(message=frappe.get_traceback(),
-                         title="[crm_agent] on_opportunity_update")
+                         title="[crm-agent.opportunity_mover] on_opportunity_update")

@@ -32,8 +32,10 @@ INTENTS: List[Tuple[str, str, str]] = [
      "_handle_pipeline_list"),
 
     # --- next best action / deal coach ---------------------------------------
+    # S4 fix: accept the EN form *without* a preposition too ("next step OPP-0042")
+    # so coverage matches the ES sibling below ("qué sigue con X" / "qué sigue X").
     ("deal_coach",
-     r"(?:next\s+(?:step|action|move)|what\s+should\s+i\s+do)\s+(?:on|for|next\s+on)\s+(\S+)",
+     r"(?:next\s+(?:step|action|move)|what\s+should\s+i\s+do)\s+(?:(?:on|for|next\s+on)\s+)?(\S+)",
      "_handle_deal_coach"),
     ("deal_coach_es",
      r"(?:qu[eé]\s+sigue\s+con|qu[eé]\s+hacer\s+con|pr[oó]ximo\s+paso\s+(?:en|para))\s+(\S+)",
@@ -62,10 +64,12 @@ INTENTS: List[Tuple[str, str, str]] = [
 
     # --- creation ------------------------------------------------------------
     ("create_lead",
-     r"(?:new|create|add)\s+lead\s+(.+)$",
+     # Bilingual: english (new/create/add) + spanish (nuevo/nueva/crea/crear/agrega/añade)
+     r"(?:new|create|add|nuevo|nueva|crea|crear|agrega|a[ñn]ade)\s+(?:lead|prospecto)\s+(.+)$",
      "_handle_create_lead"),
     ("create_opportunity",
-     r"(?:new|create|add)\s+(?:opportunity|deal|oportunidad)\s+(.+)$",
+     # Bilingual: english (new/create/add) + spanish (nuevo/nueva/crea/crear/agrega/añade)
+     r"(?:new|create|add|nuevo|nueva|crea|crear|agrega|a[ñn]ade)\s+(?:opportunity|deal|oportunidad)\s+(.+)$",
      "_handle_create_opportunity"),
 
     # --- generic CRM help ----------------------------------------------------
@@ -76,9 +80,15 @@ INTENTS: List[Tuple[str, str, str]] = [
 
 
 class CRMAgentSkill(SkillBase):
-    """Agentic CRM skill — humans supervise agents."""
+    """Agentic CRM skill — humans supervise agents.
 
-    name = "crm_agent"
+    Fix (M5, PR #16 review): ``name`` is kebab-case (``crm-agent``) to match the
+    repository-wide convention established by ``formulation-orchestrator`` and
+    all other skills. The Python package directory remains ``crm_agent/`` —
+    that's a Python identifier constraint, not a skill-name choice.
+    """
+
+    name = "crm-agent"
     description = (
         "Agentic CRM for ERPNext — enriches leads, advances opportunities, "
         "drafts follow-ups, summarizes pipeline."
@@ -122,7 +132,7 @@ class CRMAgentSkill(SkillBase):
                 result = handler(query=q, match=m, context=context)
             except Exception as e:
                 frappe.log_error(
-                    title=f"[crm_agent] {intent_id} failed",
+                    title=f"[crm-agent.skill] {intent_id} failed",
                     message=frappe.get_traceback(),
                 )
                 return {
@@ -187,10 +197,20 @@ class CRMAgentSkill(SkillBase):
         draft = agent.draft(target=target, query=query)
         return {"response": draft, "data": {"agent": "follow_up_writer", "target": target}}
 
+    # Trailing politeness words / punctuation stripped from stage names
+    # before lookup. S5 fix — "move CRM-OPP-001 to Quotation please" no
+    # longer fails with "unknown status 'Quotation Please'".
+    _STAGE_TRAIL_RE = re.compile(
+        r"\s+(?:please|porfa|por\s+favor|gracias|thanks?|now|ahora)\b.*$",
+        re.IGNORECASE,
+    )
+
     def _handle_stage_move(self, *, query, match, context) -> Dict:
         from raven_ai_agent.skills.crm_agent.tools import opportunities
         opp_id = match.group(1).strip()
         new_stage = match.group(2).strip().rstrip(".")
+        # S5: strip trailing politeness words / extra clauses.
+        new_stage = self._STAGE_TRAIL_RE.sub("", new_stage).strip()
         result = opportunities.move_stage(name=opp_id, status=new_stage)
         return {
             "response": f"✅ Moved `{opp_id}` to **{new_stage}**." if result.get("ok")

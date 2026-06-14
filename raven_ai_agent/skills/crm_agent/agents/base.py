@@ -13,6 +13,8 @@ from typing import Dict, Optional, Any
 
 import frappe
 
+__all__ = ['CRMAgentBase']
+
 
 class CRMAgentBase:
     """Common base for crm_agent sub-agents."""
@@ -51,7 +53,7 @@ class CRMAgentBase:
             return provider.complete(system=system, user=user, **kwargs) or ""
         except Exception:
             frappe.log_error(message=frappe.get_traceback(),
-                             title=f"[crm_agent.{self.agent_name}] llm failed")
+                             title=f"[crm-agent.{self.agent_name}] llm failed")
             return ""
 
     # ----------------------------------------------------------------
@@ -82,7 +84,7 @@ class CRMAgentBase:
             from raven_ai_agent.patterns import guardrails
             if hasattr(guardrails, "is_action_allowed"):
                 return guardrails.is_action_allowed(
-                    skill="crm_agent",
+                    skill="crm-agent",   # M5: kebab-case skill name
                     action=action,
                     autonomy_level=self._autonomy,
                 )
@@ -94,10 +96,16 @@ class CRMAgentBase:
     # Audit
     # ----------------------------------------------------------------
     def audit(self, intent: str, decision: str, payload: Optional[Dict] = None):
+        """Write one row to AI Routing Audit Log.
+
+        Uses ``ignore_permissions=True`` deliberately — the audit trail must not
+        be suppressible by the calling user (S3, PR #16 review). Ensure the
+        DocType has read-only client perms for non-admin roles in production.
+        """
         try:
             frappe.get_doc({
                 "doctype": "AI Routing Audit Log",
-                "skill": "crm_agent",
+                "skill": "crm-agent",   # M5: kebab-case skill name
                 "agent": self.agent_name,
                 "intent": intent,
                 "decision": decision,

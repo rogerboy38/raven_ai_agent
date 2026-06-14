@@ -11,6 +11,8 @@ import re
 import frappe
 from .base import CRMAgentBase
 
+__all__ = ['MeetingCapturerAgent', 'on_communication_after_insert']
+
 EMAIL_RE = re.compile(r"[\w\.\+\-]+@[\w\-]+\.[\w\.\-]+")
 
 
@@ -62,17 +64,27 @@ class MeetingCapturerAgent(CRMAgentBase):
                            {"comm": comm.name, "lead": created["name"]})
 
     def _link(self, comm, dt: str, name: str):
+        # S1 fix: flag the save so the after_insert hook short-circuits on the
+        # re-fire it triggers. Without this we would recurse into capture()
+        # for a Communication the agent itself just modified.
         comm.reference_doctype = dt
         comm.reference_name = name
         comm.status = "Linked"
+        comm.flags.from_meeting_capturer = True
         comm.save(ignore_permissions=True)
         self.audit("capture", "linked",
                    {"comm": comm.name, "to": f"{dt}/{name}"})
 
     @staticmethod
     def _find_opportunity_for_contact(contact_name: str):
-        # Find a recent open opportunity whose customer has this contact
-        return frappe.db.sql(
+        """Return a single opportunity name (str) or None.
+
+        Fix (M1, PR #16 review): previously returned ``frappe.db.sql`` raw output
+        (``[('OPP-001',)]``) which the caller at line 46 treated as a scalar
+        ``reference_name``. That broke the link silently (string-cast of a list
+        of tuples).
+        """
+        rows = frappe.db.sql(
             """
             SELECT o.name FROM `tabOpportunity` o
             JOIN `tabDynamic Link` dl
@@ -85,14 +97,28 @@ class MeetingCapturerAgent(CRMAgentBase):
             """,
             {"contact": contact_name},
         )
-        # Returns [(name,)] or []
+        return rows[0][0] if rows else None
 
 
 def on_communication_after_insert(doc, method=None):
+    """Bound to ``Communication.after_insert`` via hooks.py.
+
+    Fix (S1, PR #16 review): explicitly short-circuit on agent-originated
+    re-saves (``from_meeting_capturer`` flag) and on non-incoming-email
+    communications, so we don't recurse into capture() or burn LLM tokens
+    on internal notes, system mail, bulk imports, or replies the agent
+    itself wrote.
+    """
+    # Agent's own writes set this flag; do not recurse.
+    if getattr(doc, "flags", None) and doc.flags.get("from_meeting_capturer"):
+        return
+    # Only incoming emails are interesting.
     if doc.communication_medium not in ("Email",):
+        return
+    if getattr(doc, "sent_or_received", None) and doc.sent_or_received != "Received":
         return
     try:
         MeetingCapturerAgent().capture(doc.name)
     except Exception:
         frappe.log_error(message=frappe.get_traceback(),
-                         title="[crm_agent] on_communication_after_insert")
+                         title="[crm-agent] on_communication_after_insert")

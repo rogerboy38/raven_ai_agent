@@ -9,7 +9,59 @@ from typing import Dict, List, Optional
 import frappe
 
 
-VALID_STATUSES = {"Open", "Quotation", "Converted", "Replied", "Lost", "Closed"}
+# Static fallback list — used when the Opportunity DocType meta isn't available
+# (fresh installs, sandbox without the site loaded). Production code path uses
+# :func:`_valid_statuses` which reads the DocType meta at runtime so v16's
+# "Replied" (and any future statuses) are picked up automatically. See N2 in
+# the PR #16 review.
+_STATIC_VALID_STATUSES = {"Open", "Quotation", "Converted", "Replied", "Lost", "Closed"}
+
+
+def _valid_statuses() -> set:
+    """Read allowed Opportunity statuses from DocType meta at runtime.
+
+    Falls back to the static set if the meta lookup fails (e.g. running
+    outside a Frappe site during smoke tests).
+    """
+    try:
+        meta = frappe.get_meta("Opportunity")
+        field = meta.get_field("status")
+        if field and field.options:
+            return {s.strip() for s in field.options.split("\n") if s.strip()}
+    except Exception:
+        pass
+    return _STATIC_VALID_STATUSES
+
+
+# Backwards-compatible alias for callers that imported the old constant.
+VALID_STATUSES = _STATIC_VALID_STATUSES
+
+
+def _default_company() -> Optional[str]:
+    """Resolve the active company (user default → global default)."""
+    try:
+        return (frappe.defaults.get_user_default("Company")
+                or frappe.db.get_single_value("Global Defaults", "default_company"))
+    except Exception:
+        return None
+
+
+def _default_currency() -> str:
+    """Resolve the active currency from the company's ``default_currency``.
+
+    Used by ``create_opportunity`` and the parsing layer (M4 fix) so bare
+    ``$`` never silently defaults to MXN — it follows the company config.
+    Falls back to ``MXN`` only as a last resort.
+    """
+    try:
+        company = _default_company()
+        if company:
+            cur = frappe.db.get_value("Company", company, "default_currency")
+            if cur:
+                return cur
+    except Exception:
+        pass
+    return "MXN"
 
 
 @frappe.whitelist()
@@ -17,29 +69,34 @@ def create_opportunity(
     party_name: str,
     opportunity_from: str = "Customer",
     customer_name: Optional[str] = None,
-    currency: str = "MXN",
+    currency: Optional[str] = None,
     opportunity_amount: float = 0,
     expected_closing: Optional[str] = None,
     source: str = "Raven AI",
 ) -> Dict:
+    """Create an Opportunity.
+
+    Fix (N1, PR #16 review): ``currency`` now defaults to the company's
+    ``default_currency`` instead of hard-coded "MXN". Pass an explicit
+    ``currency=`` to override.
+    """
     try:
         opp = frappe.get_doc({
             "doctype": "Opportunity",
             "opportunity_from": opportunity_from,
             "party_name": party_name,
             "customer_name": customer_name or party_name,
-            "currency": currency,
+            "currency": currency or _default_currency(),
             "opportunity_amount": opportunity_amount,
             "expected_closing": expected_closing,
             "source": source,
             "status": "Open",
-            "company": frappe.defaults.get_user_default("Company")
-                       or frappe.db.get_single_value("Global Defaults", "default_company"),
+            "company": _default_company(),
         })
         opp.insert(ignore_permissions=False)
         return {"ok": True, "name": opp.name}
     except Exception as e:
-        frappe.log_error(message=frappe.get_traceback(), title="[crm_agent] create_opportunity")
+        frappe.log_error(message=frappe.get_traceback(), title="[crm-agent.opportunities] create_opportunity")
         return {"ok": False, "error": str(e)}
 
 
@@ -58,9 +115,10 @@ def move_stage(name: str, status: str) -> Dict:
     }
     status_clean = aliases.get(status_clean, status_clean)
 
-    if status_clean not in VALID_STATUSES:
+    valid = _valid_statuses()
+    if status_clean not in valid:
         return {"ok": False,
-                "error": f"Unknown status '{status}'. Valid: {sorted(VALID_STATUSES)}"}
+                "error": f"Unknown status '{status}'. Valid: {sorted(valid)}"}
     try:
         opp = frappe.get_doc("Opportunity", name)
         opp.status = status_clean
@@ -72,12 +130,20 @@ def move_stage(name: str, status: str) -> Dict:
 
 @frappe.whitelist()
 def set_amount(name: str, amount: float, currency: Optional[str] = None) -> Dict:
+    """Set Opportunity amount (and optionally currency).
+
+    Fix (M3, PR #16 review): added explicit ``ignore_permissions=False``
+    to match the convention used by every other write in this skill
+    (``create_opportunity``, ``move_stage``, ``create_lead``, etc.).
+    Default is the same, but the explicit flag prevents the next reader
+    from assuming the lack of flag is load-bearing.
+    """
     try:
         opp = frappe.get_doc("Opportunity", name)
         opp.opportunity_amount = float(amount)
         if currency:
             opp.currency = currency
-        opp.save()
+        opp.save(ignore_permissions=False)
         return {"ok": True, "name": opp.name, "amount": opp.opportunity_amount}
     except Exception as e:
         return {"ok": False, "error": str(e)}

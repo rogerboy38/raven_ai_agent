@@ -1,5 +1,5 @@
 ---
-name: crm_agent
+name: crm-agent
 description: Agentic CRM for ERPNext — humans supervise agents that enrich leads, advance opportunities, draft follow-ups, and summarize pipeline.
 version: 0.1.0
 author: Raven AI Agent
@@ -144,7 +144,21 @@ work from chat, from the ERPNext UI, and from the LLM tool-call loop.
 ## Autonomy
 
 Set `ai_agent_settings.crm_autonomy_level` (0–4). Enforced by
-`raven_ai_agent.patterns.guardrails`. Default = 1 (suggest only).
+`raven_ai_agent.patterns.guardrails` (see `raven_ai_agent/patterns/`,
+shipped in the patterns module v0.1.0). Default = 1 (suggest only).
+
+The ladder:
+
+| Level | Name | What's allowed |
+|-------|------|----------------|
+| 0 | observe | read-only; no writes |
+| 1 | suggest | post proposals in Raven; human approves |
+| 2 | enrich/draft | safe writes (Lead enrichment, follow-up drafts) |
+| 3 | stage_move | advance opportunity stages, set amounts |
+| 4 | autonomous | send emails, full pipeline ownership |
+
+Per-action overrides live in the optional `AI Action Policy` DocType
+(see the patterns module install guide).
 
 ## Usage Examples
 
@@ -175,5 +189,5 @@ Add to `ai_agent_settings`:
 
 - Sibling plan: `CRM_SKILL_PLAN.md`
 - Framework: `raven_ai_agent/skills/framework.py`
-- Patterns: `raven_ai_agent/patterns/`
+- Patterns: `raven_ai_agent/patterns/` (guardrails + planner v0.1.0)
 - Inspiration: item.app interview — [Startupeable](https://www.youtube.com/watch?v=bRkFMiuR5Es)

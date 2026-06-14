@@ -36,7 +36,7 @@ def create_lead(
         doc.insert(ignore_permissions=False)
         return {"ok": True, "name": doc.name, "lead_name": doc.lead_name}
     except Exception as e:
-        frappe.log_error(message=frappe.get_traceback(), title="[crm_agent] create_lead")
+        frappe.log_error(message=frappe.get_traceback(), title="[crm-agent.leads] create_lead")
         return {"ok": False, "error": str(e)}
 
 

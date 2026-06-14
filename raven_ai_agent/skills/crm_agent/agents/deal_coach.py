@@ -9,6 +9,8 @@ from typing import Dict
 import frappe
 from .base import CRMAgentBase
 
+__all__ = ['DealCoachAgent']
+
 
 SYSTEM_PROMPT = """You are a senior sales coach.
 Given an Opportunity's stage, amount, expected close, and full communication

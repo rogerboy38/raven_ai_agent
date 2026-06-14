@@ -21,9 +21,41 @@ _AMOUNT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Currency tokens that unambiguously map to MXN.
+_MXN_TOKENS = {"MX$", "MN", "MXN"}
+
+
+def _normalize_currency(token: str) -> str:
+    """Map a parsed currency token to a canonical ISO code.
+
+    Fix (M4, PR #16 review): bare ``$`` used to default to MXN unconditionally,
+    silently mis-currencying USD-flavored prompts in a bilingual environment.
+    It now resolves to the company's ``default_currency`` (via
+    ``opportunities._default_currency()``), which on the sandbox is MXN but
+    on a USD-configured company will be USD. Explicit ``MXN``, ``MX$``, ``MN``
+    still map to MXN regardless of company config.
+    """
+    token = (token or "").upper()
+    if token in _MXN_TOKENS:
+        return "MXN"
+    if token in {"$", ""}:
+        # Ambiguous bare $ — ask the company config.
+        try:
+            from raven_ai_agent.skills.crm_agent.tools.opportunities import _default_currency
+            return _default_currency()
+        except Exception:
+            return "MXN"
+    return token
+
 
 def parse_lead_oneliner(text: str) -> Dict:
-    """Parse 'Name at Company, email, notes...' loosely."""
+    """Parse 'Name at Company, email, notes...' loosely.
+
+    Fix (N7, PR #16 review): when the input is only an email (no "Name at
+    Company" phrase and no comma chunks), fall back to using the local-part
+    of the email as ``lead_name`` rather than returning ``lead_name=""``
+    which downstream callers treat as invalid.
+    """
     out: Dict = {}
     rest = text.strip()
 
@@ -50,6 +82,10 @@ def parse_lead_oneliner(text: str) -> Dict:
             out["lead_name"] = chunks[0]
             rest = ",".join(chunks[1:])
 
+    # N7: synthesize a name from the email local-part if still missing.
+    if not out.get("lead_name") and out.get("email_id"):
+        out["lead_name"] = out["email_id"].split("@", 1)[0]
+
     notes = re.sub(r"\s+", " ", rest).strip(" ,")
     if notes:
         out["notes"] = notes
@@ -74,7 +110,7 @@ def parse_opp_oneliner(text: str) -> Dict:
         except ValueError:
             pass
         cur = amt_m.group("cur").upper()
-        out["currency"] = "MXN" if cur in {"MX$", "MN", "MXN", "$"} else cur
+        out["currency"] = _normalize_currency(cur)
         rest = rest.replace(amt_m.group(0), "")
 
     for_m = re.search(r"\bfor\s+(.+?)(?:,|$)", rest, re.IGNORECASE)

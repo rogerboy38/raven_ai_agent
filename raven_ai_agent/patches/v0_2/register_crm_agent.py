@@ -71,15 +71,31 @@ def execute():
         print(f"[crm_agent] custom field creation warning: {e}")
 
     # 2. Skill registry row (if the AI Skill Registry DocType exists) ------
+    # M5 (PR #16 review): registry name is kebab-case ("crm-agent") to match
+    # the convention used by formulation-orchestrator and all other skills.
+    # If an old "crm_agent" row exists from an earlier install, rename it.
     try:
         if "AI Skill Registry" in frappe.get_all(
             "DocType", filters={"name": "AI Skill Registry"}, pluck="name"
         ):
-            if not frappe.db.exists("AI Skill Registry", "crm_agent"):
+            # One-shot migration: rename legacy snake_case row if present.
+            if frappe.db.exists("AI Skill Registry", "crm_agent") and \
+               not frappe.db.exists("AI Skill Registry", "crm-agent"):
+                try:
+                    frappe.rename_doc("AI Skill Registry", "crm_agent",
+                                      "crm-agent", force=True, merge=False)
+                    print("[crm-agent] renamed legacy 'crm_agent' → 'crm-agent'.")
+                except Exception:
+                    frappe.log_error(
+                        title="[crm-agent] registry rename failed",
+                        message=frappe.get_traceback(),
+                    )
+
+            if not frappe.db.exists("AI Skill Registry", "crm-agent"):
                 frappe.get_doc({
                     "doctype": "AI Skill Registry",
-                    "name": "crm_agent",
-                    "skill": "crm_agent",
+                    "name": "crm-agent",
+                    "skill": "crm-agent",
                     "enabled": 1,
                     "category": "crm",
                     "priority": 65,
@@ -88,15 +104,26 @@ def execute():
                         "opportunities, draft follow-ups, summarize pipeline."
                     ),
                 }).insert(ignore_permissions=True, ignore_if_duplicate=True)
-                print("[crm_agent] registered in AI Skill Registry.")
+                print("[crm-agent] registered in AI Skill Registry.")
             else:
-                print("[crm_agent] already registered in AI Skill Registry.")
+                print("[crm-agent] already registered in AI Skill Registry.")
     except Exception:
         # Registry row is best-effort; skill is auto-discovered from the
         # filesystem regardless.
         frappe.log_error(
-            title="[crm_agent] skill registry write failed",
+            title="[crm-agent] skill registry write failed",
             message=frappe.get_traceback(),
         )
+
+    # Also back-fill any historical audit-log rows from before the rename so
+    # analytics don't see two skill names. Best-effort, swallows errors.
+    try:
+        if frappe.db.exists("DocType", "AI Routing Audit Log"):
+            frappe.db.sql(
+                """UPDATE `tabAI Routing Audit Log`
+                   SET skill = 'crm-agent' WHERE skill = 'crm_agent'"""
+            )
+    except Exception:
+        pass
 
     frappe.db.commit()

@@ -12,6 +12,8 @@ from frappe.utils import nowdate, add_days
 
 from .base import CRMAgentBase
 
+__all__ = ['PipelineSummarizerAgent', 'run_daily_digest']
+
 
 class PipelineSummarizerAgent(CRMAgentBase):
     agent_name = "pipeline_summarizer"
@@ -89,7 +91,7 @@ class PipelineSummarizerAgent(CRMAgentBase):
             post_message(channel=channel, text=text)
         except Exception:
             frappe.log_error(message=frappe.get_traceback(),
-                             title="[crm_agent] pipeline_summarizer post failed")
+                             title="[crm-agent.pipeline_summarizer] post failed")
 
 
 # Scheduler entrypoint

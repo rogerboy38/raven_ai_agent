@@ -12,6 +12,8 @@ from typing import Dict, Optional
 import frappe
 from .base import CRMAgentBase
 
+__all__ = ['FollowUpWriterAgent']
+
 
 SYSTEM_PROMPT = """You are a senior B2B account manager.
 Write a concise, personalized follow-up email (or WhatsApp if requested).
