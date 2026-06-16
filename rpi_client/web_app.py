@@ -31,7 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response
 
 import requests
 
@@ -125,6 +125,24 @@ def get_history(limit: int = 10) -> List[Dict]:
     conn.close()
     return rows
 
+
+
+def check_duplicate_serial(serial):
+    """Check if serial already submitted."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*), MAX(gross_weight), MAX(timestamp) FROM submission_history WHERE barrel_serial = ? AND status = 'success'",
+            (serial,)
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row and row[0] > 0:
+            return {'is_duplicate': True, 'count': row[0], 'last_weight': row[1], 'last_timestamp': row[2]}
+    except Exception as e:
+        pass
+    return {'is_duplicate': False}
 
 def validate_barrel_serial(serial: str) -> bool:
     """Validate barrel serial exists in ERPNext.
@@ -286,7 +304,11 @@ init_db()
 @app.route('/')
 def index():
     """Main weight capture page (mobile-friendly)."""
-    return render_template('index.html')
+    response = make_response(render_template('index.html'))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/api/submit-weight', methods=['POST'])
@@ -366,7 +388,8 @@ def api_validate_barrel(serial: str):
     return jsonify({
         'status': 'success',
         'barrel_serial': serial,
-        'valid': True
+        'valid': True,
+        'duplicate': check_duplicate_serial(serial)
     })
 
 
@@ -432,6 +455,51 @@ def api_history():
         'count': len(history),
         'items': history
     })
+
+
+@app.route('/api/cleanup-duplicates', methods=['POST'])
+def api_cleanup_duplicates():
+    """Remove duplicate entries, keeping only the latest for each barrel_serial.
+
+    Returns:
+        JSON with cleanup results.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+
+        # Get count before
+        cur.execute('SELECT COUNT(*) FROM submission_history')
+        count_before = cur.fetchone()[0]
+
+        # Delete duplicates, keeping the latest (highest id) for each barrel_serial
+        cur.execute('''
+            DELETE FROM submission_history
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM submission_history
+                GROUP BY barrel_serial
+            )
+        ''')
+        deleted = cur.rowcount
+        conn.commit()
+
+        # Get count after
+        cur.execute('SELECT COUNT(*) FROM submission_history')
+        count_after = cur.fetchone()[0]
+        conn.close()
+
+        logger.info(f"Cleanup: removed {deleted} duplicates, {count_after} entries remain")
+
+        return jsonify({
+            'status': 'success',
+            'deleted': deleted,
+            'count_before': count_before,
+            'count_after': count_after
+        })
+    except Exception as e:
+        logger.error(f"Cleanup error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 def main():
