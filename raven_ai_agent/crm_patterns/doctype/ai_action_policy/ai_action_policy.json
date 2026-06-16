@@ -1,0 +1,110 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:AAP-{skill}-{action}",
+ "creation": "2026-06-14 08:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "skill",
+  "action",
+  "column_break_1",
+  "min_autonomy_level",
+  "section_break_1",
+  "require_human_approval",
+  "blocked",
+  "section_break_2",
+  "notes"
+ ],
+ "fields": [
+  {
+   "description": "Snake_case skill identifier (e.g. 'crm_agent', 'lead_enricher'). Use '*' as a wildcard that matches any skill.",
+   "fieldname": "skill",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Skill",
+   "reqd": 1
+  },
+  {
+   "description": "Action keyword (e.g. 'enrich', 'stage_move', 'send_email'). Must match the action passed to is_action_allowed().",
+   "fieldname": "action",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Action",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Minimum autonomy level (0-4) required to perform this action. 0=observe, 1=suggest, 2=enrich, 3=stage_move, 4=autonomous.",
+   "fieldname": "min_autonomy_level",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Min Autonomy Level",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Approval Flags"
+  },
+  {
+   "default": "0",
+   "description": "If checked, action is allowed but audit log entry gets escalation=1 for downstream approval workflows. In v0.3, this triggers a LangGraph interrupt() with Approve/Reject buttons in the Raven channel.",
+   "fieldname": "require_human_approval",
+   "fieldtype": "Check",
+   "label": "Require Human Approval"
+  },
+  {
+   "default": "0",
+   "description": "If checked, action is always blocked regardless of autonomy level. Use for compliance holds or temporary kill-switches.",
+   "fieldname": "blocked",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Blocked"
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "description": "Operator notes — why this policy exists, who approved it, related ticket numbers.",
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-14 08:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "CRM Patterns",
+ "name": "AI Action Policy",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "All"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -6,6 +6,7 @@
 
 | Skill | Description | URL |
 |-------|-------------|-----|
+| `crm-agent` | Agentic CRM for ERPNext — enrich leads, advance opportunities, draft follow-ups, summarize pipeline | [SKILL.md](crm_agent/SKILL.md) |
 | `migration-fixer` | FoxPro → ERPNext migration validation and repair | [SKILL.md](migration_fixer/SKILL.md) |
 | `skill-creator` | Create new AI agent skills | [SKILL.md](skill_creator/SKILL.md) |
 | `skill-sync` | Sync skill metadata to AGENTS.md | [SKILL.md](skill_sync/SKILL.md) |
@@ -27,6 +28,12 @@ When performing these actions, ALWAYS invoke the corresponding skill FIRST:
 | Creating new skills | `skill-creator` |
 | Adding agent capabilities | `skill-creator` |
 | Setting up skill structure | `skill-creator` |
+| Creating leads or opportunities | `crm-agent` |
+| Enriching a lead or contact | `crm-agent` |
+| Moving an opportunity stage | `crm-agent` |
+| Drafting a follow-up email or WhatsApp | `crm-agent` |
+| Next best action on a deal | `crm-agent` |
+| Pipeline digest / morning brief | `crm-agent` |
 
 ---
 

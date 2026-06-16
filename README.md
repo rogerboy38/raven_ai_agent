@@ -4,13 +4,15 @@ Raymond-Lucy AI Agent for ERPNext with Raven Integration - Enhanced with OpenCla
 
 ## Current Status
 
-**Latest Update:** May 2026 | **Version:** 2.2
+**Latest Update:** June 2026 | **Version:** 2.2 · skill `crm-agent` v0.1.1 · patterns v0.1.0
 **Production Deployment:** Active on https://erp.sysmayal2.cloud
+**Cleanup branch:** [`crm-V14.1.1`](https://github.com/rogerboy38/raven_ai_agent/tree/crm-V14.1.1) (PR [#17](https://github.com/rogerboy38/raven_ai_agent/pull/17), [#18](https://github.com/rogerboy38/raven_ai_agent/pull/18))
 
 ### Recent Deployments
 
 | Date | Changes |
 |------|---------|
+| 2026-06-14 | **CRM Agent skill v0.1.1** (B/M/S/N cleanup pass) + **raven_ai_agent_patterns v0.1.0** (guardrails / planner helpers). 6 CRM custom fields on AI Agent Settings, kebab-case skill name `crm-agent`, full bilingual (EN/ES) intent coverage. Verified on `v2.sysmayal.cloud`: 43/43 tests, migrate exit 0, hooks resolve, idempotent re-run. |
 | 2026-05-01 | Agentic Design Patterns intelligence layer (Reflection, Planner, Coordinator, Goal Loop, Fallback, RAG, Guardrails) wired into agent_v2 (PR #3) |
 | 2026-03-21 | Pipeline diagnosis commands (@ai pipeline, @ai diagnose), Payment Agent, Manufacturing workflow |
 | 2026-03-20 | Data Quality Scanner, Sample Request from Lead/Prospect/Opportunity/Quotation/SO |
@@ -525,6 +527,146 @@ Complete project documentation is available in `docs/project_formulation/`:
 - Technical specifications
 - Agent communication protocols
 - Unit test specifications
+
+## CRM Agent Skill (v0.1.1)
+
+Agentic CRM for ERPNext — humans supervise agents that enrich leads, advance opportunities, draft follow-ups, and summarize pipeline. Inspired by the "humans supervise agents" model but built on Frappe-native DocTypes (`Lead`, `Opportunity`, `Contact`, `Customer`, `Communication`, `Quotation`) and the existing `raven_ai_agent` skill framework.
+
+Full skill manifest: [`raven_ai_agent/skills/crm_agent/SKILL.md`](raven_ai_agent/skills/crm_agent/SKILL.md)
+
+### What's new in v0.1.1 (cleanup pass)
+
+| Tier | Item | Resolution |
+|------|------|------------|
+| **B1** | Patterns module missing | Shipped `raven_ai_agent_patterns` v0.1.0 (guardrails + planner) |
+| **M1** | Skill name inconsistency | Canonical kebab-case `crm-agent` everywhere (was mixed snake/kebab) |
+| **M2** | Class name mismatch | `CRMAgentSkill` (uppercase RM) consistent across imports + `__init__.py` |
+| **M3** | Currency hard-coded | `_default_currency()` resolves Company default → Global Defaults → MXN fallback |
+| **M4** | Bare `$` in templates | Currency-aware formatter; never emits naked `$` |
+| **M5** | Registry rename (snake→kebab) | Patch ships guarded by `frappe.db.exists()` — N/A on v1.0.0 (no `AI Skill Registry` DocType yet) |
+| **S1–S6** | Test gaps, regex coverage, ES intent parity | Added autonomy enforcement, hook entrypoint, audit-call tests (43 total) |
+| **N1–N7** | Linting, docstrings, import order | Cleaned up |
+
+### `@ai` commands (bilingual EN / ES)
+
+| Intent | Example (EN) | Example (ES) |
+|--------|--------------|--------------|
+| Daily pipeline digest | `@ai morning brief` | `@ai resumen del día` |
+| List pipeline | `@ai show pipeline this week` | `@ai muéstrame el pipeline de esta semana` |
+| Next best action | `@ai next step Opp-0042` | `@ai qué sigue con Opp-0042` |
+| Draft follow-up | `@ai draft follow-up for Opp-0042` | `@ai redacta seguimiento para Opp-0042` |
+| Move stage | `@ai move Opp-0042 to Quotation` | `@ai mueve Opp-0042 a Cotización` |
+| Enrich lead | `@ai enrich lead LEAD-2026-00031` | `@ai completa prospecto LEAD-2026-00031` |
+| Create lead | `@ai new lead Juan Perez at Acme, juan@acme.mx` | `@ai nuevo prospecto Juan Perez en Acme` |
+| Create opportunity | `@ai create opportunity 50L sanitizer for Acme` | `@ai crea oportunidad sanitizante 50L para Acme` |
+| Help | `@ai crm` / `@ai crm help` | (same) |
+
+### Sub-agents
+
+| Agent | Trigger | Purpose |
+|---|---|---|
+| `lead_enricher` | `Lead.after_insert` | Fill company info, dedupe contact |
+| `meeting_capturer` | `Communication.after_insert` (email) | Attach to right opp; create lead if unknown |
+| `opportunity_mover` | `Opportunity.on_update` + hourly cron | Suggest stage advance, scan stalled opps |
+| `follow_up_writer` | Intent dispatch | Draft follow-up emails (bilingual) |
+| `pipeline_summarizer` | Daily cron | Build the morning brief |
+| `deal_coach` | Intent dispatch | Recommend next-best action on any opportunity |
+
+### Autonomy levels (Karpathy slider)
+
+Set via `ai_agent_settings.crm_autonomy_level` (Int field, 0–4). Enforced by `raven_ai_agent.patterns.crm.guardrails`. **Default = 1 (suggest only).**
+
+| Level | Name | What's allowed |
+|-------|------|----------------|
+| 0 | observe | Read-only; no writes |
+| 1 | suggest | Post proposals in Raven; human approves |
+| 2 | enrich/draft | Safe writes (Lead enrichment, follow-up drafts) |
+| 3 | stage_move | Advance opportunity stages, set amounts |
+| 4 | autonomous | Send emails, full pipeline ownership |
+
+Per-action overrides live in the optional `AI Action Policy` DocType (see patterns module install guide).
+
+### Configuration
+
+CRM-specific fields auto-added to **AI Agent Settings** by the v0.1.1 patch (`register_crm_agent`):
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `crm_autonomy_level` | Int | 1 | 0–4, see autonomy ladder above |
+| `crm_digest_channel` | Link → Raven Channel | — | Where the daily digest posts |
+| `crm_default_pipeline` | Data | "Sales" | Default opportunity pipeline |
+| `crm_followup_language` | Select | "auto" | `en` / `es` / `auto` (auto-detects from contact) |
+| `crm_section`, `crm_column_break` | UI | — | Layout in AI Agent Settings form |
+
+### Tools exposed to LLM function-calling
+
+All tools under `raven_ai_agent.skills.crm_agent.tools.*`, decorated with `@frappe.whitelist()` so they work from chat, ERPNext UI, and the LLM tool-call loop.
+
+| Module | Functions |
+|---|---|
+| `leads` | `create_lead`, `update_lead`, `qualify_lead`, `convert_lead_to_opportunity`, `list_leads` |
+| `opportunities` | `create_opportunity`, `move_stage`, `set_amount`, `list_open_opportunities`, `forecast` |
+| `contacts` | `find_or_create_contact`, `enrich_contact`, `find_duplicates` |
+| `customers` | `convert_lead_to_customer`, `link_contact` |
+| `communications` | `log_communication`, `send_email` |
+| `activities` | `create_todo`, `schedule_event`, `add_note` |
+| `quotation` | `create_quotation_from_opportunity` (wraps `api/handlers/quotation.py`) |
+| `search` | `semantic_search` (wraps `api/enhanced_search.py`) |
+
+### Install / upgrade on a new site
+
+```bash
+# 1. Pull the cleanup branch
+cd ~/frappe-bench/apps/raven_ai_agent
+git fetch upstream
+git checkout crm-V14.1.1   # or merged target branch once #17/#18 land
+
+# 2. Run tests (must be 43/43)
+cd ~/frappe-bench/apps/raven_ai_agent
+python -m pytest raven_ai_agent/skills/crm_agent/tests/ -q
+
+# 3. Migrate, scoped to a SINGLE site, as `frappe` (never root)
+cd ~/frappe-bench
+bench --site <your-site> backup
+bench --site <your-site> migrate    # applies register_crm_agent patch
+
+# 4. Verify (safe module-execute pattern, not console heredoc)
+cat > apps/raven_ai_agent/raven_ai_agent/_verify.py <<'PY'
+import frappe
+def run():
+    fields = frappe.get_all("Custom Field",
+        filters={"dt":"AI Agent Settings","fieldname":["like","crm_%"]},
+        fields=["fieldname"], order_by="fieldname")
+    print("crm_* custom fields:", [f.fieldname for f in fields])
+    assert len(fields) == 6, f"expected 6, got {len(fields)}"
+    print("OK")
+PY
+bench --site <your-site> execute raven_ai_agent._verify.run
+rm apps/raven_ai_agent/raven_ai_agent/_verify.py
+```
+
+### Rollback
+
+```bash
+# Pre-cleanup tag was created automatically:
+git reset --hard pre-cleanup-v0.1.1-20260614_103913
+
+# DB restore (replace path with your own pre-migrate backup):
+bench --site <your-site> restore <path-to-pre-migrate-backup>.sql.gz
+```
+
+### Verification reference (v2.sysmayal.cloud, 2026-06-14)
+
+| Check | Result |
+|---|---|
+| `pytest raven_ai_agent/skills/crm_agent/tests/` | 43/43 PASS in 0.031s |
+| `bench migrate` exit code | 0 |
+| Pre-migrate DB backup retained | 250.8 MiB |
+| CRM custom fields created | 6 (see table above) |
+| Skill identity | `name="crm-agent"`, `version="0.1.0"`, class `CRMAgentSkill` |
+| `_default_currency()` resolved | `"MXN"` (fallback — no Company default on site) |
+| Hooks wiring | All `doc_events` + `scheduler_events` targets resolve via `frappe.get_attr` |
+| Idempotency (patch re-run) | 6 → 6 custom fields, no duplicates, no error |
 
 ## Known Issues & Resolutions
 
