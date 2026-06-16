@@ -1,0 +1,134 @@
+--- a/raven_ai_agent/skills/iot_sensor_manager/skill.py
++++ b/raven_ai_agent/skills/iot_sensor_manager/skill.py
+@@ -40,6 +40,26 @@
+         "gpio_pin": 27,
+         "sensor_model": "BH1750",
+     },
++    "soil": {
++        "unit": "",
++        "emoji": "🌱",
++        "thresholds": {},
++        "gpio_pin": None,
++        "sensor_model": "Soil Moisture",
++    },
++}
++
++
++# --- Ingestion-schema mapping -------------------------------------------------
++# The skill speaks in logical sensor types (temperature/humidity/soil/...), but
++# readings are stored in the `IoT Sensor Reading` DocType by the RPi ingestion
++# (sensor_reader_dual.py) keyed on `device_name` with a typed value column —
++# NOT bot_id/value/gpio_pin. This maps each logical type to the stored
++# sensor_type value(s) and the column its value actually lives in.
++STORED_SCHEMA = {
++    "temperature": {"sensor_types": ["Ford Temperature", "DHT11"], "value_field": "temperature"},
++    "humidity":    {"sensor_types": ["DHT11"],                      "value_field": "humidity"},
++    "soil":        {"sensor_types": ["Soil Moisture"],             "value_field": "soil_moisture"},
+ }
+ 
+ 
+@@ -173,8 +193,9 @@
+     def _detect_sensor_type(self, query: str) -> str:
+         """Detect which sensor type the query refers to."""
+         mapping = {
++            "soil": ["soil", "suelo", "soil moisture"],
+             "temperature": ["temperature", "temp", "temperatura", "calor", "frio"],
+-            "humidity": ["humidity", "humid", "humedad", "moisture"],
++            "humidity": ["humidity", "humid", "humedad"],
+             "motion": ["motion", "movement", "movimiento", "pir", "presence"],
+             "light": ["light", "lux", "luminosity", "luz", "brightness"],
+         }
+@@ -184,32 +205,50 @@
+         return "temperature"  # Default
+ 
+     def _get_latest_reading(self, bot_id: str, sensor_type: str) -> Optional[Dict]:
+-        """Get the latest sensor reading from ERPNext."""
++        """Get the latest sensor reading from ERPNext (IoT Sensor Reading).
++
++        Queries the real ingestion schema: device_name + sensor_type in the
++        stored vocabulary, with the value read from its typed column and aliased
++        back to `value` so the formatting helpers stay unchanged.
++        """
++        stored = STORED_SCHEMA.get(sensor_type)
++        if not stored:
++            return None
+         try:
+             readings = frappe.get_all(
+                 "IoT Sensor Reading",
+-                filters={"bot_id": bot_id, "sensor_type": sensor_type},
+-                fields=["value", "unit", "timestamp", "status", "gpio_pin"],
+-                order_by="timestamp desc",
++                filters={"device_name": bot_id, "sensor_type": ["in", stored["sensor_types"]]},
++                fields=[f"{stored['value_field']} as value", "sensor_type", "creation as timestamp"],
++                order_by="creation desc",
+                 limit=1,
+             )
+             if readings:
+-                return readings[0]
++                r = readings[0]
++                r["unit"] = SENSOR_TYPES.get(sensor_type, {}).get("unit", "")
++                return r
+         except Exception as e:
+             frappe.logger().error(f"[IoTSensorManager] Error fetching reading: {e}")
+         return None
+ 
+     def _get_reading_history(self, bot_id: str, sensor_type: str, limit: int = 10) -> List[Dict]:
+-        """Get historical sensor readings."""
++        """Get historical sensor readings (IoT Sensor Reading)."""
++        stored = STORED_SCHEMA.get(sensor_type)
++        if not stored:
++            return []
+         try:
+-            return frappe.get_all(
++            rows = frappe.get_all(
+                 "IoT Sensor Reading",
+-                filters={"bot_id": bot_id, "sensor_type": sensor_type},
+-                fields=["value", "unit", "timestamp", "status"],
+-                order_by="timestamp desc",
++                filters={"device_name": bot_id, "sensor_type": ["in", stored["sensor_types"]]},
++                fields=[f"{stored['value_field']} as value", "creation as timestamp"],
++                order_by="creation desc",
+                 limit=limit,
+             )
+-        except Exception:
++            unit = SENSOR_TYPES.get(sensor_type, {}).get("unit", "")
++            for r in rows:
++                r["unit"] = unit
++            return rows
++        except Exception as e:
++            frappe.logger().error(f"[IoTSensorManager] Error fetching history: {e}")
+             return []
+ 
+     def _check_thresholds(self, sensor_type: str, value: float) -> str:
+@@ -232,19 +271,22 @@
+ 
+     @staticmethod
+     def log_reading(bot_id: str, sensor_type: str, value: float, gpio_pin: int = None):
+-        """Log a sensor reading to ERPNext. Called from RPi scripts."""
+-        cfg = SENSOR_TYPES.get(sensor_type, {})
++        """Log a sensor reading to ERPNext (schema-aligned).
++
++        NOTE: the live RPi path (sensor_reader_dual.py) posts directly to
++        /api/resource/IoT Sensor Reading; this helper is kept aligned to the same
++        DocType schema for any in-bench callers.
++        """
++        stored = STORED_SCHEMA.get(sensor_type)
++        doctype_sensor_type = stored["sensor_types"][0] if stored else sensor_type
++        value_field = stored["value_field"] if stored else "temperature"
+         try:
+             doc = frappe.get_doc({
+                 "doctype": "IoT Sensor Reading",
+-                "bot_id": bot_id,
+-                "sensor_type": sensor_type,
+-                "value": value,
+-                "unit": cfg.get("unit", ""),
+-                "gpio_pin": gpio_pin or cfg.get("gpio_pin"),
+-                "sensor_model": cfg.get("sensor_model", ""),
++                "device_name": bot_id,
++                "sensor_type": doctype_sensor_type,
++                value_field: value,
+                 "timestamp": datetime.now(),
+-                "status": "Active",
+             })
+             doc.insert(ignore_permissions=True)
+             frappe.db.commit()
