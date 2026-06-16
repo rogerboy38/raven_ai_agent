@@ -1,0 +1,20 @@
+# /etc/udev/rules.d/99-raven-sensors.rules
+# Stable symlinks for Raven IoT USB-serial sensors.
+# CH340 (1a86:7523) chips share serial numbers, so we anchor to physical USB
+# port path (KERNELS). Sensor *type* is identified at runtime from the JSON
+# each Arduino emits ({"id":"NANO-01","s":"NTC",...}), looked up against the
+# ERPNext Sensor Skill registry.
+
+# RPi onboard USB ports
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.3", SYMLINK+="raven-port-A", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.4", SYMLINK+="raven-port-B", GROUP="dialout", MODE="0660"
+
+# External USB hub at 1-1.2 — 4 slots
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.2.1", SYMLINK+="raven-port-C", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.2.2", SYMLINK+="raven-port-X", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.2.3", SYMLINK+="raven-port-D", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.2.4", SYMLINK+="raven-port-Y", GROUP="dialout", MODE="0660"
+
+# 2026-06-16 (bot-iot-l01): two temperature Nanos (CH340) behind USB hub on phys 1-1.5
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.5.1", SYMLINK+="raven-port-B", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", KERNELS=="1-1.5.2", SYMLINK+="raven-port-C", GROUP="dialout", MODE="0660"
