@@ -46,6 +46,14 @@ class SkillRouter:
         except Exception as e:
             print(f"Warning: Could not load IoTSensorManagerSkill: {e}")
 
+        # Load COA Validator (T141)
+        try:
+            from raven_ai_agent.skills.coa_validator.skill import COAValidatorSkill
+            skill = COAValidatorSkill()
+            self.skills[skill.name] = skill
+        except Exception as e:
+            print(f"Warning: Could not load COAValidatorSkill: {e}")
+
     
     def register_skill(self, skill):
         """Manually register a skill."""

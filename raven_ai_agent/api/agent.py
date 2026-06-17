@@ -443,6 +443,22 @@ def handle_raven_message(doc=None, method=None):
             query = plain_text[3:].strip()
             q_lower = query.lower()
             
+            # T141: COA validation -> coa_validator skill (before DQS grabs "validate")
+            if re.search(r"coa[-\s]?\d{2}[-\s]?\d{3,4}", q_lower) or "validate coa" in q_lower or "validar coa" in q_lower:
+                try:
+                    from raven_ai_agent.skills.router import SkillRouter
+                    _coa = SkillRouter().route(query)
+                    if _coa and _coa.get("handled"):
+                        frappe.get_doc({
+                            "doctype": "Raven Message",
+                            "channel_id": doc.channel_id,
+                            "text": _coa.get("response", "Validation complete."),
+                            "message_type": "Text",
+                            "is_bot_message": 1
+                        }).insert(ignore_permissions=True)
+                        return
+                except Exception:
+                    pass
             scanner_keywords = ["scan", "validate", "pre-flight", "preflight", "repair", "solve"]
             if any(kw in q_lower for kw in scanner_keywords):
                 try:
