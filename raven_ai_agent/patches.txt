@@ -1,1 +1,2 @@
 raven_ai_agent.patches.v0_2.register_crm_agent
+raven_ai_agent.patches.v0_3.create_sensor_skills_bot_iot_l01_and_fleet
