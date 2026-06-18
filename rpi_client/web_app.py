@@ -214,6 +214,15 @@ def build_weight_payload(
     return payload
 
 
+# SCALE-U01 contract (amb_w_spc sensor_skill.receive_weight_event) — business/validation
+# codes that will NOT succeed on a blind retry. These must be surfaced to the operator,
+# NOT silently buffered as "Pending" (that masquerade was the row-3 silent miss).
+HARD_REJECT_CODES = {
+    "serial_not_found", "invalid_weight", "invalid_net_weight",
+    "tara_not_resolved", "missing_fields", "exception", "already_weighed",
+}
+
+
 def classify_erpnext_response(resp_json: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize ERPNext response shape into one predictable result."""
     message = resp_json.get("message")
@@ -354,12 +363,14 @@ def submit_to_erpnext(
             }
 
         normalized = classify_erpnext_response(resp_json)
+        data = normalized["data"] if isinstance(normalized.get("data"), dict) else {}
+        server_code = data.get("code") or resp_json.get("code") or ""
 
         if resp.status_code == 200 and normalized["ok"]:
             save_submission(payload, "success", resp_json)
-            data = normalized["data"]
             return {
                 "status": "success",
+                "code": server_code or "updated",
                 "barrel_serial": payload["barrel_serial"],
                 "gross_weight": payload["gross_weight"],
                 "tara_weight": data.get("tara_weight"),
@@ -367,6 +378,10 @@ def submit_to_erpnext(
                 "batch_name": data.get("batch_name", payload.get("batch_name", "")),
                 "container_name": data.get("container_name"),
                 "row_name": data.get("row_name"),
+                # Phase-2 target feedback fields (present once the server adds them):
+                "target_net": data.get("target_net"),
+                "tol_lower": data.get("tol_lower"),
+                "tol_upper": data.get("tol_upper"),
                 "timestamp": payload["timestamp"],
                 "message": data.get("message", "Weight event saved"),
                 "server_response": resp_json,
@@ -378,27 +393,46 @@ def submit_to_erpnext(
         else:
             error_msg = str(resp_json.get("message") or f"HTTP {resp.status_code}")
 
-        logger.error("ERPNext API error: HTTP %s - %s", resp.status_code, error_msg)
+        logger.error("ERPNext API error: HTTP %s code=%s - %s",
+                     resp.status_code, server_code, error_msg)
 
+        # SCALE-U01: a recognized business/validation code is a HARD reject — surface it
+        # and do NOT buffer as a pending retry (that masquerade was the row-3 silent miss).
+        if server_code in HARD_REJECT_CODES:
+            save_submission(payload, "error", resp_json)
+            return {
+                "status": "error",
+                "code": server_code,
+                "message": error_msg,
+                "prior": data.get("prior"),  # populated on Phase-2 already_weighed
+                "timestamp": payload["timestamp"],
+                "server_response": resp_json,
+            }
+
+        # Got a response we can't classify as success or a known reject -> treat as
+        # NOT CONFIRMED (transport-ish); buffer for retry but never report success.
         if buffer_on_failure:
             buffer_submission(payload, last_error=error_msg)
-
         save_submission(payload, "buffered" if buffer_on_failure else "error", resp_json)
-
         return {
-            "status": "buffered" if buffer_on_failure else "error",
+            "status": "not_confirmed",
+            "code": server_code or "no_ack",
             "message": error_msg,
             "timestamp": payload["timestamp"],
             "server_response": resp_json,
         }
 
     except requests.exceptions.RequestException as exc:
-        logger.error("Submission failed: %s", exc)
+        # No server ack at all -> never SUCCESS; buffer for retry, report NOT confirmed.
+        logger.error("Submission not confirmed (transport): %s", exc)
         if buffer_on_failure:
             buffer_submission(payload, last_error=str(exc))
+        save_submission(payload, "buffered" if buffer_on_failure else "error",
+                        {"status": "error", "code": "no_ack", "message": str(exc)})
         return {
-            "status": "buffered" if buffer_on_failure else "error",
-            "message": str(exc),
+            "status": "not_confirmed",
+            "code": "no_ack",
+            "message": f"Not confirmed — no server ack ({exc})",
             "timestamp": payload["timestamp"],
         }
 
@@ -474,7 +508,7 @@ def api_submit_weight():
     data = request.get_json(silent=True)
 
     if not data:
-        return jsonify({"status": "error", "message": "No data provided"}), 400
+        return jsonify({"status": "error", "code": "missing_fields", "message": "No data provided"}), 400
 
     barrel_serial = str(data.get("barrel_serial", "")).strip().upper()
     gross_weight = data.get("gross_weight")
@@ -485,15 +519,15 @@ def api_submit_weight():
     event_timestamp = data.get("timestamp") or utc_now_iso()
 
     if not barrel_serial:
-        return jsonify({"status": "error", "message": "Barrel serial required"}), 400
+        return jsonify({"status": "error", "code": "missing_fields", "message": "Barrel serial required"}), 400
 
     if gross_weight is None:
-        return jsonify({"status": "error", "message": "Weight required"}), 400
+        return jsonify({"status": "error", "code": "missing_fields", "message": "Weight required"}), 400
 
     try:
         gross_weight = float(gross_weight)
     except (ValueError, TypeError):
-        return jsonify({"status": "error", "message": "Invalid weight format"}), 400
+        return jsonify({"status": "error", "code": "invalid_weight", "message": "Invalid weight format"}), 400
 
     if tara_weight in ("", None):
         tara_weight = None
@@ -501,18 +535,20 @@ def api_submit_weight():
         try:
             tara_weight = float(tara_weight)
         except (ValueError, TypeError):
-            return jsonify({"status": "error", "message": "Invalid tara format"}), 400
+            return jsonify({"status": "error", "code": "invalid_weight", "message": "Invalid tara format"}), 400
 
     if not validate_barrel_serial(barrel_serial):
         return jsonify({
             "status": "error",
+            "code": "serial_not_found",
             "message": f"Barrel {barrel_serial} not found"
         }), 404
 
-    if gross_weight < 0.5 or gross_weight > 500:
+    if gross_weight < 0.015 or gross_weight > 500:
         return jsonify({
             "status": "error",
-            "message": f"Weight {gross_weight} out of range (0.5-500 kg)"
+            "code": "invalid_weight",
+            "message": f"Weight {gross_weight} out of range (0.015-500 kg)"
         }), 400
 
     result = submit_to_erpnext(
