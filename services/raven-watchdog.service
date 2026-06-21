@@ -1,0 +1,9 @@
+[Unit]
+Description=Raven Network Watchdog — restart services on connectivity loss/recovery
+
+[Service]
+Type=oneshot
+ExecStart=/home/admin/raven-bot/services/network_watchdog.sh
+
+[Install]
+WantedBy=timers.target
