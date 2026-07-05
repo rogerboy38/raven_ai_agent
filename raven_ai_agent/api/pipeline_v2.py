@@ -113,19 +113,18 @@ def process_command(
     ack_name: str = None,
 ) -> None:
     """Background job: run V2 agent, reply, audit. Never raises."""
-    from raven_ai_agent.api.agent_v2 import RaymondLucyAgentV2
+    from raven_ai_agent.api import dispatcher
 
     started = time.monotonic()
     status, intent, skill, error_text, response = "Failed", None, None, None, None
 
     try:
-        agent = RaymondLucyAgentV2(user=user)
-        result = agent.process_query(query)
+        result = dispatcher.route(query, user)
         response = result.get("response") or "I could not produce an answer."
         status = "Routed" if result.get("success") else "Failed"
         skill = result.get("skill_used")
-        intent = (result.get("context_used") or {}).get("pattern") or (
-            "skill" if skill else "llm"
+        intent = result.get("stage") or (
+            (result.get("context_used") or {}).get("pattern") or ("skill" if skill else "llm")
         )
     except Exception as exc:
         error_text = f"{type(exc).__name__}: {exc}"
