@@ -22,29 +22,43 @@ ACK_TEXT = "🤔 Working on it…"
 DEFAULT_BOTS = ("sales_order_bot", "iot_sensor_bot")
 
 
-def _get_reply_bot():
-    """First existing Raven bot user we can attribute replies to (legacy parity)."""
+def _get_reply_bot_doc():
+    """First existing Raven Bot we can send through (legacy parity)."""
     for bot in DEFAULT_BOTS:
         try:
-            if frappe.db.exists("Raven Bot", bot) or frappe.db.exists("User", bot):
-                return bot
+            return frappe.get_doc("Raven Bot", bot)
         except Exception:
             continue
     return None
 
 
 def _insert_bot_message(channel_id: str, text: str):
-    payload = {
-        "doctype": "Raven Message",
-        "channel_id": channel_id,
-        "text": text,
-        "message_type": "Text",
-        "is_bot_message": 1,
-    }
-    bot = _get_reply_bot()
-    if bot:
-        payload["bot"] = bot
-    doc = frappe.get_doc(payload)
+    """Send via Raven Bot.send_message (markdown -> HTML, attribution,
+    realtime). Falls back to a raw Raven Message insert if no bot exists."""
+    bot = _get_reply_bot_doc()
+    if bot is not None:
+        try:
+            message_name = bot.send_message(
+                channel_id=channel_id, text=text, markdown=True
+            )
+            if not message_name:
+                raise ValueError("bot.send_message returned no message name")
+            return frappe.get_doc("Raven Message", message_name)
+        except Exception:
+            frappe.logger().warning(
+                "[Pipeline V2] bot.send_message failed; falling back to raw insert",
+                exc_info=True,
+            )
+    doc = frappe.get_doc(
+        {
+            "doctype": "Raven Message",
+            "channel_id": channel_id,
+            "text": text,
+            "message_type": "Text",
+            "is_bot_message": 1,
+            **({"bot": bot.name} if bot is not None else {}),
+        }
+    )
     doc.insert(ignore_permissions=True)
     try:
         from raven_ai_agent.api.channel_utils import publish_message_created_event

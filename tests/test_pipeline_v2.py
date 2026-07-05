@@ -40,13 +40,17 @@ class TestDispatch:
     def test_ack_inserted_and_job_enqueued(self, frappe_mock):
         from raven_ai_agent.api import pipeline_v2
         _mk_settings(frappe_mock)
+        bot = MagicMock(); bot.send_message.return_value = "ACK-1"
         ack_doc = MagicMock(); ack_doc.name = "ACK-1"
-        frappe_mock.get_doc = MagicMock(return_value=ack_doc)
+
+        def get_doc(*args):
+            return bot if args and args[0] == "Raven Bot" else ack_doc
+        frappe_mock.get_doc = MagicMock(side_effect=get_doc)
         frappe_mock.enqueue = MagicMock()
 
         pipeline_v2.dispatch("MSG-1", "channel-1", "diagnose SO-00752", "u@x.com")
 
-        ack_doc.insert.assert_called_once()
+        bot.send_message.assert_called_once()
         frappe_mock.enqueue.assert_called_once()
         kwargs = frappe_mock.enqueue.call_args.kwargs
         assert kwargs["queue"] == "short"
@@ -116,14 +120,42 @@ class TestProcessCommand:
 
 
 class TestBotAttribution:
-    def test_reply_carries_bot_when_bot_exists(self, frappe_mock):
+    def test_reply_sent_via_raven_bot_with_markdown(self, frappe_mock):
+        from raven_ai_agent.api import pipeline_v2
+        bot = MagicMock(); bot.name = "sales_order_bot"
+        bot.send_message.return_value = "MSG-REPLY-1"
+        calls = []
+
+        def get_doc(*args):
+            if args and args[0] == "Raven Bot":
+                return bot
+            calls.append(args)
+            d = MagicMock(); d.name = "M-1"; return d
+        frappe_mock.get_doc = MagicMock(side_effect=get_doc)
+        frappe_mock.delete_doc = MagicMock()
+        frappe_mock.db.commit = MagicMock()
+
+        agent = MagicMock()
+        agent.process_query.return_value = {"success": True, "response": "# ok", "context_used": {}}
+        with patch("raven_ai_agent.api.agent_v2.RaymondLucyAgentV2", return_value=agent):
+            pipeline_v2.process_command(
+                request_id="r", message_name="M", channel_id="c", query="q",
+                user="u@x.com", ack_name=None,
+            )
+        bot.send_message.assert_called_once_with(channel_id="c", text="# ok", markdown=True)
+
+    def test_reply_falls_back_to_raw_insert_without_bot(self, frappe_mock):
         from raven_ai_agent.api import pipeline_v2
         inserted = []
 
-        def get_doc(payload):
-            d = MagicMock(); d.name = "M-1"; inserted.append(payload); return d
+        def get_doc(*args):
+            if args and args[0] == "Raven Bot":
+                raise Exception("no bot")
+            d = MagicMock(); d.name = "M-1"
+            if isinstance(args[0], dict):
+                inserted.append(args[0])
+            return d
         frappe_mock.get_doc = MagicMock(side_effect=get_doc)
-        frappe_mock.db.exists = MagicMock(return_value=True)
         frappe_mock.delete_doc = MagicMock()
         frappe_mock.db.commit = MagicMock()
 
@@ -135,7 +167,7 @@ class TestBotAttribution:
                 user="u@x.com", ack_name=None,
             )
         replies = [p for p in inserted if p.get("doctype") == "Raven Message"]
-        assert replies and replies[0].get("bot") == "sales_order_bot"
+        assert replies and replies[0]["is_bot_message"] == 1
 
 
 class TestLazyProvider:
