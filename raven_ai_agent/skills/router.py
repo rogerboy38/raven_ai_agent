@@ -22,59 +22,26 @@ class SkillRouter:
         self._load_skills()
     
     def _load_skills(self):
-        """Auto-discover and load available skills."""
-        # Load Formulation Orchestrator
+        """R2: load every skill from the framework SkillRegistry — single
+        source of truth. The old hardcoded import block silently diverged
+        from the registry (coa_validator was reachable here but invisible
+        to the V2 pipeline for months). Registry discovery + the
+        AI Skill Registry doctype is_active flag now govern both routers."""
         try:
-            from raven_ai_agent.skills.formulation_orchestrator.skill import FormulationOrchestratorSkill
-            skill = FormulationOrchestratorSkill()
-            self.skills[skill.name] = skill
-        except Exception as e:
-            print(f"Warning: Could not load FormulationOrchestratorSkill: {e}")
-        
-        # Load Data Quality Scanner (high priority - runs before operations)
-        try:
-            from raven_ai_agent.skills.data_quality_scanner.skill import DataQualityScannerSkill
-            skill = DataQualityScannerSkill()
-            self.skills[skill.name] = skill
-        except Exception as e:
-            print(f"Warning: Could not load DataQualityScannerSkill: {e}")        
-        # Load IoT Sensor Manager (Fix #3 - V14.2.0)
-        try:
-            from raven_ai_agent.skills.iot_sensor_manager.skill import IoTSensorManagerSkill
-            skill = IoTSensorManagerSkill()
-            self.skills[skill.name] = skill
-        except Exception as e:
-            print(f"Warning: Could not load IoTSensorManagerSkill: {e}")
+            from raven_ai_agent.skills.framework import get_registry
 
-        # Load COA Validator (T141)
-        try:
-            from raven_ai_agent.skills.coa_validator.skill import COAValidatorSkill
-            skill = COAValidatorSkill()
-            self.skills[skill.name] = skill
-        except Exception as e:
-            print(f"Warning: Could not load COAValidatorSkill: {e}")
+            registry = get_registry()
+            for name, skill_class in registry.get_all().items():
+                try:
+                    skill = skill_class()
+                    self.skills[getattr(skill, "name", name)] = skill
+                except Exception as exc:  # noqa: BLE001
+                    frappe.logger().warning(
+                        f"[SkillRouter] could not instantiate {name}: {exc}"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            frappe.logger().error(f"[SkillRouter] registry load failed: {exc}")
 
-    
-    def register_skill(self, skill):
-        """Manually register a skill."""
-        self.skills[skill.name] = skill
-    
-    def get_skill(self, name: str):
-        """Get a skill by name."""
-        return self.skills.get(name)
-    
-    def list_skills(self) -> List[Dict]:
-        """List all registered skills."""
-        return [
-            {
-                "name": s.name,
-                "description": s.description,
-                "triggers": s.triggers,
-                "priority": getattr(s, 'priority', 50)
-            }
-            for s in self.skills.values()
-        ]
-    
     def route(self, query: str, context: Dict = None) -> Optional[Dict]:
         """
         Route a query to the best matching skill.
