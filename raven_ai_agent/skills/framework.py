@@ -247,24 +247,25 @@ class SkillRegistry:
         """Wrap a function as a skill"""
         
         class FunctionSkill(SkillBase):
-            pass
-        
+            # handle must be defined IN the class body: assigning it after
+            # class creation does not clear ABCMeta.__abstractmethods__, so
+            # FunctionSkill() raised TypeError and every function-based skill
+            # (e.g. migration-fixer) was silently uninstantiable.
+            def handle(self, query: str, context: Dict = None):
+                result = handler(query)
+                if result:
+                    return {
+                        "handled": True,
+                        "response": result,
+                        "confidence": 0.9,
+                    }
+                return None
+
         FunctionSkill.name = name
         FunctionSkill.description = metadata.get("description", f"{name} skill")
         FunctionSkill.emoji = metadata.get("metadata", {}).get("raven", {}).get("emoji", "🔧")
         FunctionSkill.triggers = metadata.get("triggers", [name.replace("-", " "), name.replace("_", " ")])
         
-        def handle_wrapper(self, query: str, context: Dict = None):
-            result = handler(query)
-            if result:
-                return {
-                    "handled": True,
-                    "response": result,
-                    "confidence": 0.9
-                }
-            return None
-        
-        FunctionSkill.handle = handle_wrapper
         self.register(FunctionSkill, metadata)
     
     def register(self, skill_class: type, metadata: Dict = None):
