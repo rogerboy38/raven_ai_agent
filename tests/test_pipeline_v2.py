@@ -327,3 +327,14 @@ class TestProviderErrorSanitized:
         assert "401" not in result["response"]
         assert result.get("error_ref")
         assert result["error_ref"] in result["response"]
+
+
+class TestCoaValidatorDiscoverable:
+    def test_coa_validator_package_exports_skill_class(self, frappe_mock):
+        """Regression: empty __init__.py made coa_validator invisible to the
+        framework SkillRegistry — '@ai validate COA-...' fell through to DQS."""
+        import importlib
+        mod = importlib.import_module("raven_ai_agent.skills.coa_validator")
+        assert getattr(mod, "SKILL_CLASS", None) is not None
+        from raven_ai_agent.skills.framework import SkillBase
+        assert issubclass(mod.SKILL_CLASS, SkillBase)
