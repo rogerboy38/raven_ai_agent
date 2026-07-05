@@ -141,3 +141,47 @@ class TestP9BilingualAndHelp:
         body = r["response"]
         assert "0705🚫#78" in body and "0227✅" in body
         assert "Never" in body and "#77" in body
+
+
+class TestEsHandleCoverage:
+    """Regression 09:10: 'salud bom' matched at 0.9 but handle() had no ES
+    branch -> fell through to the LLM. Matching AND handling must agree."""
+
+    def test_salud_bom_returns_health_report(self, frappe_mock):
+        frappe_mock.db.count = MagicMock(side_effect=[10, 8, 6, 1, 0, 2])
+        frappe_mock.db.sql = MagicMock(return_value=[])
+        frappe_mock.db.exists = MagicMock(return_value=True)
+        r = _skill().handle("salud bom")
+        assert r is not None and "BOM Health" in r["response"]
+
+    def test_every_own_match_is_handled(self, frappe_mock):
+        """Structural guarantee: any phrase THIS skill claims (>=0.9) must be
+        handled by THIS skill — never return None into the fallthrough."""
+        frappe_mock.db.count = MagicMock(return_value=0)
+        frappe_mock.db.sql = MagicMock(return_value=[])
+        frappe_mock.db.exists = MagicMock(return_value=False)
+        frappe_mock.db.get_value = MagicMock(return_value=None)
+        s = _skill()
+        phrases = ["bom health", "salud bom", "bom issues", "bom lots 0227",
+                   "lotes bom 0227", "bom help", "ayuda bom", "serial health",
+                   "bom repair wo MFG-WO-1", "reparar wo MFG-WO-1",
+                   "validate bom BOM-1", "validar bom BOM-1",
+                   "bom status 0602", "bom inspect BOM-1",
+                   "simulate blend FMIX-1", "simular mezcla FMIX-1"]
+        for q in phrases:
+            can, conf = s.can_handle(q)
+            if can and conf >= 0.9:
+                assert s.handle(q) is not None, f"claimed but unhandled: {q!r}"
+
+
+class TestRepairDraftQuickWin:
+    def test_draft_bom_surfaces_b1_path(self, frappe_mock):
+        """#70 B1: MFG-WO-02625 -> draft BOM-0433-001 should be offered."""
+        frappe_mock.db.exists = MagicMock(
+            side_effect=lambda dt, name=None: dt == "Work Order")
+        wo = MagicMock(docstatus=0, status="Draft", bom_no="BOM-0433-002",
+                       production_item="0433", qty=25)
+        # get_value calls: WO fields -> submitted candidates (2x None) -> draft
+        frappe_mock.db.get_value = MagicMock(side_effect=[wo, None, None, "BOM-0433-001"])
+        r = _skill().handle("bom repair wo MFG-WO-02625")
+        assert "BOM-0433-001" in r["response"] and "quick-win" in r["response"]

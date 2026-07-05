@@ -71,9 +71,9 @@ class BOMAgentSkill(SkillBase):
                 return self._delegate_creator(re.sub(r"\bbom\s+plan\b", "create bom", ql, count=1))
             if "create bom from tds" in ql or "crear bom desde tds" in ql or ("create bom" in ql and "tds" in ql):
                 return self._delegate_creator(q)
-            if "validate" in ql and "bom" in ql:
+            if ("validate" in ql or "validar" in ql or "valida " in ql) and "bom" in ql:
                 return self._validate(q)
-            if re.search(r"\bbom\s+health\b", ql):
+            if re.search(r"\bbom\s+health\b|\bsalud\s+(de\s+)?bom\b", ql):
                 return self._bom_health()
             if re.search(r"\bbom\s+inspect\b", ql):
                 return self._bom_inspect(q)
@@ -87,7 +87,7 @@ class BOMAgentSkill(SkillBase):
                 return self._serial_batch(q)
             if re.search(r"\bserial\s+status\b", ql):
                 return self._serial_status(q)
-            if "simulate blend" in ql or FMIX_RE.search(q):
+            if "simulate blend" in ql or "simular mezcla" in ql or FMIX_RE.search(q):
                 return self._simulate_blend(q)
         except Exception as exc:  # noqa: BLE001
             frappe.logger().error(f"[bom-agent] {q[:60]}: {exc}", exc_info=True)
@@ -455,6 +455,15 @@ class BOMAgentSkill(SkillBase):
                     "repoint_wo_bom", wo_name, verified=True,
                     extra={"before": before, "after": candidate}))
             lines.append(f"\n🔍 _Plan only — nothing changed._ Execute: `@ai !bom repair wo {wo_name}`")
+            return self._reply("\n".join(lines))
+        draft_bom = frappe.db.get_value(
+            "BOM", {"item": wo.production_item, "docstatus": 0}, "name")
+        if draft_bom:
+            lines.append(
+                f"- 📝 DRAFT BOM **{draft_bom}** exists for {wo.production_item} — the quick-win path:\n"
+                f"  1. review + submit it (Desk, or `@ai !submit bom {draft_bom}` if it is a BOM Creator)\n"
+                f"  2. then `@ai !bom repair wo {wo_name}` to re-point")
+            lines.append(f"\n🔍 _Plan only — nothing changed. / Solo plan; nada cambió._")
             return self._reply("\n".join(lines))
         fam = family_mod.resolve(wo.production_item or "")
         if fam and fam.template_available:
