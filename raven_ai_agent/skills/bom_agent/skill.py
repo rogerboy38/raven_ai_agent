@@ -126,19 +126,39 @@ class BOMAgentSkill(SkillBase):
 
     @staticmethod
     def _format_amb_result(result) -> str:
-        if isinstance(result, dict):
-            if result.get("error"):
-                return f"❌ {result['error']}"
-            parts = []
-            if result.get("message"):
-                parts.append(str(result["message"]))
-            name = result.get("bom_creator_name") or result.get("name")
-            if name:
-                parts.append(f"📝 BOM Creator: **{name}**")
-            if not parts:
-                parts.append(frappe.as_json(result, indent=1)[:1200])
-            return "\n\n".join(parts)
-        return str(result)[:1500]
+        if not isinstance(result, dict):
+            return str(result)[:1500]
+        errors = result.get("errors") or []
+        if isinstance(errors, dict):
+            errors = [errors]
+        # Friendly rendering for structured rule errors (live ref 02:19:
+        # raw dict dump for PARSE 'unknown product family').
+        if errors:
+            lines = ["❌ **AI-BOM pipeline rejected the request:**", ""]
+            for e in errors[:5]:
+                if isinstance(e, dict):
+                    lines.append(f"- **{e.get('rule_name') or e.get('ruleid') or 'Error'}**: "
+                                 f"{e.get('message', '')}")
+                else:
+                    lines.append(f"- {e}")
+            if any("product family" in str(e).lower() for e in errors):
+                lines += ["",
+                          "💡 This product family has no master template in the AI-BOM "
+                          "pipeline yet (amb_w_tds). Ask the amb team to register it, or "
+                          "retry naming a known family/keyword (0227, 0307, 0303, 0301, "
+                          "HIGHPOL, ACETYPOL, 'concentrate', 'powder', '30:1', '200:1')."]
+            return "\n".join(lines)
+        if result.get("error"):
+            return f"❌ {result['error']}"
+        parts = []
+        if result.get("message"):
+            parts.append(str(result["message"]))
+        name = result.get("bom_creator_name") or result.get("name")
+        if name:
+            parts.append(f"📝 BOM Creator: **{name}**")
+        if not parts:
+            parts.append(frappe.as_json(result, indent=1)[:1200])
+        return "\n\n".join(parts)
 
     def _validate(self, q: str) -> Dict:
         from raven_ai_agent.agents.bom_creator_agent import BOMCreatorAgent
