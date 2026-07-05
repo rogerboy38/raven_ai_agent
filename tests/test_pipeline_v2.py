@@ -293,3 +293,37 @@ class TestCoaOutranksDqs:
         # confidence-first sorting picks the COA skill.
         can2, conf2 = coa.can_handle("validate ACC-SINV-2026-00070")
         assert can2 is False or conf2 < 0.95
+
+
+class TestProviderErrorSanitized:
+    def test_llm_401_not_leaked_to_chat(self, frappe_mock):
+        """Regression: raw 'Error code: 401 ... Incorrect API key provided:
+        sk-...' was shown verbatim in the channel."""
+        frappe_mock.get_single = MagicMock(return_value=MagicMock(
+            max_tokens=2000, confidence_threshold=0.7,
+            get_password=MagicMock(return_value=None),
+        ))
+        provider = MagicMock(); provider.name = "openai"
+        provider.chat.side_effect = RuntimeError(
+            "Error code: 401 - Incorrect API key provided: sk-SECRET123"
+        )
+        with patch("raven_ai_agent.api.agent_v2.get_provider", return_value=provider), \
+             patch("raven_ai_agent.api.agent_v2.CostMonitor"), \
+             patch("raven_ai_agent.api.agent_v2.get_router") as router:
+            router.return_value.route.return_value = None
+            from raven_ai_agent.api.agent_v2 import RaymondLucyAgentV2
+            agent = RaymondLucyAgentV2(user="u@x.com")
+            agent.intelligence = None
+            v1 = MagicMock()
+            v1.execute_workflow_command.return_value = None
+            v1.get_morning_briefing.return_value = ""
+            v1.get_erpnext_context.return_value = ""
+            v1.search_memories.return_value = []
+            v1.determine_autonomy.return_value = 1
+            with patch("raven_ai_agent.api.agent.RaymondLucyAgent", return_value=v1):
+                result = agent.process_query("show my pending invoices")
+        assert result["success"] is False
+        assert "sk-SECRET123" not in result["response"]
+        assert "401" not in result["response"]
+        assert result.get("error_ref")
+        assert result["error_ref"] in result["response"]

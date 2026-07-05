@@ -6,6 +6,7 @@ and auto-learning skill system.
 
 import frappe
 import json
+import uuid
 from typing import Optional, Dict, List
 
 # Import the provider system
@@ -406,11 +407,27 @@ class RaymondLucyAgentV2:
                 except Exception as e2:
                     pass
             
+            # Sanitize: never leak raw provider errors (API keys echoes,
+            # HTTP bodies) into chat. Log + bug_reporter get the details.
+            ref = uuid.uuid4().hex[:12]
+            frappe.logger().error(f"[AI Agent V2] provider failure ref={ref}: {e}")
+            try:
+                from raven_ai_agent.bug_reporter.collector import capture
+
+                capture(exception=e, query=query, user=self.user,
+                        intent="agent_v2_llm", failure_class="provider_error")
+            except Exception:
+                pass
             return {
                 "success": False,
-                "error": str(e),
-                "response": f"[CONFIDENCE: UNCERTAIN]\n\nError: {str(e)}",
-                "provider": self._provider_name()
+                "error": type(e).__name__,
+                "response": (
+                    "⚠️ The AI provider could not process this request. "
+                    "The error was logged for review. / El proveedor de IA no pudo "
+                    f"procesar la solicitud; el error quedó registrado (ref `{ref}`)."
+                ),
+                "provider": self._provider_name(),
+                "error_ref": ref,
             }
     
     def _format_workflow_result(self, result: Dict) -> Dict:
