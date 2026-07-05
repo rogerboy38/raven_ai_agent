@@ -436,6 +436,28 @@ def handle_raven_message(doc=None, method=None):
         query = None
         bot_name = None
 
+        # ==================== PIPELINE V2 (feature-flagged) ====================
+        # When AI Agent Settings.agent_pipeline_v2_enabled is on, @ai messages
+        # are acknowledged instantly and processed by RaymondLucyAgentV2 in a
+        # background job. Legacy pipeline below remains untouched when off.
+        if plain_text.lower().startswith("@ai"):
+            try:
+                from raven_ai_agent.api import pipeline_v2
+                if pipeline_v2.is_enabled():
+                    pipeline_v2.dispatch(
+                        message_name=doc.name,
+                        channel_id=doc.channel_id,
+                        query=plain_text[3:].strip(),
+                        user=doc.owner,
+                    )
+                    return
+            except Exception:
+                frappe.logger().warning(
+                    "[AI Agent] Pipeline V2 dispatch failed; falling back to legacy",
+                    exc_info=True,
+                )
+        # ==================== END PIPELINE V2 ====================
+
         # ==================== PRE-PROCESSOR: Data Quality Scanner ====================
         # Run scanner FIRST for scan/validate commands - pre-flight validation
         # This bypasses routing complexity and ensures data quality checks run before operations
