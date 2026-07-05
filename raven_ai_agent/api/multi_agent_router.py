@@ -312,35 +312,51 @@ def _format_pipeline_response(
     """
     if not results:
         return "No results to display."
-    
-    lines = ["📋 **Pipeline Execution Results**\n"]
-    
-    for i, (step, result) in enumerate(zip(pipeline, results), 1):
-        agent = step.get('agent', 'unknown')
-        command = step.get('sub_command', '')
-        
-        lines.append(f"### Step {i}: {agent}")
-        lines.append(f"Command: `{command}`")
-        
-        if result.get('success'):
-            lines.append("Status: ✅ Success")
-            result_text = result.get('result', '')
-            if result_text:
-                lines.append(f"Result: {result_text}")
-        else:
-            lines.append("Status: ❌ Failed")
-            error = result.get('error')
-            if error:
-                lines.append(f"Error: {error}")
-        
-        lines.append("")  # Empty line between steps
-    
-    # Summary
+
     successful = sum(1 for r in results if r.get('success'))
     total = len(results)
-    lines.append(f"**Summary:** {successful}/{total} steps completed successfully.")
-    
-    return "\n".join(lines)
+    badge = "✅" if successful == total else ("⚠️" if successful else "❌")
+
+    AGENT_LABELS = {
+        "sales_order_followup": "📦 Sales Order",
+        "manufacturing": "🏭 Manufacturing",
+        "payment": "💳 Payments",
+    }
+
+    lines = [f"📋 **Pipeline Report** — {badge} {successful}/{total} steps", ""]
+
+    for i, (step, result) in enumerate(zip(pipeline, results), 1):
+        agent = step.get('agent', 'unknown')
+        label = AGENT_LABELS.get(agent, f"🔹 {agent.replace('_', ' ').title()}")
+
+        if result.get('success'):
+            body = _distill_step_text(result.get('result', ''))
+            lines.append(f"**{i}. {label}**")
+            lines.append("")
+            lines.append(body if body else "_Done._")
+        else:
+            lines.append(f"**{i}. {label}** — ❌ failed")
+            error = result.get('error')
+            if error:
+                lines.append("")
+                lines.append(f"> {error}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+_TAG_RE = re.compile(r"\[(?:CONFIDENCE|AUTONOMY|SKILL|PATTERN)[^\]]*\]\s*")
+
+
+def _distill_step_text(text: str) -> str:
+    """Strip internal routing tags and surplus blank lines from a step
+    result so pipeline reports read like a human wrote them."""
+    if not text:
+        return ""
+    text = _TAG_RE.sub("", str(text))
+    # collapse 3+ newlines, trim edges
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
 
 
 def handle_multi_agent_command(command: str, user: str) -> Optional[str]:
@@ -456,7 +472,7 @@ def semantic_route(command: str, provider) -> Optional[str]:
         return None
 
     decision = Coordinator(provider, agents=specs).decide(command)
-    if decision.agent in {s.name for s in specs} and decision.confidence >= 0.6:
+    if decision.agent in {s.name for s in specs} and decision.confidence >= 0.75:
         logger.info(
             "Coordinator pattern matched %s (confidence=%.2f) for: %s",
             decision.agent, decision.confidence, command,

@@ -95,3 +95,36 @@ class TestDispatcherStages:
                    return_value=None):
             r = dispatcher.route("anything", "u@x.com")
         assert r["stage"] == "agent_v2"  # graceful fallthrough, no crash
+
+
+class TestHumanReadableFormatting:
+    def test_pipeline_report_distills_tags_and_reads_clean(self, frappe_mock):
+        from raven_ai_agent.api.multi_agent_router import _format_pipeline_response
+        pipeline = [
+            {"agent": "sales_order_followup", "sub_command": "status SO-00752"},
+            {"agent": "manufacturing", "sub_command": "list open WO"},
+        ]
+        results = [
+            {"success": True, "result": "[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 1]\nThe status of SO-00752 is **Completed**."},
+            {"success": False, "error": "timeout"},
+        ]
+        out = _format_pipeline_response(results, pipeline)
+        assert "[CONFIDENCE" not in out and "Command:" not in out
+        assert "⚠️ 1/2 steps" in out
+        assert "📦 Sales Order" in out and "🏭 Manufacturing" in out
+        assert "> timeout" in out
+
+    def test_crm_digest_lists_render_as_markdown(self, frappe_mock):
+        from raven_ai_agent.skills.crm_agent.agents.pipeline_summarizer import (
+            PipelineSummarizerAgent,
+        )
+        snap = {
+            "won": [], "moved": [],
+            "stalled": [{"name": "CRM-OPP-1", "party_name": "Barentz",
+                         "status": "Open", "opportunity_amount": 112000,
+                         "currency": "USD"}],
+            "open": [],
+        }
+        out = PipelineSummarizerAgent._render(snap)
+        # python-markdown needs a blank line between header and list
+        assert "**⏳ Stalled > 7d:**\n\n- " in out

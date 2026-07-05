@@ -58,6 +58,7 @@ class PipelineSummarizerAgent(CRMAgentBase):
 
         if snap["won"]:
             lines.append("**🏆 Won (last 24h):**")
+            lines.append("")
             for o in snap["won"]:
                 lines.append(f"- `{o['name']}` · {o.get('party_name','?')} · "
                              f"{o.get('opportunity_amount',0):,.0f} {o.get('currency','MXN')}")
@@ -65,12 +66,14 @@ class PipelineSummarizerAgent(CRMAgentBase):
 
         if snap["moved"]:
             lines.append("**🔄 Moved (last 24h):**")
+            lines.append("")
             for o in snap["moved"][:10]:
                 lines.append(f"- `{o['name']}` → {o.get('status')} · {o.get('party_name','?')}")
             lines.append("")
 
         if snap["stalled"]:
             lines.append("**⏳ Stalled > 7d:**")
+            lines.append("")
             for o in snap["stalled"][:10]:
                 lines.append(f"- `{o['name']}` · {o.get('party_name','?')} · "
                              f"{o.get('status')} · "
