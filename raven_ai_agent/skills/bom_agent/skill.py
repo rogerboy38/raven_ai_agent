@@ -280,7 +280,41 @@ class BOMAgentSkill(SkillBase):
             lines.append(f"- 🚨 Self-referencing BOMs (B008): {', '.join(r[0] for r in self_ref)}")
         else:
             lines.append("- ✅ No self-referencing BOMs (B008)")
+        lines.extend(self._server_script_hazards())
         return self._reply("\n".join(lines))
+
+    @staticmethod
+    def _server_script_hazards():
+        """2026-07-05 incident class: the DB-resident 'Raven Channel
+        Permission Patch' Server Script carried an illegal `import` and broke
+        EVERY Batch insert site-wide the moment server_script_enabled=1.
+        Server Scripts are invisible to git — surface them in health.
+        `import`/`from x import` are always illegal in Frappe server scripts
+        (restricted sandbox); any hit here WILL throw at runtime."""
+        lines = []
+        try:
+            rows = frappe.get_all(
+                "Server Script", filters={"disabled": 0},
+                fields=["name", "script_type", "reference_doctype", "script"])
+        except Exception:  # noqa: BLE001
+            return lines  # doctype absent / no permission — stay silent
+        bad = [r for r in rows
+               if re.search(r"^\s*(?:import|from)\s+\w", r.get("script") or "", re.M)]
+        if bad:
+            try:
+                enabled = bool(frappe.conf.get("server_script_enabled"))
+            except Exception:  # noqa: BLE001
+                enabled = None
+            state = ("ACTIVE — inserts on their doctypes are breaking NOW"
+                     if enabled else "latent (server_script_enabled is off)")
+            lines.append(f"- 🚨 **Server Scripts with ILLEGAL imports** ({state}):")
+            for r in bad[:10]:
+                lines.append(f"    - {r['name']} · {r['script_type']} on "
+                             f"{r.get('reference_doctype') or '—'} — imports are "
+                             f"forbidden in server scripts; will throw at runtime")
+        else:
+            lines.append("- ✅ No illegal-import Server Scripts (enabled set)")
+        return lines
 
     def _bom_inspect(self, q: str) -> Dict:
         m = BOM_ID_RE.search(q)
