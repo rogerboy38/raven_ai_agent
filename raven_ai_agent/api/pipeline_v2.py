@@ -19,6 +19,41 @@ import frappe
 
 ACK_TEXT = "🤔 Working on it…"
 
+DEFAULT_BOTS = ("sales_order_bot", "iot_sensor_bot")
+
+
+def _get_reply_bot():
+    """First existing Raven bot user we can attribute replies to (legacy parity)."""
+    for bot in DEFAULT_BOTS:
+        try:
+            if frappe.db.exists("Raven Bot", bot) or frappe.db.exists("User", bot):
+                return bot
+        except Exception:
+            continue
+    return None
+
+
+def _insert_bot_message(channel_id: str, text: str):
+    payload = {
+        "doctype": "Raven Message",
+        "channel_id": channel_id,
+        "text": text,
+        "message_type": "Text",
+        "is_bot_message": 1,
+    }
+    bot = _get_reply_bot()
+    if bot:
+        payload["bot"] = bot
+    doc = frappe.get_doc(payload)
+    doc.insert(ignore_permissions=True)
+    try:
+        from raven_ai_agent.api.channel_utils import publish_message_created_event
+
+        publish_message_created_event(doc, channel_id)
+    except Exception:
+        pass
+    return doc
+
 
 def is_enabled(settings=None) -> bool:
     """Cheap flag check usable inside the after_insert hook."""
@@ -37,16 +72,7 @@ def dispatch(message_name: str, channel_id: str, query: str, user: str) -> None:
     ack_name = None
     try:
         if frappe.db.get_single_value("AI Agent Settings", "pipeline_ack_enabled"):
-            ack = frappe.get_doc(
-                {
-                    "doctype": "Raven Message",
-                    "channel_id": channel_id,
-                    "text": ACK_TEXT,
-                    "message_type": "Text",
-                    "is_bot_message": 1,
-                }
-            )
-            ack.insert(ignore_permissions=True)
+            ack = _insert_bot_message(channel_id, ACK_TEXT)
             ack_name = ack.name
     except Exception:
         frappe.logger().warning("[Pipeline V2] ack insert failed", exc_info=True)
@@ -104,15 +130,7 @@ def process_command(
     latency_ms = int((time.monotonic() - started) * 1000)
 
     try:
-        frappe.get_doc(
-            {
-                "doctype": "Raven Message",
-                "channel_id": channel_id,
-                "text": response,
-                "message_type": "Text",
-                "is_bot_message": 1,
-            }
-        ).insert(ignore_permissions=True)
+        _insert_bot_message(channel_id, response)
     except Exception:
         frappe.logger().error(f"[Pipeline V2] {request_id} reply insert failed", exc_info=True)
 

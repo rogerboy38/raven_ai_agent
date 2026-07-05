@@ -48,18 +48,28 @@ class RaymondLucyAgentV2:
         # Get provider (override or from settings)
         provider_name = provider_override or self.settings.get("default_provider", "openai")
         
+        self.cost_monitor = CostMonitor()
+        self.provider = None
+        self._provider_error = None
         try:
             self.provider = get_provider(provider_name.lower(), self.settings)
-            self.cost_monitor = CostMonitor()
             frappe.logger().info(f"[AI Agent V2] Using provider: {provider_name}")
         except Exception as e:
             # Fallback to configured fallback provider
             fallback = self.settings.get("fallback_provider")
             if fallback and fallback != provider_name:
-                frappe.logger().warning(f"[AI Agent V2] Primary provider failed, using fallback: {fallback}")
-                self.provider = get_provider(fallback.lower(), self.settings)
+                try:
+                    frappe.logger().warning(f"[AI Agent V2] Primary provider failed, using fallback: {fallback}")
+                    self.provider = get_provider(fallback.lower(), self.settings)
+                except Exception as e2:
+                    self._provider_error = f"primary: {e} | fallback: {e2}"
             else:
-                raise ValueError(f"Failed to initialize provider: {e}")
+                self._provider_error = str(e)
+        if self._provider_error:
+            # Lazy failure: skills, help and other non-LLM paths must still work.
+            frappe.logger().warning(
+                f"[AI Agent V2] No LLM provider available (deferred): {self._provider_error}"
+            )
         
         self.autonomy_level = 1  # Default COPILOT
         
@@ -71,7 +81,7 @@ class RaymondLucyAgentV2:
         # OR when the env flag RAVEN_INTELLIGENCE_LAYER=1 is set. The layer is
         # provider-agnostic and only activated for queries flagged as complex.
         self.intelligence = None
-        if PATTERNS_AVAILABLE and self._intelligence_enabled():
+        if PATTERNS_AVAILABLE and self.provider is not None and self._intelligence_enabled():
             try:
                 self.intelligence = IntelligenceLayer(
                     provider=self.provider,
@@ -115,7 +125,7 @@ class RaymondLucyAgentV2:
         """Best-effort: instantiate every configured provider for fallback chains."""
         secondaries: Dict = {}
         for name in ("openai", "deepseek", "claude", "minimax", "ollama"):
-            if name == self.provider.name:
+            if self.provider is not None and name == self.provider.name:
                 continue
             try:
                 secondaries[name] = get_provider(name, self.settings)
@@ -130,6 +140,25 @@ class RaymondLucyAgentV2:
         except Exception:
             return None
     
+    def _provider_name(self) -> str:
+        return self.provider.name if self.provider is not None else "unavailable"
+
+    def _provider_unavailable_response(self) -> Dict:
+        return {
+            "success": False,
+            "response": (
+                "⚠️ No LLM provider is configured, so I can only run skill commands "
+                "right now. / No hay proveedor LLM configurado; por ahora solo puedo "
+                "ejecutar comandos de skills.\n\n"
+                "Admin: set the API key via `bench set-config openai_api_key ...` or "
+                "re-save it in AI Agent Settings.\n"
+                f"Detail: {self._provider_error}"
+            ),
+            "autonomy_level": 1,
+            "context_used": {"provider_error": True},
+            "provider": "unavailable",
+        }
+
     def _get_settings(self) -> Dict:
         """Load AI Agent Settings with all provider configs"""
         try:
@@ -197,7 +226,7 @@ class RaymondLucyAgentV2:
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 1]\n{CAPABILITIES_LIST}\n\n{skills_help}",
                 "autonomy_level": 1,
                 "context_used": {"help": True},
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
         
         # TRY SKILLS FIRST - Route to specialized skills
@@ -215,10 +244,14 @@ class RaymondLucyAgentV2:
         # Create temporary V1 agent for context/workflow methods
         v1_agent = RaymondLucyAgent(self.user)
         
-        # Try workflow command first
+        # Try workflow command first (deterministic — no LLM needed)
         workflow_result = v1_agent.execute_workflow_command(query)
         if workflow_result:
             return self._format_workflow_result(workflow_result)
+
+        # Everything past this point requires a working LLM provider.
+        if self.provider is None:
+            return self._provider_unavailable_response()
         
         # Build context using V1 methods
         morning_briefing = v1_agent.get_morning_briefing()
@@ -253,7 +286,7 @@ class RaymondLucyAgentV2:
                                 "pattern": "rag",
                                 "sources": [r.source for r in rag_result.retrieved],
                             },
-                            "provider": self.provider.name,
+                            "provider": self._provider_name(),
                         }
 
                 # Planning: surface a step-by-step plan for multi-step goals.
@@ -297,7 +330,7 @@ class RaymondLucyAgentV2:
         # Call LLM using new provider system
         try:
             # Check if DeepSeek reasoning mode is enabled
-            if (self.provider.name == "deepseek" and 
+            if (self.provider is not None and self.provider.name == "deepseek" and 
                 self.settings.get("deepseek_use_reasoning") and
                 suggested_autonomy >= 2):
                 # Use reasoning mode for complex operations
@@ -351,7 +384,7 @@ class RaymondLucyAgentV2:
                     "plan_preview": bool(plan_preview),
                     "reflection_accepted": reflection_used,
                 },
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
             
         except Exception as e:
@@ -359,7 +392,7 @@ class RaymondLucyAgentV2:
             
             # Try fallback provider
             fallback = self.settings.get("fallback_provider")
-            if fallback and fallback.lower() != self.provider.name:
+            if fallback and self.provider is not None and fallback.lower() != self.provider.name:
                 try:
                     fallback_provider = get_provider(fallback.lower(), self.settings)
                     answer = fallback_provider.chat(messages=messages)
@@ -376,7 +409,7 @@ class RaymondLucyAgentV2:
                 "success": False,
                 "error": str(e),
                 "response": f"[CONFIDENCE: UNCERTAIN]\n\nError: {str(e)}",
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
     
     def _format_workflow_result(self, result: Dict) -> Dict:
@@ -387,21 +420,21 @@ class RaymondLucyAgentV2:
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{result['preview']}",
                 "autonomy_level": 2,
                 "context_used": {"workflow": True},
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
         elif result.get("success"):
             return {
                 "success": True,
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{result.get('message', 'Done.')}",
                 "autonomy_level": 2,
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
         else:
             return {
                 "success": False,
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n❌ {result.get('error')}",
                 "autonomy_level": 2,
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
 
 
