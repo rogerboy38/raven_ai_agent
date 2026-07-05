@@ -71,7 +71,7 @@ class TestDispatch:
     def test_create_from_tds_delegates_and_reports_draft(self, frappe_mock):
         import sys, types
         agent = MagicMock()
-        agent.handle_bom_request.return_value = {
+        agent.create_bom_from_tds.return_value = {
             "success": True, "message": "BOM Creator created",
             "bom_creator_name": "BOM-TDS-0705",
         }
@@ -92,6 +92,27 @@ class TestDispatch:
                 else:
                     sys.modules[k] = v
         assert r["handled"] and "BOM-TDS-0705" in r["response"] and "!submit" in r["response"]
+
+    def test_create_from_tds_passes_full_multiword_name(self, frappe_mock):
+        """Live regression 2026-07-05 02:08: 'create bom from tds 0705 TDS
+        pH 3.5-4.0' extracted only '0705' -> not found."""
+        import sys, types
+        agent = MagicMock()
+        agent.create_bom_from_tds.return_value = {"success": True, "message": "ok",
+                                                  "bom_creator_name": "BC-1"}
+        pkg = types.ModuleType("raven_ai_agent.agents")
+        mod = types.ModuleType("raven_ai_agent.agents.bom_creator_agent")
+        mod.BOMCreatorAgent = MagicMock(return_value=agent)
+        saved = {k: sys.modules.get(k) for k in (pkg.__name__, mod.__name__)}
+        sys.modules[pkg.__name__] = pkg; sys.modules[mod.__name__] = mod
+        try:
+            r = self._skill().handle("create bom from tds 0705 TDS pH 3.5-4.0")
+        finally:
+            for k, v in saved.items():
+                if v is None: sys.modules.pop(k, None)
+                else: sys.modules[k] = v
+        agent.create_bom_from_tds.assert_called_once_with("0705 TDS pH 3.5-4.0")
+        assert r["handled"] and "BC-1" in r["response"]
 
     def test_simulate_blend_missing_doctype_is_graceful(self, frappe_mock):
         frappe_mock.db.exists = MagicMock(return_value=False)

@@ -81,7 +81,15 @@ class BOMAgentSkill(SkillBase):
     def _delegate_creator(self, q: str) -> Dict:
         from raven_ai_agent.agents.bom_creator_agent import BOMCreatorAgent
 
-        result = BOMCreatorAgent().handle_bom_request(q)
+        # TDS docnames contain spaces ("0705 TDS pH 3.5-4.0") — take the FULL
+        # rest of the line, not one token (handle_bom_request grabs one token,
+        # which produced "TDS '0705' not found" in live testing 2026-07-05).
+        m = re.search(r"(?:from\s+)?tds\s+(.+)$", q, re.IGNORECASE)
+        if m:
+            tds_name = m.group(1).strip().strip("'\"")
+            result = BOMCreatorAgent().create_bom_from_tds(tds_name)
+        else:
+            result = BOMCreatorAgent().handle_bom_request(q)
         if result.get("success"):
             msg = result.get("message") or "Done."
             name = result.get("bom_creator_name") or result.get("name")
