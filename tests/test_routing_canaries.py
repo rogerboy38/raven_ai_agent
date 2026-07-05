@@ -76,6 +76,13 @@ CANARIES = [
     ("validate bom BOM-0602-001",       "skill_exact", "bom-agent"),
     ("create bom from tds 0705 TDS pH 3.5-4.0", "skill_exact", "bom-agent"),
     ("bom status 0602",                 "skill_exact", "bom-agent"),
+    # --- v2 commands (EN + ES) ---------------------------------------------
+    ("bom repair wo MFG-WO-02625",      "skill_exact", "bom-agent"),
+    ("reparar wo MFG-WO-02625",         "skill_exact", "bom-agent"),
+    ("bom lots 0227",                   "skill_exact", "bom-agent"),
+    ("bom plan create 0307 powder",     "skill_exact", "bom-agent"),
+    ("salud bom",                       "skill_exact", "bom-agent"),
+    ("bom help",                        "skill_exact", "bom-agent"),
 ]
 
 

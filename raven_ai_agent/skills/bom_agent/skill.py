@@ -15,11 +15,15 @@ Scope discipline:
   (whitelisted doc method, read-only compute) when that app is installed.
 """
 
+import json
 import re
+from datetime import datetime
 from typing import Dict, Optional
 
 import frappe
 
+from raven_ai_agent.skills.bom_agent import family as family_mod
+from raven_ai_agent.skills.bom_agent import golden
 from raven_ai_agent.skills.framework import SkillBase
 
 FMIX_RE = re.compile(r"\b(FMIX-[\w-]+)\b", re.IGNORECASE)
@@ -36,14 +40,18 @@ class BOMAgentSkill(SkillBase):
     # No bare "bom" trigger on purpose — precision over greed.
     triggers = [
         "bom health", "bom inspect", "bom issues", "create bom from tds",
-        "serial health", "simulate blend",
+        "serial health", "simulate blend", "bom help", "bom plan", "bom repair",
+        "bom lots", "salud bom", "ayuda bom", "reparar wo", "lotes bom",
+        "crear bom desde tds",
     ]
     patterns = [
-        r"\bbom\s+(health|inspect|status|issues)\b",
+        r"\bbom\s+(health|inspect|status|issues|help|plan|lots)\b",
+        r"\bbom\s+repair\b|\brepair\s+wo\b|\breparar\s+(wo|orden)\b",
         r"\bserial\s+(health|status|batch)\b",
-        r"\bvalidate\s+bom\b",
-        r"\bcreate\s+bom\s+from\s+tds\b",
-        r"\bsimulate\s+blend\b",
+        r"\bvalidate\s+bom\b|\bvalidar\s+bom\b",
+        r"\bcreate\s+bom\s+from\s+tds\b|\bcrear\s+bom\s+desde\s+tds\b",
+        r"\bsimulate\s+blend\b|\bsimular\s+mezcla\b",
+        r"\bsalud\s+(de\s+)?bom\b|\bayuda\s+bom\b|\blotes\s+bom\b",
         r"\bFMIX-[\w-]+\b",
     ]
 
@@ -52,7 +60,16 @@ class BOMAgentSkill(SkillBase):
         q = (query or "").strip()
         ql = q.lower()
         try:
-            if "create bom from tds" in ql or ("create bom" in ql and "tds" in ql):
+            if re.search(r"\bbom\s+help\b|\bayuda\s+bom\b", ql):
+                return self._help()
+            if re.search(r"\bbom\s+repair\b|\brepair\s+wo\b|\breparar\s+(wo|orden)\b", ql):
+                return self._repair_wo(q)
+            if re.search(r"\bbom\s+lots\b|\blotes\s+bom\b", ql):
+                return self._bom_lots(q)
+            if re.search(r"\bbom\s+plan\b", ql):
+                # explicit dry-run alias: strip 'plan', force preview
+                return self._delegate_creator(re.sub(r"\bbom\s+plan\b", "create bom", ql, count=1))
+            if "create bom from tds" in ql or "crear bom desde tds" in ql or ("create bom" in ql and "tds" in ql):
                 return self._delegate_creator(q)
             if "validate" in ql and "bom" in ql:
                 return self._validate(q)
@@ -90,6 +107,20 @@ class BOMAgentSkill(SkillBase):
         dry_run = not q.lstrip().startswith("!")
         request_text = q.lstrip("!").strip()
 
+        # Principle 2: resolve family HERE. A family without an amb master
+        # template refuses honestly BEFORE any pipeline call — no silent
+        # mis-mapping (old juice->0227), no phantom success (#79).
+        fam = family_mod.resolve(request_text)
+        if fam is not None and not fam.template_available:
+            return self._reply(
+                f"🚫 **No BOM template for family {fam.code} ({fam.label})** — "
+                f"nothing was created. / No existe plantilla para la familia "
+                f"{fam.code}; no se creó nada.\n\n"
+                f"- {fam.note or 'Template pending in amb_w_tds ai_bom_agent/templates.'}\n"
+                f"- Families with templates today: {', '.join(family_mod.available_codes())}\n"
+                f"- Tracking: #78 (0705/juice master template)"
+            )
+
         fn = None
         try:
             fn = frappe.get_attr(self.AMB_BOM_SKILL_API)
@@ -103,8 +134,21 @@ class BOMAgentSkill(SkillBase):
                 return self._reply(f"❌ AI-BOM pipeline error: {exc}")
             body = self._format_amb_result(result)
             if dry_run:
-                body += ("\n\n🔍 _Dry run — nothing was created._ "
-                         f"Execute with `@ai !{request_text}`")
+                body += ("\n\n🔍 _Dry run — nothing was created. / Simulación; "
+                         f"no se creó nada._ Execute with `@ai !{request_text}`")
+                return self._reply(body)
+            # Principle 1 — HONESTY: trust rows, not labels (#79). Verify.
+            verified, name = self._verify_created(result, request_text)
+            if verified:
+                body += f"\n\n✅ **VERIFIED**: BOM Creator row **{name}** exists."
+                body += self._dod_json("create_bom_creator", name, verified=True)
+            else:
+                body = (
+                    "❌ **NOT CREATED / NO SE CREÓ** — the pipeline replied but no "
+                    "BOM Creator row exists (known label bug #79).\n\n"
+                    "Pipeline transcript:\n\n" + body
+                )
+                body += self._dod_json("create_bom_creator", name or "-", verified=False)
             return self._reply(body)
 
         # Fallback: raven-side agent (multi-word TDS names supported)
@@ -209,9 +253,33 @@ class BOMAgentSkill(SkillBase):
             f"- BOM Creators: **{creators}**",
         ]
         if multi_default:
-            lines.append(f"- ⚠️ Items with MULTIPLE default BOMs: {', '.join(r[0] for r in multi_default)}")
+            lines.append(f"- ⚠️ Items with MULTIPLE default BOMs (B009): {', '.join(r[0] for r in multi_default)}")
         else:
-            lines.append("- ✅ No items with duplicate default BOMs")
+            lines.append("- ✅ No items with duplicate default BOMs (B009)")
+        # v2: WOs pointing at missing BOMs — the #70 failure mode the old
+        # health check missed entirely.
+        broken_wos = frappe.db.sql("""
+            SELECT wo.name, wo.bom_no, wo.docstatus FROM `tabWork Order` wo
+            LEFT JOIN `tabBOM` b ON b.name = wo.bom_no
+            WHERE wo.bom_no IS NOT NULL AND wo.bom_no != '' AND b.name IS NULL
+              AND wo.docstatus < 2 LIMIT 10""")
+        if broken_wos:
+            lines.append(f"- 🚨 **{len(broken_wos)} Work Orders point at MISSING BOMs** (#70 class):")
+            for name, bom_no, ds in broken_wos:
+                state = "draft" if ds == 0 else "submitted"
+                fix = f" → `@ai bom repair wo {name}`" if ds == 0 else " (submitted — human decision)"
+                lines.append(f"    - {name} ({state}) → {bom_no}{fix}")
+        else:
+            lines.append("- ✅ No Work Orders pointing at missing BOMs")
+        # v2: self-referencing BOMs (B008)
+        self_ref = frappe.db.sql("""
+            SELECT bi.parent FROM `tabBOM Item` bi
+            JOIN `tabBOM` b ON b.name = bi.parent
+            WHERE bi.item_code = b.item LIMIT 5""")
+        if self_ref:
+            lines.append(f"- 🚨 Self-referencing BOMs (B008): {', '.join(r[0] for r in self_ref)}")
+        else:
+            lines.append("- ✅ No self-referencing BOMs (B008)")
         return self._reply("\n".join(lines))
 
     def _bom_inspect(self, q: str) -> Dict:
@@ -320,6 +388,128 @@ class BOMAgentSkill(SkillBase):
         else:
             body = str(result)[:1500]
         return self._reply(f"🧪 **Blend simulation — {name}** (read-only)\n\n{body}")
+
+    # ---- v2: verification, repair, lots, help, DoD -------------------- #
+    def _verify_created(self, result, request_text: str):
+        """Row-existence check after an executed create (#79 neutralizer)."""
+        name = None
+        if isinstance(result, dict):
+            name = result.get("bom_creator_name") or result.get("name")
+        try:
+            if name and frappe.db.exists("BOM Creator", name):
+                return True, name
+            fam = family_mod.resolve(request_text)
+            if fam is not None:
+                recent = frappe.get_all(
+                    "BOM Creator",
+                    filters={"item_code": ["like", f"%{fam.code}%"],
+                             "creation": [">", frappe.utils.add_to_date(None, minutes=-5)]},
+                    pluck="name", limit=1, order_by="creation desc")
+                if recent:
+                    return True, recent[0]
+        except Exception:  # noqa: BLE001
+            frappe.logger().warning("[bom-agent] verify_created failed", exc_info=True)
+        return False, name
+
+    def _repair_wo(self, q: str) -> Dict:
+        """Principle 5: repair a DRAFT WO pointing at a missing BOM.
+        Plan by default; '!' executes. Refuses non-draft WOs, always."""
+        execute = q.lstrip().startswith("!")
+        m = re.search(r"\b(MFG-WO-[\w-]+|WO-[\w-]+)\b", q, re.IGNORECASE)
+        if not m:
+            return self._reply("Usage: `@ai bom repair wo MFG-WO-XXXXX` "
+                               "(add `!` to execute after reviewing the plan)")
+        wo_name = m.group(1).upper()
+        if not frappe.db.exists("Work Order", wo_name):
+            return self._reply(f"⚠️ Work Order **{wo_name}** not found. / Orden no encontrada.")
+        wo = frappe.db.get_value(
+            "Work Order", wo_name,
+            ["docstatus", "status", "bom_no", "production_item", "qty"], as_dict=True)
+        if wo.docstatus != 0:
+            return self._reply(
+                f"🚫 **REFUSED / RECHAZADO** — {wo_name} is {wo.status} "
+                f"(docstatus={wo.docstatus}). Repair only touches DRAFT work orders; "
+                "submitted/in-process WOs need a human decision.")
+        bom_exists = bool(wo.bom_no and frappe.db.exists("BOM", wo.bom_no))
+        lines = [f"🔧 **WO repair plan — {wo_name}** (item {wo.production_item}, qty {wo.qty})", ""]
+        if bom_exists:
+            docstatus = frappe.db.get_value("BOM", wo.bom_no, "docstatus")
+            if docstatus == 1:
+                return self._reply(
+                    f"✅ {wo_name} already points at submitted BOM **{wo.bom_no}** — nothing to repair.")
+            lines.append(f"- Current BOM **{wo.bom_no}** exists but docstatus={docstatus} (not submitted).")
+        else:
+            lines.append(f"- Current bom_no **{wo.bom_no or '(empty)'}** does NOT exist (the #70 failure mode).")
+        candidate = frappe.db.get_value(
+            "BOM", {"item": wo.production_item, "is_active": 1, "docstatus": 1,
+                    "is_default": 1}, "name") or frappe.db.get_value(
+            "BOM", {"item": wo.production_item, "is_active": 1, "docstatus": 1}, "name")
+        if candidate:
+            lines.append(f"- Candidate replacement: active submitted BOM **{candidate}** ✔")
+            if execute:
+                before = wo.bom_no
+                frappe.db.set_value("Work Order", wo_name, "bom_no", candidate)
+                frappe.db.commit()
+                lines.append(f"\n✅ **EXECUTED**: {wo_name}.bom_no re-pointed → **{candidate}**")
+                return self._reply("\n".join(lines) + self._dod_json(
+                    "repoint_wo_bom", wo_name, verified=True,
+                    extra={"before": before, "after": candidate}))
+            lines.append(f"\n🔍 _Plan only — nothing changed._ Execute: `@ai !bom repair wo {wo_name}`")
+            return self._reply("\n".join(lines))
+        fam = family_mod.resolve(wo.production_item or "")
+        if fam and fam.template_available:
+            lines.append(
+                f"- No usable BOM exists. Family **{fam.code}** has a template — recreate first:\n"
+                f"  1. `@ai !create bom from tds <TDS for {wo.production_item}>` (draft)\n"
+                f"  2. review + `@ai !submit bom <BOM-Creator>` (generates the BOM)\n"
+                f"  3. `@ai !bom repair wo {wo_name}` (re-point)")
+        elif fam:
+            lines.append(f"- No usable BOM and family **{fam.code}** has NO template yet (#78) — blocked on amb_w_tds.")
+        else:
+            lines.append("- No usable BOM and product family unrecognized — manual review needed.")
+        return self._reply("\n".join(lines))
+
+    def _bom_lots(self, q: str) -> Dict:
+        """Principle 7: Golden-Number FEFO ranking — never manufacturing_date."""
+        item = re.sub(r".*\b(?:bom\s+lots|lotes\s+bom)\b", "", q, flags=re.IGNORECASE).strip()
+        if not item:
+            return self._reply("Usage: `@ai bom lots <ITEM-CODE>`")
+        rows = frappe.get_all(
+            "Batch", filters={"item": ["like", f"%{item}%"]},
+            fields=["name", "batch_qty", "item"], limit=50)
+        if not rows:
+            return self._reply(f"⚠️ No batches found for **{item}**.")
+        ranked = sorted(rows, key=lambda r: golden.fefo_key(r.name))
+        lines = [f"📦 **FEFO lots for {item}** — Golden-Number order (YY+FFF), "
+                 f"NOT manufacturing_date", ""]
+        for r in ranked[:15]:
+            g = golden.parse(r.name)
+            tag = f"Y{g['year']:02d}·F{g['folio']:03d}" if g else "no-golden (consume last)"
+            lines.append(f"- **{r.name}** · {tag} · qty {r.batch_qty or 0}")
+        return self._reply("\n".join(lines))
+
+    def _help(self) -> Dict:
+        fams = ", ".join(
+            f"{f.code}{'✅' if f.template_available else '🚫#78'}" for f in family_mod.FAMILIES)
+        return self._reply(
+            "📦 **BOM Agent v2** — honest, dry-run-first, draft-only\n\n"
+            "**Read**: `bom health` · `bom inspect <BOM>` · `bom status <ITEM>` · "
+            "`bom issues` · `bom lots <ITEM>` (Golden-Number FEFO) · `serial health|status|batch` · "
+            "`validate bom <BOM>` · `simulate blend FMIX-…`\n"
+            "**Plan/Write** (plan by default, `!` executes): `bom plan …` · "
+            "`create bom from tds <TDS>` · `bom repair wo <WO>` (draft WOs only)\n"
+            "**Never**: auto-submit, touch non-draft WOs, write BOM Formula (gated on #77 lifecycle)\n\n"
+            f"Families / Familias: {fams}\n"
+            "ES: salud bom · reparar wo · lotes bom · crear bom desde tds · validar bom")
+
+    @staticmethod
+    def _dod_json(op: str, target: str, verified: bool, extra: dict = None) -> str:
+        dod = {"op": op, "target": target, "verified": verified,
+               "actor": getattr(frappe.session, "user", "unknown") if hasattr(frappe, "session") else "unknown",
+               "ts": datetime.utcnow().isoformat() + "Z"}
+        if extra:
+            dod.update(extra)
+        return "\n\n```json\n" + json.dumps(dod, indent=1) + "\n```"
 
     # ------------------------------------------------------------------ #
     @staticmethod

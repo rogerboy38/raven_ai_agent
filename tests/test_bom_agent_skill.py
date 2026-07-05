@@ -34,7 +34,7 @@ class TestDiscoveryAndPrecedence:
         claimed by formulation-advisor ('No batches found in tds')."""
         from raven_ai_agent.skills.framework import get_registry, SkillRouter
         r = SkillRouter(get_registry(), None)
-        top = sorted(r._find_matches("create bom from tds 0705 TDS pH 3.5-4.0"),
+        top = sorted(r._find_matches("create bom from tds 0307 spray TDS"),
                      key=lambda m: (m[1], m[2]), reverse=True)[0]
         assert top[0] == "bom-agent" and top[1] >= 0.9
 
@@ -84,7 +84,7 @@ class TestDispatch:
         sys.modules[pkg.__name__] = pkg
         sys.modules[mod.__name__] = mod
         try:
-            r = self._skill().handle("create bom from tds 0705")
+            r = self._skill().handle("create bom from tds 0307X")
         finally:
             for k, v in saved.items():
                 if v is None:
@@ -106,12 +106,12 @@ class TestDispatch:
         saved = {k: sys.modules.get(k) for k in (pkg.__name__, mod.__name__)}
         sys.modules[pkg.__name__] = pkg; sys.modules[mod.__name__] = mod
         try:
-            r = self._skill().handle("create bom from tds 0705 TDS pH 3.5-4.0")
+            r = self._skill().handle("create bom from tds 0307 spray TDS")
         finally:
             for k, v in saved.items():
                 if v is None: sys.modules.pop(k, None)
                 else: sys.modules[k] = v
-        agent.create_bom_from_tds.assert_called_once_with("0705 TDS pH 3.5-4.0")
+        agent.create_bom_from_tds.assert_called_once_with("0307 spray TDS")
         assert r["handled"] and "BC-1" in r["response"]
 
     def test_simulate_blend_missing_doctype_is_graceful(self, frappe_mock):
@@ -134,17 +134,17 @@ class TestAmbPipelinePreferred:
         api = MagicMock(return_value={"message": "Would create BOM for 0705",
                                       "bom_creator_name": None})
         frappe_mock.get_attr = MagicMock(return_value=api)
-        r = self._skill().handle("create bom from tds 0705 TDS pH 3.5-4.0")
+        r = self._skill().handle("create bom from tds 0307 spray TDS")
         api.assert_called_once_with(
-            request_text="create bom from tds 0705 TDS pH 3.5-4.0", dry_run=True)
+            request_text="create bom from tds 0307 spray TDS", dry_run=True)
         assert "Dry run" in r["response"] and "!create bom from tds" in r["response"]
 
     def test_bang_prefix_executes_for_real(self, frappe_mock):
         api = MagicMock(return_value={"message": "Created", "bom_creator_name": "BC-9"})
         frappe_mock.get_attr = MagicMock(return_value=api)
-        r = self._skill().handle("!create bom from tds 0705 TDS pH 3.5-4.0")
+        r = self._skill().handle("!create bom from tds 0307 spray TDS")
         api.assert_called_once_with(
-            request_text="create bom from tds 0705 TDS pH 3.5-4.0", dry_run=False)
+            request_text="create bom from tds 0307 spray TDS", dry_run=False)
         assert "BC-9" in r["response"] and "Dry run" not in r["response"]
 
     def test_falls_back_to_raven_agent_when_amb_absent(self, frappe_mock):
@@ -159,10 +159,10 @@ class TestAmbPipelinePreferred:
         saved = {k: sys.modules.get(k) for k in (pkg.__name__, mod.__name__)}
         sys.modules[pkg.__name__] = pkg; sys.modules[mod.__name__] = mod
         try:
-            r = self._skill().handle("create bom from tds 0705 TDS pH 3.5-4.0")
+            r = self._skill().handle("create bom from tds 0307 spray TDS")
         finally:
             for k, v in saved.items():
                 if v is None: sys.modules.pop(k, None)
                 else: sys.modules[k] = v
-        agent.create_bom_from_tds.assert_called_once_with("0705 TDS pH 3.5-4.0")
+        agent.create_bom_from_tds.assert_called_once_with("0307 spray TDS")
         assert "BC-2" in r["response"]
