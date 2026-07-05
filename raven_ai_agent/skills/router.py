@@ -120,6 +120,8 @@ class SkillRouter:
         frappe.logger().info(f"[SkillRouter] Calling skill: {best_skill.name}")
         try:
             result = best_skill.handle(query, context)
+            if isinstance(result, dict):
+                result.setdefault("skill", getattr(best_skill, "name", "skill"))
             frappe.logger().info(f"[SkillRouter] Skill result: {result}")
             return result
         except Exception as e:
