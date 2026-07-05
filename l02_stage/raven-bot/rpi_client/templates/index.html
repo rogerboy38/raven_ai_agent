@@ -301,13 +301,6 @@
                 width: 100%;
             }
         }
-
-        /* SCALE-U01 ok/not-ok feedback */
-        input.field-ok { border-color: #27ae60 !important; background: #eafaf0; }
-        input.field-bad { border-color: #e74c3c !important; background: #fdecea; }
-        .scan-status { font-size: 0.85rem; font-weight: 600; margin-top: 6px; min-height: 1.1em; }
-        .scan-status.ok { color: #27ae60; }
-        .scan-status.bad { color: #e74c3c; }
     </style>
 </head>
 <body>
@@ -334,8 +327,7 @@
         <div class="card">
             <div class="card-title">Barrel Serial</div>
             <div class="form-group">
-                <input type="text" id="barrelSerial" placeholder="SMP-...-C001-011" autocomplete="off" autocapitalize="characters">
-                <div class="scan-status" id="status-barrelSerial"></div>
+                <input type="text" id="barrelSerial" placeholder="JAR0001261-1-C1-001" autocomplete="off" autocapitalize="characters">
             </div>
             <div class="button-row">
                 <button class="stub" onclick="scanBarcode()">Scan Barcode</button>
@@ -347,7 +339,6 @@
             <div class="card-title">Weight (kg)</div>
             <div class="form-group">
                 <input type="number" id="weight" placeholder="25.00" step="0.01" min="0" max="500">
-                <div class="scan-status" id="status-weight"></div>
             </div>
             <div class="button-row">
                 <button class="stub" onclick="readScale()">Read Scale</button>
@@ -377,10 +368,7 @@
         </div>
 
         <div class="card">
-            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-                <span>Recent History</span>
-                <button onclick="cleanupDuplicates()" style="padding: 4px 8px; font-size: 12px;">Cleanup</button>
-            </div>
+            <div class="card-title">Recent History</div>
             <table class="history-table">
                 <thead>
                     <tr>
@@ -406,96 +394,13 @@
     <script>
         let currentSerial = '';
         let currentWeight = null;
-        let serialOk = false;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             updateStatus();
             loadHistory();
             setInterval(updateStatus, 30000);
-            attachScanFlow();
-            focusSerial();
         });
-
-        // ---- ok / not-ok operator feedback (scale comm is one-way) ----
-        let _audioCtx = null;
-        function beep(ok) {
-            try {
-                _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-                const o = _audioCtx.createOscillator(), g = _audioCtx.createGain();
-                o.connect(g); g.connect(_audioCtx.destination);
-                o.type = ok ? 'sine' : 'square';
-                o.frequency.value = ok ? 880 : 220;
-                g.gain.value = 0.12;
-                o.start();
-                setTimeout(() => { try { o.stop(); } catch (e) {} }, ok ? 120 : 320);
-            } catch (e) {}
-        }
-
-        function setField(id, state) {            // 'ok' | 'bad' | 'idle'
-            const el = document.getElementById(id);
-            el.classList.remove('field-ok', 'field-bad');
-            if (state === 'ok') el.classList.add('field-ok');
-            if (state === 'bad') el.classList.add('field-bad');
-        }
-        function setBadge(id, state, text) {
-            const b = document.getElementById('status-' + id);
-            if (!b) return;
-            b.textContent = text || '';
-            b.className = 'scan-status ' + (state || '');
-        }
-
-        function focusSerial() { const e = document.getElementById('barrelSerial'); e.focus(); e.select(); }
-        function focusWeight() { const e = document.getElementById('weight'); e.focus(); e.select(); }
-
-        // Guided per-barrel loop: Serial (scan/validate) -> Weight -> Submit -> back to Serial.
-        // Lot/batch is a set-once header hint (server resolves the authoritative batch).
-        function attachScanFlow() {
-            const serial = document.getElementById('barrelSerial');
-            const weight = document.getElementById('weight');
-            serial.addEventListener('focus', () => serial.select());
-            weight.addEventListener('focus', () => weight.select());
-            serial.addEventListener('keydown', e => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    validateSerial().then(ok => { beep(ok); if (ok) focusWeight(); });
-                } else if (serialOk && e.key.length === 1) {
-                    // a new scan begins on an already-accepted field -> replace, don't append
-                    serial.value = ''; serialOk = false;
-                    setField('barrelSerial', 'idle'); setBadge('barrelSerial', '', '');
-                }
-            });
-            weight.addEventListener('keydown', e => {
-                if (e.key === 'Enter') { e.preventDefault(); submitWeight(); }
-            });
-        }
-
-        // Pre-check the serial is on the batch before weighing (server stays authoritative on submit).
-        function validateSerial() {
-            const serial = document.getElementById('barrelSerial').value.trim().toUpperCase();
-            document.getElementById('barrelSerial').value = serial;
-            if (!serial) {
-                serialOk = false; setField('barrelSerial', 'bad'); setBadge('barrelSerial', 'bad', 'Empty');
-                return Promise.resolve(false);
-            }
-            setBadge('barrelSerial', '', 'Checking…');
-            return fetch('/api/barrels/' + encodeURIComponent(serial))
-                .then(r => r.json())
-                .then(data => {
-                    const ok = data.status === 'success';
-                    serialOk = ok; currentSerial = ok ? serial : '';
-                    setField('barrelSerial', ok ? 'ok' : 'bad');
-                    setBadge('barrelSerial', ok ? 'ok' : 'bad', ok ? 'Serial OK' : 'NOT on batch');
-                    updateCurrentEntry();
-                    return ok;
-                })
-                .catch(() => {  // pre-check unavailable -> let the server be authoritative at submit
-                    serialOk = true; currentSerial = serial;
-                    setField('barrelSerial', 'ok'); setBadge('barrelSerial', '', 'Serial (unchecked)');
-                    updateCurrentEntry();
-                    return true;
-                });
-        }
 
         function showMessage(text, type = 'success') {
             const msg = document.getElementById('message');
@@ -552,10 +457,7 @@
                 .catch(err => console.error('History error:', err));
         }
 
-        // Validate button -> same path as scan-Enter. (Bug fix: removed undefined `batch` ref
-        // that made the original Validate button throw a ReferenceError.)
         function validateBarrel() {
-            validateSerial().then(ok => { beep(ok); if (ok) focusWeight(); });
             const serial = document.getElementById('barrelSerial').value.trim().toUpperCase();
             if (!batch) {
                 showMessage('Please enter a batch name', 'error');
@@ -571,13 +473,9 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success') {
+                        showMessage('Barrel validated: ' + serial, 'success');
                         currentSerial = serial;
                         updateCurrentEntry();
-                        if (data.duplicate && data.duplicate.is_duplicate) {
-                            showMessage("WARNING: " + serial + " already submitted " + data.duplicate.count + " time(s). Last weight: " + data.duplicate.last_weight + " kg", "warning");
-                        } else {
-                            showMessage("Barrel validated: " + serial, "success");
-                        }
                     } else {
                         showMessage('Barrel not found: ' + serial, 'error');
                         currentSerial = '';
@@ -605,10 +503,9 @@
 
         function updateCurrentEntry() {
             const entry = document.getElementById('currentEntry');
-            const w = parseFloat(document.getElementById('weight').value);
-            if (currentSerial && !isNaN(w)) {
+            if (currentSerial && currentWeight) {
                 document.getElementById('currentSerial').textContent = currentSerial;
-                document.getElementById('currentWeight').textContent = w;
+                document.getElementById('currentWeight').textContent = currentWeight;
                 entry.classList.add('show');
             } else {
                 entry.classList.remove('show');
@@ -618,65 +515,54 @@
         function submitWeight() {
             const batch = document.getElementById('batchName').value.trim();
             const serial = currentSerial || document.getElementById('barrelSerial').value.trim().toUpperCase();
-            const weight = parseFloat(document.getElementById('weight').value);
+            const weight = currentWeight || parseFloat(document.getElementById('weight').value);
+
+            if (!batch) {
+                showMessage('Please enter a batch name', 'error');
+                return;
+            }
 
             if (!serial) {
-                showMessage('Scan a barrel serial first', 'error'); beep(false); focusSerial(); return;
+                showMessage('Please enter or validate a barrel serial', 'error');
+                return;
             }
+
             if (!weight || isNaN(weight)) {
-                showMessage('Enter a valid weight', 'error'); beep(false); focusWeight(); return;
+                showMessage('Please enter a valid weight', 'error');
+                return;
             }
 
             const btn = document.getElementById('submitBtn');
             btn.disabled = true;
-            btn.textContent = 'Awaiting ack…';
-            setBadge('weight', '', 'Awaiting server ack…');
+            btn.textContent = 'Submitting...';
 
             fetch('/api/submit-weight', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    batch_name: batch,        // optional hint; server resolves authoritative batch
+                    batch_name: batch,
                     barrel_serial: serial,
-                    gross_weight: weight,
-                    mode: 'scale'
+                    gross_weight: weight
                 })
             })
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'success') {
-                    if (data.duplicate && data.duplicate.is_duplicate) {
-                        showMessage("WARNING: Submitted but DUPLICATE: " + serial + " was already submitted " + data.duplicate.count + " time(s)", "warning");
-                    } else {
-                        showMessage('Weight submitted: ' + serial + ' = ' + weight + ' kg', 'success');
-                    }
+                    showMessage('Weight submitted: ' + serial + ' = ' + weight + ' kg', 'success');
                     currentSerial = '';
                     currentWeight = null;
                     document.getElementById('barrelSerial').value = '';
                     document.getElementById('weight').value = '';
-                    setField('barrelSerial', 'idle'); setBadge('barrelSerial', '', '');
                     updateCurrentEntry();
-                    updateStatus();   // Pending decrements only on a confirmed ack
-                    loadHistory();
-                    focusSerial();
-                } else if (status === 'not_confirmed') {
-                    // no server ack -> never claim success; keep operator on the same barrel
-                    showMessage('⚠ NOT confirmed (no server ack) — retry. ' + (data.message || ''), 'warning');
-                    beep(false);
-                    setField('weight', 'bad'); setBadge('weight', 'bad', 'NOT confirmed — retry');
                     updateStatus();
+                    loadHistory();
                 } else {
-                    // status === 'error' -> hard server reject: surface it, stay on this barrel,
-                    // Pending unchanged (this is what would have caught the row-3 silent miss)
-                    showMessage('✖ REJECTED [' + (code || 'error') + ']: ' + (data.message || 'Unknown error'), 'error');
-                    beep(false);
-                    setField('weight', 'bad'); setBadge('weight', 'bad', 'REJECT: ' + (code || 'error'));
+                    showMessage('Error: ' + (data.message || 'Unknown error'), 'warning');
+                    updateStatus();
                 }
             })
             .catch(err => {
-                showMessage('⚠ NOT confirmed (network) — retry', 'warning');
-                beep(false);
-                setBadge('weight', 'bad', 'NOT confirmed — retry');
+                showMessage('Submission failed', 'error');
             })
             .finally(() => {
                 btn.disabled = false;
@@ -690,22 +576,6 @@
 
         function readScale() {
             alert('Scale reader coming in next version');
-        }
-
-        function cleanupDuplicates() {
-            if (!confirm('Remove duplicate entries, keeping only the latest for each barrel?')) return;
-            fetch('/api/cleanup-duplicates', { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showMessage('Removed ' + data.deleted + ' duplicates (' + data.count_after + ' entries remain)', 'success');
-                        loadHistory();
-                        updateStatus();
-                    } else {
-                        showMessage('Cleanup failed: ' + data.message, 'error');
-                    }
-                })
-                .catch(err => showMessage('Cleanup failed', 'error'));
         }
     </script>
 </body>

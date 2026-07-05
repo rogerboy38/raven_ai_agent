@@ -1,0 +1,23 @@
+[Unit]
+Description=Claude Code interactive session in tmux — bot-iot-l01
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=forking
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/raven-bot
+EnvironmentFile=/home/admin/raven-bot/services/claude.env
+Environment=HOME=/home/admin
+Environment=TERM=xterm-256color
+ExecStartPre=-/usr/bin/tmux kill-session -t claude
+ExecStart=/usr/bin/tmux new-session -d -s claude /usr/bin/claude
+ExecStop=/usr/bin/tmux kill-session -t claude
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

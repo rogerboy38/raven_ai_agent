@@ -23,8 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, jsonify, make_response
-
+from flask import Flask, render_template, request, jsonify
 import requests
 
 logger = logging.getLogger(__name__)
@@ -153,26 +152,14 @@ def get_history(limit: int = 10) -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-
-def check_duplicate_serial(serial):
-    """Check if serial already submitted."""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*), MAX(gross_weight), MAX(timestamp) FROM submission_history WHERE barrel_serial = ? AND status = 'success'",
-            (serial,)
-        )
-        row = cur.fetchone()
-        conn.close()
-        if row and row[0] > 0:
-            return {'is_duplicate': True, 'count': row[0], 'last_weight': row[1], 'last_timestamp': row[2]}
-    except Exception as e:
-        pass
-    return {'is_duplicate': False}
-
-def validate_barrel_serial(serial: str) -> bool:
-    """Validate barrel serial exists in ERPNext.
+def get_pending() -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM weight_buffer ORDER BY created_at ASC, id ASC"
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 def validate_barrel_serial(serial: str) -> bool:
@@ -225,15 +212,6 @@ def build_weight_payload(
         "source": "rpi_client_web_app",
     }
     return payload
-
-
-# SCALE-U01 contract (amb_w_spc sensor_skill.receive_weight_event) — business/validation
-# codes that will NOT succeed on a blind retry. These must be surfaced to the operator,
-# NOT silently buffered as "Pending" (that masquerade was the row-3 silent miss).
-HARD_REJECT_CODES = {
-    "serial_not_found", "invalid_weight", "invalid_net_weight",
-    "tara_not_resolved", "missing_fields", "exception", "already_weighed",
-}
 
 
 def classify_erpnext_response(resp_json: Dict[str, Any]) -> Dict[str, Any]:
@@ -376,14 +354,12 @@ def submit_to_erpnext(
             }
 
         normalized = classify_erpnext_response(resp_json)
-        data = normalized["data"] if isinstance(normalized.get("data"), dict) else {}
-        server_code = data.get("code") or resp_json.get("code") or ""
 
         if resp.status_code == 200 and normalized["ok"]:
             save_submission(payload, "success", resp_json)
+            data = normalized["data"]
             return {
                 "status": "success",
-                "code": server_code or "updated",
                 "barrel_serial": payload["barrel_serial"],
                 "gross_weight": payload["gross_weight"],
                 "tara_weight": data.get("tara_weight"),
@@ -391,10 +367,6 @@ def submit_to_erpnext(
                 "batch_name": data.get("batch_name", payload.get("batch_name", "")),
                 "container_name": data.get("container_name"),
                 "row_name": data.get("row_name"),
-                # Phase-2 target feedback fields (present once the server adds them):
-                "target_net": data.get("target_net"),
-                "tol_lower": data.get("tol_lower"),
-                "tol_upper": data.get("tol_upper"),
                 "timestamp": payload["timestamp"],
                 "message": data.get("message", "Weight event saved"),
                 "server_response": resp_json,
@@ -406,46 +378,27 @@ def submit_to_erpnext(
         else:
             error_msg = str(resp_json.get("message") or f"HTTP {resp.status_code}")
 
-        logger.error("ERPNext API error: HTTP %s code=%s - %s",
-                     resp.status_code, server_code, error_msg)
+        logger.error("ERPNext API error: HTTP %s - %s", resp.status_code, error_msg)
 
-        # SCALE-U01: a recognized business/validation code is a HARD reject — surface it
-        # and do NOT buffer as a pending retry (that masquerade was the row-3 silent miss).
-        if server_code in HARD_REJECT_CODES:
-            save_submission(payload, "error", resp_json)
-            return {
-                "status": "error",
-                "code": server_code,
-                "message": error_msg,
-                "prior": data.get("prior"),  # populated on Phase-2 already_weighed
-                "timestamp": payload["timestamp"],
-                "server_response": resp_json,
-            }
-
-        # Got a response we can't classify as success or a known reject -> treat as
-        # NOT CONFIRMED (transport-ish); buffer for retry but never report success.
         if buffer_on_failure:
             buffer_submission(payload, last_error=error_msg)
+
         save_submission(payload, "buffered" if buffer_on_failure else "error", resp_json)
+
         return {
-            "status": "not_confirmed",
-            "code": server_code or "no_ack",
+            "status": "buffered" if buffer_on_failure else "error",
             "message": error_msg,
             "timestamp": payload["timestamp"],
             "server_response": resp_json,
         }
 
     except requests.exceptions.RequestException as exc:
-        # No server ack at all -> never SUCCESS; buffer for retry, report NOT confirmed.
-        logger.error("Submission not confirmed (transport): %s", exc)
+        logger.error("Submission failed: %s", exc)
         if buffer_on_failure:
             buffer_submission(payload, last_error=str(exc))
-        save_submission(payload, "buffered" if buffer_on_failure else "error",
-                        {"status": "error", "code": "no_ack", "message": str(exc)})
         return {
-            "status": "not_confirmed",
-            "code": "no_ack",
-            "message": f"Not confirmed — no server ack ({exc})",
+            "status": "buffered" if buffer_on_failure else "error",
+            "message": str(exc),
             "timestamp": payload["timestamp"],
         }
 
@@ -500,12 +453,7 @@ init_db()
 
 @app.route("/")
 def index():
-    """Main weight capture page (mobile-friendly)."""
-    response = make_response(render_template('index.html'))
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    return response
+    return render_template("index.html")
 
 
 @app.route("/api/submit-weight", methods=["POST"])
@@ -526,7 +474,7 @@ def api_submit_weight():
     data = request.get_json(silent=True)
 
     if not data:
-        return jsonify({"status": "error", "code": "missing_fields", "message": "No data provided"}), 400
+        return jsonify({"status": "error", "message": "No data provided"}), 400
 
     barrel_serial = str(data.get("barrel_serial", "")).strip().upper()
     gross_weight = data.get("gross_weight")
@@ -537,15 +485,15 @@ def api_submit_weight():
     event_timestamp = data.get("timestamp") or utc_now_iso()
 
     if not barrel_serial:
-        return jsonify({"status": "error", "code": "missing_fields", "message": "Barrel serial required"}), 400
+        return jsonify({"status": "error", "message": "Barrel serial required"}), 400
 
     if gross_weight is None:
-        return jsonify({"status": "error", "code": "missing_fields", "message": "Weight required"}), 400
+        return jsonify({"status": "error", "message": "Weight required"}), 400
 
     try:
         gross_weight = float(gross_weight)
     except (ValueError, TypeError):
-        return jsonify({"status": "error", "code": "invalid_weight", "message": "Invalid weight format"}), 400
+        return jsonify({"status": "error", "message": "Invalid weight format"}), 400
 
     if tara_weight in ("", None):
         tara_weight = None
@@ -553,20 +501,18 @@ def api_submit_weight():
         try:
             tara_weight = float(tara_weight)
         except (ValueError, TypeError):
-            return jsonify({"status": "error", "code": "invalid_weight", "message": "Invalid tara format"}), 400
+            return jsonify({"status": "error", "message": "Invalid tara format"}), 400
 
     if not validate_barrel_serial(barrel_serial):
         return jsonify({
             "status": "error",
-            "code": "serial_not_found",
             "message": f"Barrel {barrel_serial} not found"
         }), 404
 
-    if gross_weight < 0.015 or gross_weight > 500:
+    if gross_weight < 0.5 or gross_weight > 500:
         return jsonify({
             "status": "error",
-            "code": "invalid_weight",
-            "message": f"Weight {gross_weight} out of range (0.015-500 kg)"
+            "message": f"Weight {gross_weight} out of range (0.5-500 kg)"
         }), 400
 
     result = submit_to_erpnext(
@@ -595,10 +541,9 @@ def api_validate_barrel(serial: str):
         }), 404
 
     return jsonify({
-        'status': 'success',
-        'barrel_serial': serial,
-        'valid': True,
-        'duplicate': check_duplicate_serial(serial)
+        "status": "success",
+        "barrel_serial": serial,
+        "valid": True
     })
 
 
@@ -644,51 +589,6 @@ def api_history():
         "count": len(history),
         "items": history
     })
-
-
-@app.route('/api/cleanup-duplicates', methods=['POST'])
-def api_cleanup_duplicates():
-    """Remove duplicate entries, keeping only the latest for each barrel_serial.
-
-    Returns:
-        JSON with cleanup results.
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cur = conn.cursor()
-
-        # Get count before
-        cur.execute('SELECT COUNT(*) FROM submission_history')
-        count_before = cur.fetchone()[0]
-
-        # Delete duplicates, keeping the latest (highest id) for each barrel_serial
-        cur.execute('''
-            DELETE FROM submission_history
-            WHERE id NOT IN (
-                SELECT MAX(id)
-                FROM submission_history
-                GROUP BY barrel_serial
-            )
-        ''')
-        deleted = cur.rowcount
-        conn.commit()
-
-        # Get count after
-        cur.execute('SELECT COUNT(*) FROM submission_history')
-        count_after = cur.fetchone()[0]
-        conn.close()
-
-        logger.info(f"Cleanup: removed {deleted} duplicates, {count_after} entries remain")
-
-        return jsonify({
-            'status': 'success',
-            'deleted': deleted,
-            'count_before': count_before,
-            'count_after': count_after
-        })
-    except Exception as e:
-        logger.error(f"Cleanup error: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 def main():
