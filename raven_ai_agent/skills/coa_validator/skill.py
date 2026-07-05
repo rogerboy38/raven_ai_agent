@@ -43,6 +43,14 @@ class COAValidatorSkill(SkillBase):
         r"\bCOA[-\s]?\d{2}[-\s]?\d{3,4}\b",
     ]
 
+    def can_handle(self, query: str):
+        """Explicit COA id (or 'validate coa') must outrank generic
+        'validate'/'scan' triggers from data_quality_scanner (T141 parity
+        for the V2 framework router)."""
+        if COA_RE.search(query or ""):
+            return True, 0.95
+        return super().can_handle(query)
+
     def handle(self, query: str, context: Dict = None) -> Optional[Dict]:
         name = self._extract_coa_name(query)
         if not name:

@@ -279,3 +279,17 @@ class TestFrameworkRouterTolerance:
 
         matches2 = router._find_matches("create skill foo")
         assert any(m[0] == "bad" for m in matches2)  # bare-bool normalized
+
+
+class TestCoaOutranksDqs:
+    def test_explicit_coa_id_beats_generic_validate_trigger(self, frappe_mock):
+        """Screenshot regression: '@ai validate COA-26-0010' routed to
+        data-quality-scanner help card instead of coa_validator."""
+        from raven_ai_agent.skills.coa_validator.skill import COAValidatorSkill
+        coa = COAValidatorSkill()
+        can, conf = coa.can_handle("validate COA-26-0010")
+        assert can is True and conf == 0.95
+        # DQS-style generic trigger tops out at 0.8 via SkillBase, so
+        # confidence-first sorting picks the COA skill.
+        can2, conf2 = coa.can_handle("validate ACC-SINV-2026-00070")
+        assert can2 is False or conf2 < 0.95
