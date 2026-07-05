@@ -128,3 +128,22 @@ class TestHumanReadableFormatting:
         out = PipelineSummarizerAgent._render(snap)
         # python-markdown needs a blank line between header and list
         assert "**⏳ Stalled > 7d:**\n\n- " in out
+
+
+class TestSemanticGuard:
+    """Regression: 'show my pending invoices' was claimed by the
+    morning_briefing pipeline via the Coordinator (25-31s misroute)."""
+
+    def test_briefing_key_rejected_for_document_listing(self, frappe_mock):
+        from raven_ai_agent.api.multi_agent_router import semantic_guard
+        assert semantic_guard("morning_briefing", "show my pending invoices") is False
+        assert semantic_guard("morning_briefing", "list overdue payments") is False
+        assert semantic_guard("morning_briefing", "give me my morning briefing") is True
+        assert semantic_guard("morning_briefing", "resumen del día") is True
+
+    def test_doc_anchored_keys_require_so_id(self, frappe_mock):
+        from raven_ai_agent.api.multi_agent_router import semantic_guard
+        assert semantic_guard("full_status", "how are my orders doing?") is False
+        assert semantic_guard("full_status", "complete status of SO-00752") is True
+        assert semantic_guard("workflow_run", "run everything") is False
+        assert semantic_guard("diagnose_and_fix", "fix SAL-QTN-2024-00769") is True

@@ -445,6 +445,7 @@ class RaymondLucyAgentV2:
                 "success": True,
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{result.get('message', 'Done.')}",
                 "autonomy_level": 2,
+                "context_used": {"workflow": True},
                 "provider": self._provider_name()
             }
         else:
@@ -452,6 +453,7 @@ class RaymondLucyAgentV2:
                 "success": False,
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n❌ {result.get('error')}",
                 "autonomy_level": 2,
+                "context_used": {"workflow": True},
                 "provider": self._provider_name()
             }
 

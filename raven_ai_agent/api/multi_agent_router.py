@@ -447,12 +447,36 @@ def coordinator_specs():
         AgentSpec(
             name="morning_briefing",
             description=(
-                "Produce the daily Lucy-protocol briefing: pending WOs, "
-                "overdue invoices, and sales summary."
+                "Produce the daily Lucy-protocol briefing digest. Use ONLY "
+                "when the user asks for their briefing/digest/day summary. "
+                "Do NOT use for requests to list specific documents such as "
+                "invoices, payments, orders, or work orders — those belong "
+                "to the general agent."
             ),
             examples=["give me my morning briefing", "what's on my plate today"],
         ),
     ]
+
+
+_DOC_ANCHORED_KEYS = {"workflow_run", "full_status", "diagnose_and_fix"}
+_SO_ID_RE = re.compile(r"\b(?:SO|SAL-ORD|SAL-QTN)[-\s]?\d", re.IGNORECASE)
+_BRIEFING_RE = re.compile(
+    r"\b(briefing|brief|digest|resumen|agenda|plate|d[ií]a)\b", re.IGNORECASE
+)
+
+
+def semantic_guard(key: str, command: str) -> bool:
+    """Sanity-check a Coordinator decision before executing a pipeline.
+
+    - Doc-anchored pipelines are meaningless without an SO/QTN id.
+    - morning_briefing must only fire on briefing-ish phrasing, never on
+      "show my pending invoices"-style listing requests (observed misroute:
+      25-31s pipeline for a 6s LLM answer)."""
+    if key in _DOC_ANCHORED_KEYS:
+        return bool(_SO_ID_RE.search(command or ""))
+    if key == "morning_briefing":
+        return bool(_BRIEFING_RE.search(command or ""))
+    return True
 
 
 def semantic_route(command: str, provider) -> Optional[str]:
@@ -472,7 +496,9 @@ def semantic_route(command: str, provider) -> Optional[str]:
         return None
 
     decision = Coordinator(provider, agents=specs).decide(command)
-    if decision.agent in {s.name for s in specs} and decision.confidence >= 0.75:
+    if (decision.agent in {s.name for s in specs}
+            and decision.confidence >= 0.75
+            and semantic_guard(decision.agent, command)):
         logger.info(
             "Coordinator pattern matched %s (confidence=%.2f) for: %s",
             decision.agent, decision.confidence, command,
