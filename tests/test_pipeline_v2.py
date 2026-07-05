@@ -230,3 +230,52 @@ class TestSkillResultWithoutSkillKey:
         assert result["success"] is True
         assert "COA ok" in result["response"]
         assert result["skill_used"] == "skill"
+
+
+class TestFrameworkRouterTolerance:
+    """Regression for ref facc28f9e3d9: skill returning bare bool from
+    can_handle crashed the whole skills scan with
+    'TypeError: cannot unpack non-iterable bool object'."""
+
+    def _mk_router(self, frappe_mock):
+        from raven_ai_agent.skills.framework import SkillRouter, SkillBase
+
+        class GoodSkill(SkillBase):
+            name = "good"; description = "d"; triggers = ["validate coa"]; patterns = []
+            def handle(self, query, context=None):
+                return {"handled": True, "response": "ok"}
+
+        class BadBoolSkill(SkillBase):
+            name = "bad"; description = "d"; triggers = ["create skill"]; patterns = []
+            def can_handle(self, query):
+                return "create skill" in query.lower()  # bare bool — contract violation
+            def handle(self, query, context=None):
+                return {"handled": True, "response": "made"}
+
+        class ExplodingSkill(SkillBase):
+            name = "boom"; description = "d"; triggers = []; patterns = []
+            def can_handle(self, query):
+                raise RuntimeError("boom")
+            def handle(self, query, context=None):
+                return None
+
+        router = SkillRouter.__new__(SkillRouter)
+        return router, {"good": GoodSkill, "bad": BadBoolSkill, "boom": ExplodingSkill}
+
+    def test_bare_bool_and_exploding_skills_do_not_break_scan(self, frappe_mock):
+        from raven_ai_agent.skills import framework
+        router, skills = self._mk_router(frappe_mock)
+        instances = {n: c() for n, c in skills.items()}
+        router.registry = MagicMock()
+        router.registry.get_all.return_value = skills
+        router._get_or_create_skill = lambda name: instances[name]
+        router._learner = MagicMock()
+        router._learner.get_confidence_boost.return_value = 0.0
+
+        matches = router._find_matches("please validate coa-26-0010")
+        names = [m[0] for m in matches]
+        assert "good" in names          # tuple-contract skill matched
+        assert "boom" not in names      # exploding skill skipped, no crash
+
+        matches2 = router._find_matches("create skill foo")
+        assert any(m[0] == "bad" for m in matches2)  # bare-bool normalized

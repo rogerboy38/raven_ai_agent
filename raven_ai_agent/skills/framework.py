@@ -390,8 +390,17 @@ class SkillRouter:
             if not skill:
                 continue
             
-            can_handle, confidence = skill.can_handle(query)
-            
+            try:
+                res = skill.can_handle(query)
+            except Exception as exc:  # noqa: BLE001
+                frappe.logger().warning(f"[SkillRouter] can_handle failed for {name}: {exc}")
+                continue
+            # Contract is Tuple[bool, float]; tolerate skills returning bare bool
+            if isinstance(res, tuple):
+                can_handle, confidence = res
+            else:
+                can_handle, confidence = bool(res), 0.6
+
             if can_handle:
                 # Boost confidence based on learning
                 learned_boost = self._learner.get_confidence_boost(query, name)
