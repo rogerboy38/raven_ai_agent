@@ -70,6 +70,12 @@ CANARIES = [
     ("show my pending invoices",        "agent_v2", None),
     # --- explicit sensor id -> exact IoT skill (post best-score fix) -------
     ("temperature L01",                 "skill_exact", "iot_temperature"),
+    # --- BOM/serial family -> bom-agent (2026-07-05 audit fixes) ----------
+    ("bom health",                      "skill_exact", "bom-agent"),
+    ("serial health",                   "skill_exact", "bom-agent"),
+    ("validate bom BOM-0602-001",       "skill_exact", "bom-agent"),
+    ("create bom from tds 0705 TDS pH 3.5-4.0", "skill_exact", "bom-agent"),
+    ("bom status 0602",                 "skill_exact", "bom-agent"),
 ]
 
 
