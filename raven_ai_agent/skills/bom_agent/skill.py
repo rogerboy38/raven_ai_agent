@@ -78,18 +78,44 @@ class BOMAgentSkill(SkillBase):
         return None
 
     # ---- delegates to existing agent --------------------------------- #
+    AMB_BOM_SKILL_API = "amb_w_tds.raven.bom_creator_agent.bom_skill_api"
+
     def _delegate_creator(self, q: str) -> Dict:
+        """TDS-driven BOM creation. Preferred path: the amb_w_tds AI-BOM
+        pipeline (per-product master templates, dry-run-first whitelisted
+        API). Fallback: raven's template-copy agent.
+
+        Convention: without `!` -> DRY RUN preview (no writes); with `!`
+        -> real draft creation. Matches the existing ! execute discipline."""
+        dry_run = not q.lstrip().startswith("!")
+        request_text = q.lstrip("!").strip()
+
+        fn = None
+        try:
+            fn = frappe.get_attr(self.AMB_BOM_SKILL_API)
+        except Exception:
+            fn = None
+
+        if fn is not None:
+            try:
+                result = fn(request_text=request_text, dry_run=dry_run)
+            except Exception as exc:  # noqa: BLE001
+                return self._reply(f"❌ AI-BOM pipeline error: {exc}")
+            body = self._format_amb_result(result)
+            if dry_run:
+                body += ("\n\n🔍 _Dry run — nothing was created._ "
+                         f"Execute with `@ai !{request_text}`")
+            return self._reply(body)
+
+        # Fallback: raven-side agent (multi-word TDS names supported)
         from raven_ai_agent.agents.bom_creator_agent import BOMCreatorAgent
 
-        # TDS docnames contain spaces ("0705 TDS pH 3.5-4.0") — take the FULL
-        # rest of the line, not one token (handle_bom_request grabs one token,
-        # which produced "TDS '0705' not found" in live testing 2026-07-05).
-        m = re.search(r"(?:from\s+)?tds\s+(.+)$", q, re.IGNORECASE)
+        m = re.search(r"(?:from\s+)?tds\s+(.+)$", request_text, re.IGNORECASE)
         if m:
             tds_name = m.group(1).strip().strip("'\"")
             result = BOMCreatorAgent().create_bom_from_tds(tds_name)
         else:
-            result = BOMCreatorAgent().handle_bom_request(q)
+            result = BOMCreatorAgent().handle_bom_request(request_text)
         if result.get("success"):
             msg = result.get("message") or "Done."
             name = result.get("bom_creator_name") or result.get("name")
@@ -97,6 +123,22 @@ class BOMAgentSkill(SkillBase):
                 msg += f"\n\n📝 Draft created: **{name}** — review & submit with `@ai !submit bom {name}`"
             return self._reply(msg)
         return self._reply(f"❌ {result.get('error', 'BOM request failed')}")
+
+    @staticmethod
+    def _format_amb_result(result) -> str:
+        if isinstance(result, dict):
+            if result.get("error"):
+                return f"❌ {result['error']}"
+            parts = []
+            if result.get("message"):
+                parts.append(str(result["message"]))
+            name = result.get("bom_creator_name") or result.get("name")
+            if name:
+                parts.append(f"📝 BOM Creator: **{name}**")
+            if not parts:
+                parts.append(frappe.as_json(result, indent=1)[:1200])
+            return "\n\n".join(parts)
+        return str(result)[:1500]
 
     def _validate(self, q: str) -> Dict:
         from raven_ai_agent.agents.bom_creator_agent import BOMCreatorAgent
@@ -249,7 +291,10 @@ class BOMAgentSkill(SkillBase):
         doc = frappe.get_doc("BOM Formula", name)
         if not hasattr(doc, "simulate_blend"):
             return self._reply("⚠️ simulate_blend not available on this amb_w_tds version.")
-        result = doc.simulate_blend()
+        try:
+            result = doc.simulate_blend()
+        except frappe.ValidationError as exc:
+            return self._reply(f"⚠️ **{name}** cannot simulate yet: {exc}")
         if isinstance(result, dict):
             body = result.get("message") or frappe.as_json(result, indent=1)[:1500]
         else:

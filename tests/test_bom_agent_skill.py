@@ -123,3 +123,46 @@ class TestDispatch:
         frappe_mock.db.count = MagicMock(side_effect=RuntimeError("db down"))
         r = self._skill().handle("bom health")
         assert r["handled"] and "❌" in r["response"]
+
+
+class TestAmbPipelinePreferred:
+    def _skill(self):
+        from raven_ai_agent.skills.bom_agent.skill import BOMAgentSkill
+        return BOMAgentSkill()
+
+    def test_dry_run_by_default_via_amb_api(self, frappe_mock):
+        api = MagicMock(return_value={"message": "Would create BOM for 0705",
+                                      "bom_creator_name": None})
+        frappe_mock.get_attr = MagicMock(return_value=api)
+        r = self._skill().handle("create bom from tds 0705 TDS pH 3.5-4.0")
+        api.assert_called_once_with(
+            request_text="create bom from tds 0705 TDS pH 3.5-4.0", dry_run=True)
+        assert "Dry run" in r["response"] and "!create bom from tds" in r["response"]
+
+    def test_bang_prefix_executes_for_real(self, frappe_mock):
+        api = MagicMock(return_value={"message": "Created", "bom_creator_name": "BC-9"})
+        frappe_mock.get_attr = MagicMock(return_value=api)
+        r = self._skill().handle("!create bom from tds 0705 TDS pH 3.5-4.0")
+        api.assert_called_once_with(
+            request_text="create bom from tds 0705 TDS pH 3.5-4.0", dry_run=False)
+        assert "BC-9" in r["response"] and "Dry run" not in r["response"]
+
+    def test_falls_back_to_raven_agent_when_amb_absent(self, frappe_mock):
+        import sys, types
+        frappe_mock.get_attr = MagicMock(side_effect=ImportError("no amb_w_tds"))
+        agent = MagicMock()
+        agent.create_bom_from_tds.return_value = {"success": True, "message": "ok",
+                                                  "bom_creator_name": "BC-2"}
+        pkg = types.ModuleType("raven_ai_agent.agents")
+        mod = types.ModuleType("raven_ai_agent.agents.bom_creator_agent")
+        mod.BOMCreatorAgent = MagicMock(return_value=agent)
+        saved = {k: sys.modules.get(k) for k in (pkg.__name__, mod.__name__)}
+        sys.modules[pkg.__name__] = pkg; sys.modules[mod.__name__] = mod
+        try:
+            r = self._skill().handle("create bom from tds 0705 TDS pH 3.5-4.0")
+        finally:
+            for k, v in saved.items():
+                if v is None: sys.modules.pop(k, None)
+                else: sys.modules[k] = v
+        agent.create_bom_from_tds.assert_called_once_with("0705 TDS pH 3.5-4.0")
+        assert "BC-2" in r["response"]
