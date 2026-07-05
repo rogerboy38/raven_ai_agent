@@ -12,6 +12,9 @@ def frappe_mock():
     if not hasattr(frappe, "conf"):
         frappe.conf = MagicMock()
     frappe.get_all = MagicMock(return_value=[])
+    # order-independence: default = amb_w_tds absent; tests that exercise the
+    # amb path override get_attr explicitly (mock module is shared across files)
+    frappe.get_attr = MagicMock(side_effect=ImportError("amb_w_tds not installed"))
     return frappe
 
 

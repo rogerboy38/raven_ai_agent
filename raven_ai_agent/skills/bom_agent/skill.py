@@ -17,7 +17,7 @@ Scope discipline:
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import frappe
@@ -506,7 +506,7 @@ class BOMAgentSkill(SkillBase):
     def _dod_json(op: str, target: str, verified: bool, extra: dict = None) -> str:
         dod = {"op": op, "target": target, "verified": verified,
                "actor": getattr(frappe.session, "user", "unknown") if hasattr(frappe, "session") else "unknown",
-               "ts": datetime.utcnow().isoformat() + "Z"}
+               "ts": datetime.now(timezone.utc).isoformat()}
         if extra:
             dod.update(extra)
         return "\n\n```json\n" + json.dumps(dod, indent=1) + "\n```"
