@@ -227,3 +227,38 @@ class TestFefoGoldenSource:
         frappe_mock.db.exists = MagicMock(return_value=False)
         r = _skill().handle("bom lots 0227")
         assert r["handled"] and "no-golden" in r["response"]
+
+
+class TestFefoBatchAmbPrimary:
+    """Second executor finding: tabBatch<->Batch AMB row link is EMPTY on prod
+    (two-hop join = 0). Batch AMB via golden product-prefix is PRIMARY."""
+
+    def test_batch_amb_rows_listed_directly(self, frappe_mock):
+        def get_all(dt, filters=None, fields=None, limit=None):
+            if dt == "Batch AMB" and "custom_golden_number" in (filters or {}):
+                return [{"name": "LOTE-26-16-0001", "custom_golden_number": "0334009263",
+                         "lote_amb_reference": "rc737cemaj"},
+                        {"name": "LOTE-26-14-0001", "custom_golden_number": "0334002263",
+                         "lote_amb_reference": ""}]
+            return []
+        frappe_mock.get_all = MagicMock(side_effect=get_all)
+        frappe_mock.db.exists = MagicMock(return_value=True)
+        r = _skill().handle("bom lots 0334")
+        body = r["response"]
+        assert "Batch AMB production lots" in body and "authoritative" in body
+        # folio 002 before folio 009
+        assert body.index("LOTE-26-14-0001") < body.index("LOTE-26-16-0001")
+        assert "rc737cemaj" in body
+
+    def test_no_amb_rows_falls_back_to_tabbatch(self, frappe_mock):
+        b1 = MagicMock(batch_qty=1, item="0227"); b1.name = "0227001251"
+        def get_all(dt, filters=None, fields=None, limit=None):
+            if dt == "Batch AMB":
+                return []
+            if dt == "Batch":
+                return [b1]
+            return []
+        frappe_mock.get_all = MagicMock(side_effect=get_all)
+        frappe_mock.db.exists = MagicMock(return_value=True)
+        r = _skill().handle("bom lots 0227")
+        assert "0227001251" in r["response"] and "from batch name" in r["response"]

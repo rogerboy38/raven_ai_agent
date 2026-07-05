@@ -489,6 +489,33 @@ class BOMAgentSkill(SkillBase):
         item = re.sub(r".*\b(?:bom\s+lots|lotes\s+bom)\b", "", q, flags=re.IGNORECASE).strip()
         if not item:
             return self._reply("Usage: `@ai bom lots <ITEM-CODE>`")
+
+        # PRIMARY SOURCE (rvnv2r1 executor probes): Batch AMB rows ARE the
+        # production lots and carry the goldens. tabBatch<->Batch AMB has NO
+        # working row-level link on prod (two-hop join = 0; batch_id and
+        # generated_batch_name empty). The one provable key is the golden's
+        # product prefix (first 4 digits) == product family of the item.
+        m = re.match(r"\D*?(\d{4})", item)
+        prod4 = m.group(1) if m else None
+        if prod4:
+            amb = self._amb_lots_by_product(prod4)
+            if amb:
+                ranked = sorted(amb, key=lambda r: golden.fefo_key(r.get("custom_golden_number") or ""))
+                lines = [f"📦 **FEFO lots for {item}** — Batch AMB production lots, "
+                         f"Golden-Number order (YY+FFF), NOT manufacturing_date", ""]
+                for r in ranked[:15]:
+                    g = golden.parse(r.get("custom_golden_number") or "")
+                    tag = (f"Y{g['year']:02d}·F{g['folio']:03d}"
+                           + (f"·{g['plant']}" if g.get("plant") else "")) if g else "golden unparseable"
+                    ref = r.get("lote_amb_reference") or ""
+                    lines.append(f"- **{r['name']}** · {tag} · golden {r.get('custom_golden_number')}"
+                                 + (f" · ref {ref}" if ref else ""))
+                lines.append("")
+                lines.append("_Source: Batch AMB.custom_golden_number (authoritative)._")
+                return self._reply("\n".join(lines))
+
+        # FALLBACK: tabBatch listing (non-AMB items/sites), decorated with any
+        # Batch AMB goldens reachable by name/link joins.
         rows = frappe.get_all(
             "Batch", filters={"item": ["like", f"%{item}%"]},
             fields=["name", "batch_qty", "item"], limit=50)
@@ -514,6 +541,21 @@ class BOMAgentSkill(SkillBase):
                 tag = "no-golden (consume last)"
             lines.append(f"- **{r.name}** · {tag} · qty {r.batch_qty or 0}")
         return self._reply("\n".join(lines))
+
+    @staticmethod
+    def _amb_lots_by_product(prod4: str):
+        """Batch AMB lots for a product family via golden prefix. Fails open."""
+        try:
+            if not frappe.db.exists("DocType", "Batch AMB"):
+                return []
+            return frappe.get_all(
+                "Batch AMB",
+                filters={"custom_golden_number": ["like", f"{prod4}%"]},
+                fields=["name", "custom_golden_number", "lote_amb_reference"],
+                limit=50)
+        except Exception:  # noqa: BLE001
+            frappe.logger().warning("[bom-agent] _amb_lots_by_product failed", exc_info=True)
+            return []
 
     @staticmethod
     def _amb_goldens(batch_names) -> Dict:
