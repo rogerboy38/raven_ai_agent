@@ -479,23 +479,116 @@ class BOMAgentSkill(SkillBase):
         return self._reply("\n".join(lines))
 
     def _bom_lots(self, q: str) -> Dict:
-        """Principle 7: Golden-Number FEFO ranking — never manufacturing_date."""
+        """Principle 7: Golden-Number FEFO ranking — never manufacturing_date.
+
+        rvnv2r1 evidence-pack finding (vpt executor, 2026-07-05): golden codes
+        do NOT live in tabBatch.name on prod substrates — they live in
+        Batch AMB.custom_golden_number (prod 12/12, vpt 15/17, batch names
+        0/104). Source-of-truth order: Batch AMB golden -> parseable batch
+        name -> no-golden (consume last)."""
         item = re.sub(r".*\b(?:bom\s+lots|lotes\s+bom)\b", "", q, flags=re.IGNORECASE).strip()
         if not item:
             return self._reply("Usage: `@ai bom lots <ITEM-CODE>`")
+
+        # PRIMARY SOURCE (rvnv2r1 executor probes): Batch AMB rows ARE the
+        # production lots and carry the goldens. tabBatch<->Batch AMB has NO
+        # working row-level link on prod (two-hop join = 0; batch_id and
+        # generated_batch_name empty). The one provable key is the golden's
+        # product prefix (first 4 digits) == product family of the item.
+        m = re.match(r"\D*?(\d{4})", item)
+        prod4 = m.group(1) if m else None
+        if prod4:
+            amb = self._amb_lots_by_product(prod4)
+            if amb:
+                ranked = sorted(amb, key=lambda r: golden.fefo_key(r.get("custom_golden_number") or ""))
+                lines = [f"📦 **FEFO lots for {item}** — Batch AMB production lots, "
+                         f"Golden-Number order (YY+FFF), NOT manufacturing_date", ""]
+                for r in ranked[:15]:
+                    g = golden.parse(r.get("custom_golden_number") or "")
+                    tag = (f"Y{g['year']:02d}·F{g['folio']:03d}"
+                           + (f"·{g['plant']}" if g.get("plant") else "")) if g else "golden unparseable"
+                    ref = r.get("lote_amb_reference") or ""
+                    lines.append(f"- **{r['name']}** · {tag} · golden {r.get('custom_golden_number')}"
+                                 + (f" · ref {ref}" if ref else ""))
+                lines.append("")
+                lines.append("_Source: Batch AMB.custom_golden_number (authoritative)._")
+                return self._reply("\n".join(lines))
+
+        # FALLBACK: tabBatch listing (non-AMB items/sites), decorated with any
+        # Batch AMB goldens reachable by name/link joins.
         rows = frappe.get_all(
             "Batch", filters={"item": ["like", f"%{item}%"]},
             fields=["name", "batch_qty", "item"], limit=50)
         if not rows:
             return self._reply(f"⚠️ No batches found for **{item}**.")
-        ranked = sorted(rows, key=lambda r: golden.fefo_key(r.name))
+        goldens = self._amb_goldens([r.name for r in rows])
+
+        def key(r):
+            src = goldens.get(r.name)
+            return golden.fefo_key(src) if src else golden.fefo_key(r.name)
+
+        ranked = sorted(rows, key=key)
         lines = [f"📦 **FEFO lots for {item}** — Golden-Number order (YY+FFF), "
                  f"NOT manufacturing_date", ""]
         for r in ranked[:15]:
-            g = golden.parse(r.name)
-            tag = f"Y{g['year']:02d}·F{g['folio']:03d}" if g else "no-golden (consume last)"
+            src = goldens.get(r.name)
+            g = golden.parse(src) if src else golden.parse(r.name)
+            if g and src:
+                tag = f"Y{g['year']:02d}·F{g['folio']:03d} (golden {src} · Batch AMB)"
+            elif g:
+                tag = f"Y{g['year']:02d}·F{g['folio']:03d} (from batch name)"
+            else:
+                tag = "no-golden (consume last)"
             lines.append(f"- **{r.name}** · {tag} · qty {r.batch_qty or 0}")
         return self._reply("\n".join(lines))
+
+    @staticmethod
+    def _amb_lots_by_product(prod4: str):
+        """Batch AMB lots for a product family via golden prefix. Fails open."""
+        try:
+            if not frappe.db.exists("DocType", "Batch AMB"):
+                return []
+            return frappe.get_all(
+                "Batch AMB",
+                filters={"custom_golden_number": ["like", f"{prod4}%"]},
+                fields=["name", "custom_golden_number", "lote_amb_reference"],
+                limit=50)
+        except Exception:  # noqa: BLE001
+            frappe.logger().warning("[bom-agent] _amb_lots_by_product failed", exc_info=True)
+            return []
+
+    @staticmethod
+    def _amb_goldens(batch_names) -> Dict:
+        """batch name -> golden code via Batch AMB.custom_golden_number.
+        Name-join first, then common link fields. Fails open (empty dict)."""
+        try:
+            if not frappe.db.exists("DocType", "Batch AMB"):
+                return {}
+        except Exception:  # noqa: BLE001
+            return {}
+        out = {}
+        try:
+            rows = frappe.get_all(
+                "Batch AMB", filters={"name": ["in", list(batch_names)]},
+                fields=["name", "custom_golden_number"])
+            out.update({r["name"]: r["custom_golden_number"]
+                        for r in rows if r.get("custom_golden_number")})
+            if out:
+                return out
+        except Exception:  # noqa: BLE001
+            pass
+        for link_field in ("batch", "batch_no", "erpnext_batch", "batch_id"):
+            try:
+                rows = frappe.get_all(
+                    "Batch AMB", filters={link_field: ["in", list(batch_names)]},
+                    fields=[link_field, "custom_golden_number"])
+                out.update({r[link_field]: r["custom_golden_number"]
+                            for r in rows if r.get("custom_golden_number")})
+                if out:
+                    return out
+            except Exception:  # noqa: BLE001
+                continue
+        return out
 
     def _help(self) -> Dict:
         fams = ", ".join(
