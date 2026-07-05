@@ -232,13 +232,14 @@ class RaymondLucyAgentV2:
         # TRY SKILLS FIRST - Route to specialized skills
         skill_result = self.skill_router.route(query, context={"user": self.user})
         if skill_result and skill_result.get("handled"):
+            skill_name = skill_result.get("skill") or "skill"
             return {
                 "success": True,
-                "response": f"[CONFIDENCE: HIGH] [SKILL: {skill_result['skill']}]\n\n{skill_result['response']}",
+                "response": f"[CONFIDENCE: HIGH] [SKILL: {skill_name}]\n\n{skill_result.get('response', '')}",
                 "autonomy_level": 1,
-                "context_used": {"skill": skill_result['skill']},
+                "context_used": {"skill": skill_name},
                 "provider": "skill",
-                "skill_used": skill_result['skill']
+                "skill_used": skill_name
             }
         
         # Create temporary V1 agent for context/workflow methods

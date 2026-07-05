@@ -209,3 +209,24 @@ class TestLazyProvider:
             assert result["success"] is False
             assert "provider" in result and result["provider"] == "unavailable"
             assert "set-config" in result["response"]
+
+
+class TestSkillResultWithoutSkillKey:
+    def test_skill_result_missing_skill_key_does_not_crash(self, frappe_mock):
+        """Regression: coa_validator returns no 'skill' key (ref facc28f9e3d9)."""
+        frappe_mock.get_single = MagicMock(return_value=MagicMock(
+            max_tokens=2000, confidence_threshold=0.7,
+            get_password=MagicMock(return_value=None),
+        ))
+        with patch("raven_ai_agent.api.agent_v2.get_provider", side_effect=ValueError("no key")), \
+             patch("raven_ai_agent.api.agent_v2.CostMonitor"), \
+             patch("raven_ai_agent.api.agent_v2.get_router") as router:
+            router.return_value.route.return_value = {
+                "handled": True, "response": "✅ COA ok", "confidence": 0.95,
+            }
+            from raven_ai_agent.api.agent_v2 import RaymondLucyAgentV2
+            agent = RaymondLucyAgentV2(user="u@x.com")
+            result = agent.process_query("validate COA-26-0010")
+        assert result["success"] is True
+        assert "COA ok" in result["response"]
+        assert result["skill_used"] == "skill"
