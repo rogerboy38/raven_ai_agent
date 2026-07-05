@@ -377,6 +377,40 @@ class SkillRouter:
         
         return None
     
+    def _disabled_skills(self) -> set:
+        """Skills switched off via the AI Skill Registry doctype (is_active=0).
+        Registry rows are the ops-facing kill switch; absence of a row means
+        enabled. Fails open (empty set) outside a Frappe context."""
+        try:
+            rows = frappe.get_all(
+                "AI Skill Registry", filters={"is_active": 0}, pluck="skill_code"
+            )
+            return set(rows or [])
+        except Exception:
+            return set()
+
+    def sync_doctype_registry(self) -> int:
+        """Upsert one AI Skill Registry row per discovered skill so ops can
+        see and toggle every skill from the Desk. Returns rows created."""
+        created = 0
+        try:
+            for name, skill_class in self.registry.get_all().items():
+                if frappe.db.exists("AI Skill Registry", name):
+                    continue
+                frappe.get_doc({
+                    "doctype": "AI Skill Registry",
+                    "skill_code": name,
+                    "skill_label": getattr(skill_class, "description", name)[:140],
+                    "is_active": 1,
+                    "handler_path": f"{skill_class.__module__}.{skill_class.__name__}",
+                }).insert(ignore_permissions=True)
+                created += 1
+            if created:
+                frappe.db.commit()
+        except Exception:
+            frappe.logger().warning("[SkillRegistry] doctype sync failed", exc_info=True)
+        return created
+
     def _find_matches(self, query: str) -> List[Tuple[str, float, int]]:
         """
         Find all potentially matching skills.
@@ -384,8 +418,11 @@ class SkillRouter:
         Returns list of (skill_name, confidence, priority)
         """
         matches = []
+        disabled = self._disabled_skills()
         
         for name, skill_class in self.registry.get_all().items():
+            if name in disabled:
+                continue
             skill = self._get_or_create_skill(name)
             if not skill:
                 continue
@@ -536,9 +573,20 @@ def get_registry() -> SkillRegistry:
     return registry
 
 
+_REGISTRY_SYNCED = False
+
+
 def get_router(agent=None) -> SkillRouter:
-    """Get a skill router instance"""
-    return SkillRouter(get_registry(), agent)
+    """Get a skill router instance. First call per process also upserts the
+    AI Skill Registry doctype rows (ops visibility + is_active kill switch)."""
+    global _REGISTRY_SYNCED
+    router = SkillRouter(get_registry(), agent)
+    if not _REGISTRY_SYNCED:
+        try:
+            router.sync_doctype_registry()
+        finally:
+            _REGISTRY_SYNCED = True
+    return router
 
 
 def list_available_skills() -> List[Dict]:

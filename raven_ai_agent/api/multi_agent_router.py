@@ -80,7 +80,7 @@ def _extract_so_from_command(command: str) -> Optional[str]:
     return None
 
 
-def build_agent_pipeline(command: str) -> List[Dict[str, str]]:
+def build_agent_pipeline(command: str, pipeline_type: str = None) -> List[Dict[str, str]]:
     """
     Build an ordered list of agent steps for a multi-agent command.
     
@@ -93,12 +93,12 @@ def build_agent_pipeline(command: str) -> List[Dict[str, str]]:
     command_lower = command.lower().strip()
     so_name = _extract_so_from_command(command)
     
-    # Determine pipeline type
-    pipeline_type = None
-    for pattern, ptype in MULTI_AGENT_PATTERNS:
-        if re.search(pattern, command_lower, re.IGNORECASE):
-            pipeline_type = ptype
-            break
+    # Determine pipeline type (unless caller resolved it, e.g. semantic router)
+    if pipeline_type is None:
+        for pattern, ptype in MULTI_AGENT_PATTERNS:
+            if re.search(pattern, command_lower, re.IGNORECASE):
+                pipeline_type = ptype
+                break
     
     if pipeline_type is None:
         return []
