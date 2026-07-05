@@ -88,17 +88,20 @@ class SkillBase(ABC):
         """
         query_lower = query.lower()
         
-        # Check simple triggers
+        # R3: return the BEST score, not the first hit. Previously a broad
+        # trigger (0.8) returned before precise patterns (0.9) were checked,
+        # so e.g. data-quality-scanner's "validate SO-…" pattern could never
+        # outrank its own bare "validate" trigger in dispatcher ranking.
+        best = 0.0
         for trigger in self.triggers:
             if trigger.lower() in query_lower:
-                return True, 0.8
-        
-        # Check regex patterns
+                best = 0.8
+                break
         for pattern in self.patterns:
             if re.search(pattern, query_lower, re.IGNORECASE):
-                return True, 0.9
-        
-        return False, 0.0
+                best = max(best, 0.9)
+                break
+        return (best > 0.0), best
     
     def get_help(self) -> str:
         """Return help text for this skill"""
@@ -247,24 +250,25 @@ class SkillRegistry:
         """Wrap a function as a skill"""
         
         class FunctionSkill(SkillBase):
-            pass
-        
+            # handle must be defined IN the class body: assigning it after
+            # class creation does not clear ABCMeta.__abstractmethods__, so
+            # FunctionSkill() raised TypeError and every function-based skill
+            # (e.g. migration-fixer) was silently uninstantiable.
+            def handle(self, query: str, context: Dict = None):
+                result = handler(query)
+                if result:
+                    return {
+                        "handled": True,
+                        "response": result,
+                        "confidence": 0.9,
+                    }
+                return None
+
         FunctionSkill.name = name
         FunctionSkill.description = metadata.get("description", f"{name} skill")
         FunctionSkill.emoji = metadata.get("metadata", {}).get("raven", {}).get("emoji", "🔧")
         FunctionSkill.triggers = metadata.get("triggers", [name.replace("-", " "), name.replace("_", " ")])
         
-        def handle_wrapper(self, query: str, context: Dict = None):
-            result = handler(query)
-            if result:
-                return {
-                    "handled": True,
-                    "response": result,
-                    "confidence": 0.9
-                }
-            return None
-        
-        FunctionSkill.handle = handle_wrapper
         self.register(FunctionSkill, metadata)
     
     def register(self, skill_class: type, metadata: Dict = None):
@@ -377,6 +381,40 @@ class SkillRouter:
         
         return None
     
+    def _disabled_skills(self) -> set:
+        """Skills switched off via the AI Skill Registry doctype (is_active=0).
+        Registry rows are the ops-facing kill switch; absence of a row means
+        enabled. Fails open (empty set) outside a Frappe context."""
+        try:
+            rows = frappe.get_all(
+                "AI Skill Registry", filters={"is_active": 0}, pluck="skill_code"
+            )
+            return set(rows or [])
+        except Exception:
+            return set()
+
+    def sync_doctype_registry(self) -> int:
+        """Upsert one AI Skill Registry row per discovered skill so ops can
+        see and toggle every skill from the Desk. Returns rows created."""
+        created = 0
+        try:
+            for name, skill_class in self.registry.get_all().items():
+                if frappe.db.exists("AI Skill Registry", name):
+                    continue
+                frappe.get_doc({
+                    "doctype": "AI Skill Registry",
+                    "skill_code": name,
+                    "skill_label": getattr(skill_class, "description", name)[:140],
+                    "is_active": 1,
+                    "handler_path": f"{skill_class.__module__}.{skill_class.__name__}",
+                }).insert(ignore_permissions=True)
+                created += 1
+            if created:
+                frappe.db.commit()
+        except Exception:
+            frappe.logger().warning("[SkillRegistry] doctype sync failed", exc_info=True)
+        return created
+
     def _find_matches(self, query: str) -> List[Tuple[str, float, int]]:
         """
         Find all potentially matching skills.
@@ -384,14 +422,26 @@ class SkillRouter:
         Returns list of (skill_name, confidence, priority)
         """
         matches = []
+        disabled = self._disabled_skills()
         
         for name, skill_class in self.registry.get_all().items():
+            if name in disabled:
+                continue
             skill = self._get_or_create_skill(name)
             if not skill:
                 continue
             
-            can_handle, confidence = skill.can_handle(query)
-            
+            try:
+                res = skill.can_handle(query)
+            except Exception as exc:  # noqa: BLE001
+                frappe.logger().warning(f"[SkillRouter] can_handle failed for {name}: {exc}")
+                continue
+            # Contract is Tuple[bool, float]; tolerate skills returning bare bool
+            if isinstance(res, tuple):
+                can_handle, confidence = res
+            else:
+                can_handle, confidence = bool(res), 0.6
+
             if can_handle:
                 # Boost confidence based on learning
                 learned_boost = self._learner.get_confidence_boost(query, name)
@@ -527,9 +577,20 @@ def get_registry() -> SkillRegistry:
     return registry
 
 
+_REGISTRY_SYNCED = False
+
+
 def get_router(agent=None) -> SkillRouter:
-    """Get a skill router instance"""
-    return SkillRouter(get_registry(), agent)
+    """Get a skill router instance. First call per process also upserts the
+    AI Skill Registry doctype rows (ops visibility + is_active kill switch)."""
+    global _REGISTRY_SYNCED
+    router = SkillRouter(get_registry(), agent)
+    if not _REGISTRY_SYNCED:
+        try:
+            router.sync_doctype_registry()
+        finally:
+            _REGISTRY_SYNCED = True
+    return router
 
 
 def list_available_skills() -> List[Dict]:

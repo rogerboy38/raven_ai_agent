@@ -6,6 +6,7 @@ and auto-learning skill system.
 
 import frappe
 import json
+import uuid
 from typing import Optional, Dict, List
 
 # Import the provider system
@@ -14,6 +15,13 @@ from raven_ai_agent.utils.cost_monitor import CostMonitor
 
 # Import the skill system
 from raven_ai_agent.skills import get_router, list_available_skills
+
+# Import the Agentic Design Patterns intelligence layer (opt-in)
+try:
+    from raven_ai_agent.patterns import IntelligenceLayer
+    PATTERNS_AVAILABLE = True
+except ImportError:
+    PATTERNS_AVAILABLE = False
 
 
 class RaymondLucyAgentV2:
@@ -41,23 +49,90 @@ class RaymondLucyAgentV2:
         # Get provider (override or from settings)
         provider_name = provider_override or self.settings.get("default_provider", "openai")
         
+        self.cost_monitor = CostMonitor()
+        self.provider = None
+        self._provider_error = None
         try:
             self.provider = get_provider(provider_name.lower(), self.settings)
-            self.cost_monitor = CostMonitor()
             frappe.logger().info(f"[AI Agent V2] Using provider: {provider_name}")
         except Exception as e:
             # Fallback to configured fallback provider
             fallback = self.settings.get("fallback_provider")
             if fallback and fallback != provider_name:
-                frappe.logger().warning(f"[AI Agent V2] Primary provider failed, using fallback: {fallback}")
-                self.provider = get_provider(fallback.lower(), self.settings)
+                try:
+                    frappe.logger().warning(f"[AI Agent V2] Primary provider failed, using fallback: {fallback}")
+                    self.provider = get_provider(fallback.lower(), self.settings)
+                except Exception as e2:
+                    self._provider_error = f"primary: {e} | fallback: {e2}"
             else:
-                raise ValueError(f"Failed to initialize provider: {e}")
+                self._provider_error = str(e)
+        if self._provider_error:
+            # Lazy failure: skills, help and other non-LLM paths must still work.
+            frappe.logger().warning(
+                f"[AI Agent V2] No LLM provider available (deferred): {self._provider_error}"
+            )
         
         self.autonomy_level = 1  # Default COPILOT
         
         # Initialize skill router
         self.skill_router = get_router(agent=self)
+
+        # Initialize Agentic-Design-Patterns intelligence layer (opt-in).
+        # Enabled when AI Agent Settings has `intelligence_layer_enabled` truthy
+        # OR when the env flag RAVEN_INTELLIGENCE_LAYER=1 is set. The layer is
+        # provider-agnostic and only activated for queries flagged as complex.
+        self.intelligence = None
+        if PATTERNS_AVAILABLE and self.provider is not None and self._intelligence_enabled():
+            try:
+                self.intelligence = IntelligenceLayer(
+                    provider=self.provider,
+                    retriever=self._memory_retriever,
+                    secondary_providers=self._collect_secondary_providers(),
+                )
+                frappe.logger().info("[AI Agent V2] IntelligenceLayer activated")
+            except Exception as exc:
+                frappe.logger().warning(
+                    f"[AI Agent V2] IntelligenceLayer init failed: {exc}"
+                )
+                self.intelligence = None
+
+    def _intelligence_enabled(self) -> bool:
+        import os
+        if str(os.environ.get("RAVEN_INTELLIGENCE_LAYER", "")).strip() in ("1", "true", "True"):
+            return True
+        return bool(self.settings.get("intelligence_layer_enabled"))
+
+    def _memory_retriever(self, query: str, k: int = 5):
+        """Bridge RAGRetriever → existing MemoryMixin.search_memories."""
+        try:
+            from raven_ai_agent.api.agent import RaymondLucyAgent
+            v1 = RaymondLucyAgent(self.user)
+            hits = v1.search_memories(query, limit=k) or []
+            normalised = []
+            for h in hits:
+                if not isinstance(h, dict):
+                    continue
+                normalised.append({
+                    "content": h.get("content", ""),
+                    "source": h.get("source") or h.get("name") or "AI Memory",
+                    "score": h.get("importance_score") or h.get("similarity") or 0.0,
+                })
+            return normalised
+        except Exception as exc:
+            frappe.logger().debug(f"[AI Agent V2] memory retriever error: {exc}")
+            return []
+
+    def _collect_secondary_providers(self) -> Dict:
+        """Best-effort: instantiate every configured provider for fallback chains."""
+        secondaries: Dict = {}
+        for name in ("openai", "deepseek", "claude", "minimax", "ollama"):
+            if self.provider is not None and name == self.provider.name:
+                continue
+            try:
+                secondaries[name] = get_provider(name, self.settings)
+            except Exception:
+                continue
+        return secondaries
     
     def _safe_get_password(self, settings, field_name):
         """Safely get password field"""
@@ -66,6 +141,25 @@ class RaymondLucyAgentV2:
         except Exception:
             return None
     
+    def _provider_name(self) -> str:
+        return self.provider.name if self.provider is not None else "unavailable"
+
+    def _provider_unavailable_response(self) -> Dict:
+        return {
+            "success": False,
+            "response": (
+                "⚠️ No LLM provider is configured, so I can only run skill commands "
+                "right now. / No hay proveedor LLM configurado; por ahora solo puedo "
+                "ejecutar comandos de skills.\n\n"
+                "Admin: set the API key via `bench set-config openai_api_key ...` or "
+                "re-save it in AI Agent Settings.\n"
+                f"Detail: {self._provider_error}"
+            ),
+            "autonomy_level": 1,
+            "context_used": {"provider_error": True},
+            "provider": "unavailable",
+        }
+
     def _get_settings(self) -> Dict:
         """Load AI Agent Settings with all provider configs"""
         try:
@@ -133,28 +227,33 @@ class RaymondLucyAgentV2:
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 1]\n{CAPABILITIES_LIST}\n\n{skills_help}",
                 "autonomy_level": 1,
                 "context_used": {"help": True},
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
         
         # TRY SKILLS FIRST - Route to specialized skills
         skill_result = self.skill_router.route(query, context={"user": self.user})
         if skill_result and skill_result.get("handled"):
+            skill_name = skill_result.get("skill") or "skill"
             return {
                 "success": True,
-                "response": f"[CONFIDENCE: HIGH] [SKILL: {skill_result['skill']}]\n\n{skill_result['response']}",
+                "response": f"[CONFIDENCE: HIGH] [SKILL: {skill_name}]\n\n{skill_result.get('response', '')}",
                 "autonomy_level": 1,
-                "context_used": {"skill": skill_result['skill']},
+                "context_used": {"skill": skill_name},
                 "provider": "skill",
-                "skill_used": skill_result['skill']
+                "skill_used": skill_name
             }
         
         # Create temporary V1 agent for context/workflow methods
         v1_agent = RaymondLucyAgent(self.user)
         
-        # Try workflow command first
+        # Try workflow command first (deterministic — no LLM needed)
         workflow_result = v1_agent.execute_workflow_command(query)
         if workflow_result:
             return self._format_workflow_result(workflow_result)
+
+        # Everything past this point requires a working LLM provider.
+        if self.provider is None:
+            return self._provider_unavailable_response()
         
         # Build context using V1 methods
         morning_briefing = v1_agent.get_morning_briefing()
@@ -162,11 +261,63 @@ class RaymondLucyAgentV2:
         relevant_memories = v1_agent.search_memories(query)
         memories_text = "\n".join([f"- {m['content']}" for m in relevant_memories])
         
+        # ── Agentic-Design-Patterns: complexity-aware path ─────────────
+        complexity_label = "simple"
+        plan_preview = None
+        rag_block = ""
+        if self.intelligence is not None:
+            try:
+                complexity = self.intelligence.classify_complexity(query)
+                complexity_label = complexity.label
+
+                # RAG: ground the answer in vector-stored memories when the
+                # query is retrieval-flavoured.
+                if complexity_label == "rag":
+                    rag_result = self.intelligence.answer_with_rag(
+                        query, extra_context=erpnext_context, top_k=5
+                    )
+                    if rag_result and rag_result.used_context:
+                        return {
+                            "success": True,
+                            "response": (
+                                f"[CONFIDENCE: HIGH] [PATTERN: RAG]\n\n"
+                                f"{rag_result.answer}"
+                            ),
+                            "autonomy_level": 1,
+                            "context_used": {
+                                "pattern": "rag",
+                                "sources": [r.source for r in rag_result.retrieved],
+                            },
+                            "provider": self._provider_name(),
+                        }
+
+                # Planning: surface a step-by-step plan for multi-step goals.
+                if complexity_label == "planning":
+                    plan = self.intelligence.plan(
+                        goal=query,
+                        context=erpnext_context[:1500] if erpnext_context else None,
+                    )
+                    if not plan.is_empty():
+                        plan_preview = plan.as_markdown()
+            except Exception as exc:
+                frappe.logger().debug(
+                    f"[AI Agent V2] IntelligenceLayer pre-step skipped: {exc}"
+                )
+
         # Build messages
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "system", "content": f"## Context\n{morning_briefing}\n\n## ERPNext Data\n{erpnext_context}\n\n## Relevant Memories\n{memories_text}"}
         ]
+        if plan_preview:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "## Suggested Plan (from Planner pattern)\n"
+                    "Use this as a backbone for your reply; refine if needed.\n\n"
+                    + plan_preview
+                ),
+            })
         
         if conversation_history:
             messages.extend(conversation_history[-10:])
@@ -181,7 +332,7 @@ class RaymondLucyAgentV2:
         # Call LLM using new provider system
         try:
             # Check if DeepSeek reasoning mode is enabled
-            if (self.provider.name == "deepseek" and 
+            if (self.provider is not None and self.provider.name == "deepseek" and 
                 self.settings.get("deepseek_use_reasoning") and
                 suggested_autonomy >= 2):
                 # Use reasoning mode for complex operations
@@ -197,15 +348,45 @@ class RaymondLucyAgentV2:
                     temperature=0.3
                 )
             
+            # Reflection: when autonomy is HIGH and intelligence is on,
+            # critic-revise the draft once before returning.
+            reflection_used = False
+            if (
+                self.intelligence is not None
+                and suggested_autonomy >= 2
+                and complexity_label != "simple"
+            ):
+                try:
+                    refined = self.intelligence.refine(
+                        query=query,
+                        draft=answer,
+                        criteria=[
+                            "Every ERPNext document ID mentioned must come from the supplied context.",
+                            "No fabricated totals, dates, or status values.",
+                            "If a destructive action is implied, surface required confirmations.",
+                        ],
+                        max_iterations=1,
+                    )
+                    if refined and refined.final_answer:
+                        answer = refined.final_answer
+                        reflection_used = bool(refined.accepted)
+                except Exception as exc:
+                    frappe.logger().debug(
+                        f"[AI Agent V2] Reflection skipped: {exc}"
+                    )
+
             return {
                 "success": True,
                 "response": answer,
                 "autonomy_level": suggested_autonomy,
                 "context_used": {
                     "memories": len(relevant_memories),
-                    "erpnext_data": bool(erpnext_context)
+                    "erpnext_data": bool(erpnext_context),
+                    "complexity": complexity_label,
+                    "plan_preview": bool(plan_preview),
+                    "reflection_accepted": reflection_used,
                 },
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
             
         except Exception as e:
@@ -213,7 +394,7 @@ class RaymondLucyAgentV2:
             
             # Try fallback provider
             fallback = self.settings.get("fallback_provider")
-            if fallback and fallback.lower() != self.provider.name:
+            if fallback and self.provider is not None and fallback.lower() != self.provider.name:
                 try:
                     fallback_provider = get_provider(fallback.lower(), self.settings)
                     answer = fallback_provider.chat(messages=messages)
@@ -226,11 +407,27 @@ class RaymondLucyAgentV2:
                 except Exception as e2:
                     pass
             
+            # Sanitize: never leak raw provider errors (API keys echoes,
+            # HTTP bodies) into chat. Log + bug_reporter get the details.
+            ref = uuid.uuid4().hex[:12]
+            frappe.logger().error(f"[AI Agent V2] provider failure ref={ref}: {e}")
+            try:
+                from raven_ai_agent.bug_reporter.collector import capture
+
+                capture(exception=e, query=query, user=self.user,
+                        intent="agent_v2_llm", failure_class="provider_error")
+            except Exception:
+                pass
             return {
                 "success": False,
-                "error": str(e),
-                "response": f"[CONFIDENCE: UNCERTAIN]\n\nError: {str(e)}",
-                "provider": self.provider.name
+                "error": type(e).__name__,
+                "response": (
+                    "⚠️ The AI provider could not process this request. "
+                    "The error was logged for review. / El proveedor de IA no pudo "
+                    f"procesar la solicitud; el error quedó registrado (ref `{ref}`)."
+                ),
+                "provider": self._provider_name(),
+                "error_ref": ref,
             }
     
     def _format_workflow_result(self, result: Dict) -> Dict:
@@ -241,21 +438,23 @@ class RaymondLucyAgentV2:
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{result['preview']}",
                 "autonomy_level": 2,
                 "context_used": {"workflow": True},
-                "provider": self.provider.name
+                "provider": self._provider_name()
             }
         elif result.get("success"):
             return {
                 "success": True,
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n{result.get('message', 'Done.')}",
                 "autonomy_level": 2,
-                "provider": self.provider.name
+                "context_used": {"workflow": True},
+                "provider": self._provider_name()
             }
         else:
             return {
                 "success": False,
                 "response": f"[CONFIDENCE: HIGH] [AUTONOMY: LEVEL 2]\n\n❌ {result.get('error')}",
                 "autonomy_level": 2,
-                "provider": self.provider.name
+                "context_used": {"workflow": True},
+                "provider": self._provider_name()
             }
 
 

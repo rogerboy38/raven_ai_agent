@@ -436,6 +436,28 @@ def handle_raven_message(doc=None, method=None):
         query = None
         bot_name = None
 
+        # ==================== PIPELINE V2 (feature-flagged) ====================
+        # When AI Agent Settings.agent_pipeline_v2_enabled is on, @ai messages
+        # are acknowledged instantly and processed by RaymondLucyAgentV2 in a
+        # background job. Legacy pipeline below remains untouched when off.
+        if plain_text.lower().startswith("@ai"):
+            try:
+                from raven_ai_agent.api import pipeline_v2
+                if pipeline_v2.is_enabled():
+                    pipeline_v2.dispatch(
+                        message_name=doc.name,
+                        channel_id=doc.channel_id,
+                        query=plain_text[3:].strip(),
+                        user=doc.owner,
+                    )
+                    return
+            except Exception:
+                frappe.logger().warning(
+                    "[AI Agent] Pipeline V2 dispatch failed; falling back to legacy",
+                    exc_info=True,
+                )
+        # ==================== END PIPELINE V2 ====================
+
         # ==================== PRE-PROCESSOR: Data Quality Scanner ====================
         # Run scanner FIRST for scan/validate commands - pre-flight validation
         # This bypasses routing complexity and ensures data quality checks run before operations
@@ -443,6 +465,22 @@ def handle_raven_message(doc=None, method=None):
             query = plain_text[3:].strip()
             q_lower = query.lower()
             
+            # T141: COA validation -> coa_validator skill (before DQS grabs "validate")
+            if re.search(r"coa[-\s]?\d{2}[-\s]?\d{3,4}", q_lower) or "validate coa" in q_lower or "validar coa" in q_lower:
+                try:
+                    from raven_ai_agent.skills.router import SkillRouter
+                    _coa = SkillRouter().route(query)
+                    if _coa and _coa.get("handled"):
+                        frappe.get_doc({
+                            "doctype": "Raven Message",
+                            "channel_id": doc.channel_id,
+                            "text": _coa.get("response", "Validation complete."),
+                            "message_type": "Text",
+                            "is_bot_message": 1
+                        }).insert(ignore_permissions=True)
+                        return
+                except Exception:
+                    pass
             scanner_keywords = ["scan", "validate", "pre-flight", "preflight", "repair", "solve"]
             if any(kw in q_lower for kw in scanner_keywords):
                 try:
@@ -576,8 +614,20 @@ def handle_raven_message(doc=None, method=None):
                 bot_name = "manufacturing_bot"
             elif any(kw in q_lower for kw in pay_keywords):
                 bot_name = "payment_bot"
+            elif any(kw in q_lower for kw in [
+                "sensor", "sensors", "temperature", "temperatura",
+                "humidity", "humedad", "motion", "movimiento",
+                "light", "luz", "iot", "rpi", "raspberry",
+                "sensor reading", "sensor status", "sensor history",
+                "sensor alert", "read sensor", "bot status",
+                "dht11", "dht22"
+            ]) or re.search(r"\bL\d{2}\b", q_lower, re.IGNORECASE):
+                # IoT/sensor commands route to SkillRouter -> iot_sensor_manager
+                bot_name = None
+                frappe.logger().info(f"[AI Agent] IoT keywords matched, routing to SkillRouter")
             else:
-                bot_name = "sales_order_bot"  # Default bot
+                # Default: route unknown @ai queries to SkillRouter (NOT sales_order_bot)
+                bot_name = None
 
         # Check for @sales_order_bot mention
         elif "sales_order_bot" in plain_text.lower():
@@ -732,6 +782,19 @@ def handle_raven_message(doc=None, method=None):
                     router_result = router.route(query)
                     if router_result and router_result.get("handled"):
                         result = {"success": True, "response": router_result.get("response", "Skill executed.")}
+                        # Attribute reply to the skill-specific bot instead of sales_order_bot
+                        skill_name = router_result.get("skill") or getattr(router_result, "skill", None)
+                        # Map skill -> bot. For now: any IoT skill answer comes from iot_sensor_bot
+                        if "iot" in str(skill_name or "").lower() or any(
+                            kw in query.lower() for kw in [
+                                "sensor","temperature","temperatura","humidity","humedad",
+                                "motion","movimiento","light","luz","iot","rpi",
+                                "dht11","dht22","raspberry"
+                            ]
+                        ) or re.search(r"\bL\d{2}\b", query, re.IGNORECASE):
+                            if frappe.db.exists("Raven Bot", "iot_sensor_bot"):
+                                bot_name = "iot_sensor_bot"
+                                frappe.logger().info("[AI Agent] Skill response attributed to iot_sensor_bot")
                     else:
                         agent = RaymondLucyAgent(user)
                         result = agent.process_query(query, channel_id=doc.channel_id)
@@ -750,17 +813,21 @@ def handle_raven_message(doc=None, method=None):
             try:
                 bot = frappe.get_doc("Raven Bot", bot_name)
             except frappe.DoesNotExistError:
-                frappe.logger().warning(f"[AI Agent] Bot {bot_name} not found, trying sales_order_bot")
+                frappe.logger().warning(f"[AI Agent] Bot {bot_name} not found, trying iot_sensor_bot")
+                try:
+                    bot = frappe.get_doc("Raven Bot", "iot_sensor_bot")
+                except Exception:
+                    frappe.logger().warning(f"[AI Agent] iot_sensor_bot not found either")
+        else:
+            # Default sender for skill-routed/unknown queries: iot_sensor_bot (NOT sales)
+            try:
+                bot = frappe.get_doc("Raven Bot", "iot_sensor_bot")
+            except frappe.DoesNotExistError:
+                frappe.logger().warning("[AI Agent] iot_sensor_bot not found, falling back")
                 try:
                     bot = frappe.get_doc("Raven Bot", "sales_order_bot")
-                except:
-                    frappe.logger().warning(f"[AI Agent] sales_order_bot not found")
-        else:
-            # Default to sales_order_bot if no bot_name specified
-            try:
-                bot = frappe.get_doc("Raven Bot", "sales_order_bot")
-            except:
-                frappe.logger().warning(f"[AI Agent] Could not get default sales_order_bot")
+                except Exception:
+                    frappe.logger().warning("[AI Agent] No default bot available")
 
         response_text = result.get("response") or result.get("message") or result.get("error") or "No response generated"
         link_doctype = result.get("link_doctype")
@@ -777,7 +844,7 @@ def handle_raven_message(doc=None, method=None):
         else:
             # Fallback: create message directly - use default bot to avoid "Raven User None not found" error
             # Try to get a valid bot, fallback to sales_order_bot if not specified
-            default_bot = bot_name if bot_name else "sales_order_bot"
+            default_bot = bot_name if bot_name else "iot_sensor_bot"
             reply_doc = frappe.get_doc({
                 "doctype": "Raven Message",
                 "channel_id": doc.channel_id,

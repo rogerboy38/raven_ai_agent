@@ -377,7 +377,10 @@
         </div>
 
         <div class="card">
-            <div class="card-title">Recent History</div>
+            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Recent History</span>
+                <button onclick="cleanupDuplicates()" style="padding: 4px 8px; font-size: 12px;">Cleanup</button>
+            </div>
             <table class="history-table">
                 <thead>
                     <tr>
@@ -553,6 +556,39 @@
         // that made the original Validate button throw a ReferenceError.)
         function validateBarrel() {
             validateSerial().then(ok => { beep(ok); if (ok) focusWeight(); });
+            const serial = document.getElementById('barrelSerial').value.trim().toUpperCase();
+            if (!batch) {
+                showMessage('Please enter a batch name', 'error');
+                return;
+            }
+
+            if (!serial) {
+                showMessage('Please enter a barrel serial', 'error');
+                return;
+            }
+
+            fetch('/api/barrels/' + encodeURIComponent(serial))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        currentSerial = serial;
+                        updateCurrentEntry();
+                        if (data.duplicate && data.duplicate.is_duplicate) {
+                            showMessage("WARNING: " + serial + " already submitted " + data.duplicate.count + " time(s). Last weight: " + data.duplicate.last_weight + " kg", "warning");
+                        } else {
+                            showMessage("Barrel validated: " + serial, "success");
+                        }
+                    } else {
+                        showMessage('Barrel not found: ' + serial, 'error');
+                        currentSerial = '';
+                        updateCurrentEntry();
+                    }
+                })
+                .catch(err => {
+                    showMessage('Validation error', 'error');
+                    currentSerial = serial;
+                    updateCurrentEntry();
+                });
         }
 
         function setWeight(weight) {
@@ -608,21 +644,14 @@
             })
             .then(r => r.json())
             .then(data => {
-                const status = data.status, code = data.code || '';
-                if (status === 'success' && code === 'updated') {
-                    // CONFIRMED ack -> only now is this barrel "done"
-                    const net = (data.net_weight != null) ? data.net_weight : weight;
-                    let tgt = '';
-                    if (data.target_net != null) {            // Phase-2 target feedback (when server sends it)
-                        const d = net - data.target_net;
-                        tgt = ' | ' + (Math.abs(d) <= 1e-9 ? 'target reached'
-                                       : (d < 0 ? 'under by ' + (-d).toFixed(3) : 'over by ' + d.toFixed(3)) + ' kg');
+                if (data.status === 'success') {
+                    if (data.duplicate && data.duplicate.is_duplicate) {
+                        showMessage("WARNING: Submitted but DUPLICATE: " + serial + " was already submitted " + data.duplicate.count + " time(s)", "warning");
+                    } else {
+                        showMessage('Weight submitted: ' + serial + ' = ' + weight + ' kg', 'success');
                     }
-                    showMessage('✔ CONFIRMED: ' + serial + ' net ' + net + ' kg' + tgt, 'success');
-                    beep(true);
-                    setField('weight', 'ok'); setBadge('weight', 'ok', 'ACK: updated');
-                    // reset for the next barrel
-                    currentSerial = ''; currentWeight = null; serialOk = false;
+                    currentSerial = '';
+                    currentWeight = null;
                     document.getElementById('barrelSerial').value = '';
                     document.getElementById('weight').value = '';
                     setField('barrelSerial', 'idle'); setBadge('barrelSerial', '', '');
@@ -661,6 +690,22 @@
 
         function readScale() {
             alert('Scale reader coming in next version');
+        }
+
+        function cleanupDuplicates() {
+            if (!confirm('Remove duplicate entries, keeping only the latest for each barrel?')) return;
+            fetch('/api/cleanup-duplicates', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showMessage('Removed ' + data.deleted + ' duplicates (' + data.count_after + ' entries remain)', 'success');
+                        loadHistory();
+                        updateStatus();
+                    } else {
+                        showMessage('Cleanup failed: ' + data.message, 'error');
+                    }
+                })
+                .catch(err => showMessage('Cleanup failed', 'error'));
         }
     </script>
 </body>

@@ -104,7 +104,7 @@ When showing documents:
 CAPABILITIES_LIST = """
 ## 🤖 AMB AI Agent Capabilities
 
-**Latest Update:** March 2026 | **Version:** 2.1
+**Latest Update:** June 2026 | **Version:** 2.2 (V14.2.0)
 
 ---
 
@@ -378,12 +378,98 @@ Complete sales pipeline from opportunity to payment and purchase requisition:
 
 | Skill | Description |
 |-------|-------------|
+| **CRM Agent** 🆕 | Agentic CRM — leads, opportunities, follow-ups, pipeline (see section below) |
 | **Formulation Reader** | Parse and validate formulation data from BOMs |
 | **Formulation Orchestrator** | Optimize batch selection (FEFO/Cost balancing) |
 | **Formulation Advisor** | Production batch selection recommendations |
 | **Browser** | Web automation and data extraction |
 | **IoT Sensors** | Temperature, humidity, motion monitoring |
 | **Skill Creator** | Create new custom skills |
+
+---
+
+### 🤝 CRM Agent (V14.2.0)
+
+Agentic CRM for ERPNext — agents enrich leads, advance opportunities, draft follow-ups, and summarize pipeline. Bilingual (EN/ES). All commands respect the per-agent **AI Action Policy** autonomy level (0-4).
+
+#### Pipeline & Digest
+| Command | Description |
+|---------|-------------|
+| `@ai morning brief` / `@ai daily digest` | Pipeline digest for today |
+| `@ai pipeline summary` / `@ai pipeline status` | On-demand pipeline digest |
+| `@ai resumen del día` / `@ai resumen de hoy` | Digest en español |
+| `@ai show pipeline` / `@ai list opportunities` | Top 20 open opportunities |
+| `@ai show my deals` / `@ai view leads` | Same — alternate phrasings |
+
+#### Deal Coach (Next Best Action)
+| Command | Description |
+|---------|-------------|
+| `@ai next step OPP-0042` | Suggested next action for an opportunity |
+| `@ai next action for OPP-0042` | Same |
+| `@ai what should i do on OPP-0042` | Same |
+| `@ai qué sigue con OPP-0042` | Próxima acción (ES) |
+| `@ai próximo paso en OPP-0042` | Próxima acción (ES) |
+
+#### Follow-Up Writer
+| Command | Description |
+|---------|-------------|
+| `@ai draft follow-up for LEAD-0007` | Draft follow-up email/message |
+| `@ai write email to CRM-OPP-001` | Same |
+| `@ai redacta seguimiento para LEAD-0007` | Borrador (ES) |
+| `@ai escribe correo a CRM-OPP-001` | Borrador (ES) |
+
+#### Stage Move
+| Command | Description |
+|---------|-------------|
+| `@ai move OPP-0042 to Quotation` | Advance opportunity stage |
+| `@ai set deal CRM-OPP-001 to Lost` | Close as Lost |
+| `@ai advance opportunity OPP-0042 to Negotiation` | Explicit doctype form |
+
+#### Lead / Contact Enrichment
+| Command | Description |
+|---------|-------------|
+| `@ai enrich lead LEAD-0007` | Auto-complete lead fields |
+| `@ai complete contact CON-0021` | Same for contacts |
+| `@ai completa prospecto LEAD-0007` | Enriquecer (ES) |
+
+#### Create Lead / Opportunity
+| Command | Description |
+|---------|-------------|
+| `@ai create lead Acme Corp - new chemical line` | New lead from free text |
+| `@ai new opportunity Acme - 50k bottles` | New opportunity |
+| `@ai nuevo prospecto Acme - línea química` | Crear lead (ES) |
+| `@ai crea oportunidad Acme - 50k botellas` | Crear oportunidad (ES) |
+
+#### CRM Agents (background + on-demand)
+| Agent | Role | Schedule |
+|-------|------|----------|
+| **Pipeline Summarizer** | Daily pipeline digest | Daily (scheduler) + on-demand |
+| **Opportunity Mover** | Detect stalled opportunities, suggest stage moves | Hourly (scheduler) + on hooks |
+| **Lead Enricher** | Auto-complete missing lead fields | On-demand |
+| **Deal Coach** | Next-best-action recommendations | On-demand |
+| **Follow-Up Writer** | Draft follow-up emails/messages | On-demand |
+| **Meeting Capturer** | Extract action items from meeting notes | On Communication hook |
+
+#### Autonomy Levels (per AI Action Policy DocType)
+- **Level 0 — Observe:** log only, no suggestions surfaced
+- **Level 1 — Suggest:** surface recommendations, human acts
+- **Level 2 — Draft:** prepare drafts (emails, stage moves), human submits
+- **Level 3 — Act:** execute with audit trail, human can revert
+- **Level 4 — Autonomous:** scheduled background execution
+
+#### New DocTypes (CRM Patterns module)
+- **AI Action Policy** — per-agent autonomy level + guardrails
+- **AI Bot Persona** — bot identity, tone, language defaults
+- **AI Skill Registry** — registered skills + versions
+- **AI Routing Audit Log** — every intent dispatch (skill, intent_id, confidence)
+- **AI Orchestrator** — multi-agent coordination state
+- **Raven Agent Bug** / **Raven Agent Bug Occurrence** — bug reports from agents
+
+#### CRM Custom Fields (AI Agent Settings)
+- `crm_autonomy_level` (default global autonomy 0-4)
+- `crm_digest_channel` (Raven channel for daily digest)
+- `crm_default_pipeline` (default Opportunity pipeline)
+- `crm_followup_language` (EN / ES default for drafts)
 
 ---
 

@@ -45,9 +45,10 @@ class {class_name}(SkillBase):
     description = "{description}"
     triggers = {triggers}
     
-    def can_handle(self, query: str) -> bool:
+    def can_handle(self, query: str):
         query_lower = query.lower()
-        return any(t in query_lower for t in self.triggers)
+        hit = any(t in query_lower for t in self.triggers)
+        return (hit, 0.8 if hit else 0.0)
     
     def execute(self, query: str, context: dict = None) -> dict:
         return {{
@@ -75,9 +76,10 @@ class SkillCreatorSkill(SkillBase):
         super().__init__(agent)
         self.skills_dir = Path(__file__).parent.parent
     
-    def can_handle(self, query: str) -> bool:
+    def can_handle(self, query: str):
         query_lower = query.lower()
-        return any(t in query_lower for t in self.triggers)
+        hit = any(t in query_lower for t in self.triggers)
+        return (hit, 0.8 if hit else 0.0)
     
     def handle(self, query: str, context: dict = None) -> dict:
         """Handle skill creation requests."""

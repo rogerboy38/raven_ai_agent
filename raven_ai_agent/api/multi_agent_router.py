@@ -80,7 +80,7 @@ def _extract_so_from_command(command: str) -> Optional[str]:
     return None
 
 
-def build_agent_pipeline(command: str) -> List[Dict[str, str]]:
+def build_agent_pipeline(command: str, pipeline_type: str = None) -> List[Dict[str, str]]:
     """
     Build an ordered list of agent steps for a multi-agent command.
     
@@ -93,12 +93,12 @@ def build_agent_pipeline(command: str) -> List[Dict[str, str]]:
     command_lower = command.lower().strip()
     so_name = _extract_so_from_command(command)
     
-    # Determine pipeline type
-    pipeline_type = None
-    for pattern, ptype in MULTI_AGENT_PATTERNS:
-        if re.search(pattern, command_lower, re.IGNORECASE):
-            pipeline_type = ptype
-            break
+    # Determine pipeline type (unless caller resolved it, e.g. semantic router)
+    if pipeline_type is None:
+        for pattern, ptype in MULTI_AGENT_PATTERNS:
+            if re.search(pattern, command_lower, re.IGNORECASE):
+                pipeline_type = ptype
+                break
     
     if pipeline_type is None:
         return []
@@ -173,17 +173,16 @@ def _execute_single_step(
     error = None
     
     try:
-        # Import the router to use existing routing logic
-        from raven_ai_agent.api.router import handle_raven_message
-        
-        # Build the full message for routing
-        full_message = sub_command
-        
-        # Execute via router - this calls the actual agent
-        # Note: In real execution, this would need a user context
-        response = handle_raven_message(full_message, "System")
-        result = response
-        
+        # R2: execute via the V2 agent (the old import from api.router was a
+        # dead module whose handle_raven_message(doc, method) signature could
+        # not accept a plain command string — pipeline steps always failed).
+        from raven_ai_agent.api.agent_v2 import RaymondLucyAgentV2
+
+        exec_user = (context or {}).get("user") or "Administrator"
+        agent = RaymondLucyAgentV2(user=exec_user)
+        v2_result = agent.process_query(sub_command)
+        result = v2_result.get("response") if isinstance(v2_result, dict) else str(v2_result)
+
     except Exception as e:
         error = str(e)
         logger.error(f"Error executing step {agent_name}: {e}")
@@ -313,35 +312,51 @@ def _format_pipeline_response(
     """
     if not results:
         return "No results to display."
-    
-    lines = ["📋 **Pipeline Execution Results**\n"]
-    
-    for i, (step, result) in enumerate(zip(pipeline, results), 1):
-        agent = step.get('agent', 'unknown')
-        command = step.get('sub_command', '')
-        
-        lines.append(f"### Step {i}: {agent}")
-        lines.append(f"Command: `{command}`")
-        
-        if result.get('success'):
-            lines.append("Status: ✅ Success")
-            result_text = result.get('result', '')
-            if result_text:
-                lines.append(f"Result: {result_text}")
-        else:
-            lines.append("Status: ❌ Failed")
-            error = result.get('error')
-            if error:
-                lines.append(f"Error: {error}")
-        
-        lines.append("")  # Empty line between steps
-    
-    # Summary
+
     successful = sum(1 for r in results if r.get('success'))
     total = len(results)
-    lines.append(f"**Summary:** {successful}/{total} steps completed successfully.")
-    
-    return "\n".join(lines)
+    badge = "✅" if successful == total else ("⚠️" if successful else "❌")
+
+    AGENT_LABELS = {
+        "sales_order_followup": "📦 Sales Order",
+        "manufacturing": "🏭 Manufacturing",
+        "payment": "💳 Payments",
+    }
+
+    lines = [f"📋 **Pipeline Report** — {badge} {successful}/{total} steps", ""]
+
+    for i, (step, result) in enumerate(zip(pipeline, results), 1):
+        agent = step.get('agent', 'unknown')
+        label = AGENT_LABELS.get(agent, f"🔹 {agent.replace('_', ' ').title()}")
+
+        if result.get('success'):
+            body = _distill_step_text(result.get('result', ''))
+            lines.append(f"**{i}. {label}**")
+            lines.append("")
+            lines.append(body if body else "_Done._")
+        else:
+            lines.append(f"**{i}. {label}** — ❌ failed")
+            error = result.get('error')
+            if error:
+                lines.append("")
+                lines.append(f"> {error}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+_TAG_RE = re.compile(r"\[(?:CONFIDENCE|AUTONOMY|SKILL|PATTERN)[^\]]*\]\s*")
+
+
+def _distill_step_text(text: str) -> str:
+    """Strip internal routing tags and surplus blank lines from a step
+    result so pipeline reports read like a human wrote them."""
+    if not text:
+        return ""
+    text = _TAG_RE.sub("", str(text))
+    # collapse 3+ newlines, trim edges
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
 
 
 def handle_multi_agent_command(command: str, user: str) -> Optional[str]:
@@ -379,3 +394,114 @@ def handle_multi_agent_command(command: str, user: str) -> Optional[str]:
     result = execute_pipeline(pipeline, user, context)
     
     return result
+
+
+# ---------------------------------------------------------------------------
+# Agentic-Design-Patterns: semantic Coordinator fallback (Chapter 7)
+# ---------------------------------------------------------------------------
+def coordinator_specs():
+    """AgentSpec catalog for the Coordinator pattern.
+
+    Mirrors the regex-driven pipelines above so the Coordinator can route
+    natural-language phrasings the regex layer doesn't catch.
+    """
+    try:
+        from raven_ai_agent.patterns import AgentSpec
+    except ImportError:
+        return []
+
+    return [
+        AgentSpec(
+            name="workflow_run",
+            description=(
+                "Run the complete 8-step manufacturing-to-payment cycle for "
+                "a Sales Order (WO -> SE -> SO -> Sales WO -> SE -> DN -> SI -> PE)."
+            ),
+            examples=[
+                "kick off the full workflow for SO-00752",
+                "execute the full cycle on SO-00800",
+            ],
+        ),
+        AgentSpec(
+            name="full_status",
+            description=(
+                "Return a combined sales + delivery + payment status report "
+                "for a Sales Order."
+            ),
+            examples=[
+                "give me the complete status of SO-00752",
+                "where do we stand on SO-00800 across sales, delivery, and payments",
+            ],
+        ),
+        AgentSpec(
+            name="diagnose_and_fix",
+            description=(
+                "Diagnose pipeline gaps for a Sales Order or Quotation and "
+                "suggest the next workflow actions."
+            ),
+            examples=[
+                "what's wrong with SO-00752 and how do I fix it",
+                "diagnose pipeline issues on SAL-QTN-0901 and propose fixes",
+            ],
+        ),
+        AgentSpec(
+            name="morning_briefing",
+            description=(
+                "Produce the daily Lucy-protocol briefing digest. Use ONLY "
+                "when the user asks for their briefing/digest/day summary. "
+                "Do NOT use for requests to list specific documents such as "
+                "invoices, payments, orders, or work orders — those belong "
+                "to the general agent."
+            ),
+            examples=["give me my morning briefing", "what's on my plate today"],
+        ),
+    ]
+
+
+_DOC_ANCHORED_KEYS = {"workflow_run", "full_status", "diagnose_and_fix"}
+_SO_ID_RE = re.compile(r"\b(?:SO|SAL-ORD|SAL-QTN)[-\s]?\d", re.IGNORECASE)
+_BRIEFING_RE = re.compile(
+    r"\b(briefing|brief|digest|resumen|agenda|plate|d[ií]a)\b", re.IGNORECASE
+)
+
+
+def semantic_guard(key: str, command: str) -> bool:
+    """Sanity-check a Coordinator decision before executing a pipeline.
+
+    - Doc-anchored pipelines are meaningless without an SO/QTN id.
+    - morning_briefing must only fire on briefing-ish phrasing, never on
+      "show my pending invoices"-style listing requests (observed misroute:
+      25-31s pipeline for a 6s LLM answer)."""
+    if key in _DOC_ANCHORED_KEYS:
+        return bool(_SO_ID_RE.search(command or ""))
+    if key == "morning_briefing":
+        return bool(_BRIEFING_RE.search(command or ""))
+    return True
+
+
+def semantic_route(command: str, provider) -> Optional[str]:
+    """Use the Coordinator pattern to map a free-form user request to one of
+    the multi-agent pipeline keys.  Returns the matched key or None.
+
+    Used as a SECOND-CHANCE router: only invoke this when the regex layer
+    in `is_multi_agent_command()` returns False.
+    """
+    try:
+        from raven_ai_agent.patterns import Coordinator
+    except ImportError:
+        return None
+
+    specs = coordinator_specs()
+    if not specs:
+        return None
+
+    decision = Coordinator(provider, agents=specs).decide(command)
+    if (decision.agent in {s.name for s in specs}
+            and decision.confidence >= 0.75
+            and semantic_guard(decision.agent, command)):
+        logger.info(
+            "Coordinator pattern matched %s (confidence=%.2f) for: %s",
+            decision.agent, decision.confidence, command,
+        )
+        return decision.agent
+    return None

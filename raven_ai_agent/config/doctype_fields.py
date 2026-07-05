@@ -148,6 +148,45 @@ NEW_FIELDS = [
         "label": "Ollama Model",
         "default": "llama3.1:8b",
         "description": "e.g., llama3.1:8b, mistral, codellama"
+    },
+
+    # --- CRM Agent ---------------------------------------------------------
+    {
+        "fieldname": "crm_section",
+        "fieldtype": "Section Break",
+        "label": "CRM Agent"
+    },
+    {
+        "fieldname": "crm_autonomy_level",
+        "fieldtype": "Int",
+        "label": "CRM Autonomy Level",
+        "default": 1,
+        "description": "0=observe, 1=suggest, 2=draft, 3=act, 4=autonomous"
+    },
+    {
+        "fieldname": "crm_digest_channel",
+        "fieldtype": "Link",
+        "options": "Raven Channel",
+        "label": "CRM Digest Channel",
+        "description": "Where the daily pipeline digest is posted"
+    },
+    {
+        "fieldname": "crm_column_break",
+        "fieldtype": "Column Break"
+    },
+    {
+        "fieldname": "crm_default_pipeline",
+        "fieldtype": "Data",
+        "label": "CRM Default Pipeline",
+        "default": "Sales"
+    },
+    {
+        "fieldname": "crm_followup_language",
+        "fieldtype": "Select",
+        "options": "auto\nen\nes",
+        "label": "Follow-up Language",
+        "default": "auto",
+        "description": "Language for agent-drafted follow-ups; 'auto' detects from last communication"
     }
 ]
 
