@@ -262,3 +262,42 @@ class TestFefoBatchAmbPrimary:
         frappe_mock.db.exists = MagicMock(return_value=True)
         r = _skill().handle("bom lots 0227")
         assert "0227001251" in r["response"] and "from batch name" in r["response"]
+
+
+class TestServerScriptHazardDetector:
+    """2026-07-05 incident: DB-resident 'Raven Channel Permission Patch' with
+    illegal import broke every Batch insert once server_script_enabled=1."""
+
+    def _health(self, frappe_mock, scripts, enabled=True):
+        frappe_mock.db.count = MagicMock(return_value=0)
+        frappe_mock.db.sql = MagicMock(return_value=[])
+        frappe_mock.db.exists = MagicMock(return_value=True)
+        def get_all(dt, filters=None, fields=None, **kw):
+            if dt == "Server Script":
+                return scripts
+            return []
+        frappe_mock.get_all = MagicMock(side_effect=get_all)
+        frappe_mock.conf = MagicMock()
+        frappe_mock.conf.get = MagicMock(return_value=enabled)
+        return _skill().handle("bom health")["response"]
+
+    def test_illegal_import_flagged_active(self, frappe_mock):
+        body = self._health(frappe_mock, [
+            {"name": "Raven Channel Permission Patch", "script_type": "DocType Event",
+             "reference_doctype": "Batch",
+             "script": "import frappe\nfrappe.msgprint('x')"}], enabled=True)
+        assert "ILLEGAL imports" in body
+        assert "Raven Channel Permission Patch" in body
+        assert "breaking NOW" in body
+
+    def test_latent_when_flag_off(self, frappe_mock):
+        body = self._health(frappe_mock, [
+            {"name": "Bad One", "script_type": "API", "reference_doctype": None,
+             "script": "from x import y"}], enabled=False)
+        assert "latent" in body
+
+    def test_clean_scripts_pass(self, frappe_mock):
+        body = self._health(frappe_mock, [
+            {"name": "Good", "script_type": "DocType Event", "reference_doctype": "Batch",
+             "script": "doc = frappe.get_doc(doctype, name)\n# importantly not an import"}])
+        assert "✅ No illegal-import Server Scripts" in body
