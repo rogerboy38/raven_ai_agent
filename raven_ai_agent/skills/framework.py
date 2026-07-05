@@ -88,17 +88,20 @@ class SkillBase(ABC):
         """
         query_lower = query.lower()
         
-        # Check simple triggers
+        # R3: return the BEST score, not the first hit. Previously a broad
+        # trigger (0.8) returned before precise patterns (0.9) were checked,
+        # so e.g. data-quality-scanner's "validate SO-…" pattern could never
+        # outrank its own bare "validate" trigger in dispatcher ranking.
+        best = 0.0
         for trigger in self.triggers:
             if trigger.lower() in query_lower:
-                return True, 0.8
-        
-        # Check regex patterns
+                best = 0.8
+                break
         for pattern in self.patterns:
             if re.search(pattern, query_lower, re.IGNORECASE):
-                return True, 0.9
-        
-        return False, 0.0
+                best = max(best, 0.9)
+                break
+        return (best > 0.0), best
     
     def get_help(self) -> str:
         """Return help text for this skill"""
