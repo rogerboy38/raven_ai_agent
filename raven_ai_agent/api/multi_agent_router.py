@@ -173,17 +173,16 @@ def _execute_single_step(
     error = None
     
     try:
-        # Import the router to use existing routing logic
-        from raven_ai_agent.api.router import handle_raven_message
-        
-        # Build the full message for routing
-        full_message = sub_command
-        
-        # Execute via router - this calls the actual agent
-        # Note: In real execution, this would need a user context
-        response = handle_raven_message(full_message, "System")
-        result = response
-        
+        # R2: execute via the V2 agent (the old import from api.router was a
+        # dead module whose handle_raven_message(doc, method) signature could
+        # not accept a plain command string — pipeline steps always failed).
+        from raven_ai_agent.api.agent_v2 import RaymondLucyAgentV2
+
+        exec_user = (context or {}).get("user") or "Administrator"
+        agent = RaymondLucyAgentV2(user=exec_user)
+        v2_result = agent.process_query(sub_command)
+        result = v2_result.get("response") if isinstance(v2_result, dict) else str(v2_result)
+
     except Exception as e:
         error = str(e)
         logger.error(f"Error executing step {agent_name}: {e}")
