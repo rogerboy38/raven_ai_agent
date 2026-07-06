@@ -228,21 +228,34 @@ def _census_lot(frappe, src, lote, header, line):
             fields=["name", "custom_batch_level", "batch_level", "parent_batch_amb",
                     "custom_golden_number", "item_code", "batch_id"])
     if ba:
-        names = [b.name for b in ba]
-        kids = frappe.get_all(
-            "Batch AMB", filters=[["parent_batch_amb", "in", names]],
-            fields=["name", "custom_batch_level"])
-        kid_names = [k.name for k in kids]
-        grandkids = frappe.get_all(
-            "Batch AMB", filters=[["parent_batch_amb", "in", kid_names]],
-            pluck="name") if kid_names else []
-        all_names = names + kid_names + list(grandkids)
-        n_serial = frappe.db.count("Container Barrels", {"parent": ["in", all_names]}) \
-            if all_names else 0
-        complete = bool(kids) and bool(grandkids) and n_serial > 0
+        # children created via create_child_batch copy the golden, so the
+        # golden query already returns every level — but pick up any child
+        # linked only by parent_batch_amb too, then classify by ACTUAL level.
+        # refs are level-sorted so refs[0] is the L1 lot batch (the COA link
+        # target); the note counts real levels (gate-COA finding 2026-07-06:
+        # the old code labeled every golden hit "L1" and inverted the counts).
+        seen = {b["name"]: b for b in ba}
+        frontier = list(seen)
+        while frontier:
+            more = frappe.get_all(
+                "Batch AMB", filters=[["parent_batch_amb", "in", frontier]],
+                fields=["name", "custom_batch_level", "batch_level"])
+            frontier = [m["name"] for m in more if m["name"] not in seen]
+            seen.update({m["name"]: m for m in more if m["name"] not in seen})
+        def _lvl(b):
+            return str(b.get("custom_batch_level") or b.get("batch_level") or "1")
+        by_level = {}
+        for b in seen.values():
+            by_level.setdefault(_lvl(b), []).append(b["name"])
+        refs = [n for lvl in sorted(by_level) for n in sorted(by_level[lvl])]
+        n_serial = frappe.db.count("Container Barrels", {"parent": ["in", refs]}) \
+            if refs else 0
+        complete = bool(by_level.get("1")) and bool(by_level.get("2")) \
+            and bool(by_level.get("3") or by_level.get("4")) and n_serial > 0
         info["batch_amb"] = _st(
-            OK if complete else PARTIAL, names,
-            f"L1={len(names)} L2={len(kids)} L3={len(list(grandkids))} serial-rows={n_serial}")
+            OK if complete else PARTIAL, refs,
+            " ".join(f"L{lvl}={len(by_level[lvl])}" for lvl in sorted(by_level))
+            + f" serial-rows={n_serial}")
     else:
         info["batch_amb"] = _st(MISSING)
 
