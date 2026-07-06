@@ -102,35 +102,47 @@ class FolioSources:
             wb = openpyxl.load_workbook(self.xlsx_path, read_only=True)
             ws = wb.worksheets[0]
             rows = []
+            malformed = 0
             for raw in ws.iter_rows(values_only=True):
                 if raw is None or raw[1] is None:
                     continue
                 row = dict(zip(XLSX_COLS, list(raw) + [None] * (len(XLSX_COLS) - len(raw))))
+                try:
+                    row["folio"] = int(row["folio"])
+                except (TypeError, ValueError):
+                    # a handful of source rows carry concatenated CSV text in
+                    # the folio cell — keep them countable, not crashing
+                    malformed += 1
+                    row["folio"] = None
                 rows.append(row)
             wb.close()
             self._xlsx_rows = rows
+            self.xlsx_malformed_rows = malformed
         return self._xlsx_rows
 
     def xlsx_for_folio(self, folio):
         n = int(folio)
-        return [r for r in self.xlsx_rows() if int(r["folio"]) == n]
+        return [r for r in self.xlsx_rows() if r["folio"] == n]
 
     def folios_for_year(self, year):
         """Folio numbers whose xlsx fecha falls in `year` (invoice-date truth)."""
         out = set()
         for r in self.xlsx_rows():
             f = r.get("fecha")
-            if f is not None and getattr(f, "year", None) == int(year):
-                out.add(int(r["folio"]))
+            if r["folio"] is not None and f is not None \
+                    and getattr(f, "year", None) == int(year):
+                out.add(r["folio"])
         return sorted(out)
 
     def undated_folios(self):
         dated = set()
         all_f = set()
         for r in self.xlsx_rows():
-            all_f.add(int(r["folio"]))
+            if r["folio"] is None:
+                continue
+            all_f.add(r["folio"])
             if r.get("fecha") is not None:
-                dated.add(int(r["folio"]))
+                dated.add(r["folio"])
         return sorted(all_f - dated)
 
     # ---- det_trazab index (C-source a: extracted-trazab) ---------------- #
