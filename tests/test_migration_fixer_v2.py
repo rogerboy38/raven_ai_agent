@@ -35,12 +35,14 @@ PILOT_JSON = {
 }
 
 
-def _census(so_refs=None, batch_status="MISSING"):
+def _census(so_refs=None, batch_status="MISSING", wo_refs=None):
     """Minimal census dict shaped like census.census_folio output."""
     from raven_ai_agent.skills.migration_fixer.census import STAGES
     stages = {s: {"status": "MISSING", "refs": [], "note": ""} for s in STAGES}
     if so_refs:
         stages["sales_order"] = {"status": "OK", "refs": so_refs, "note": "matched"}
+    if wo_refs:
+        stages["work_order"] = {"status": "OK", "refs": wo_refs, "note": "matched"}
     lots = {"0612185231": {
         "variants": ["0612185231", "612185231"],
         "batch_amb": {"status": batch_status, "refs": [], "note": ""},
@@ -183,6 +185,36 @@ class TestHonestyLayer:
                    return_value=src):
             body = execute_stage(999999, "so", execute=True, date_policy="historical")
         assert "REFUSED" in body and "RECHAZADO" in body
+
+
+class TestBatchStage:
+    """Gate-3 live finding (2026-07-06): Batch AMB's only mandatory field is
+    work_order_ref — the L1 create must anchor it from the census, and refuse
+    honestly when the folio has no Work Order yet."""
+
+    def test_l1_create_sets_work_order_ref_from_census(self, frappe_mock, executor_env):
+        from raven_ai_agent.skills.migration_fixer.executor import execute_stage
+        executor_env.return_value = _census(
+            so_refs=["SO-00752-LEGOSAN AB"], wo_refs=["MFG-WO-03726"])
+        frappe_mock.db.exists = MagicMock(return_value=True)
+        doc = MagicMock()
+        doc.name = "LOTE-TEST-L1"
+        frappe_mock.new_doc = MagicMock(return_value=doc)
+        body = execute_stage(752, "batch", execute=True)
+        doc.insert.assert_called_once()
+        assert doc.work_order_ref == "MFG-WO-03726"
+        assert doc.sales_order_related == "SO-00752-LEGOSAN AB"
+        assert "VERIFIED" in body and '"verified": true' in body
+
+    def test_l1_refuses_without_work_order(self, frappe_mock, executor_env):
+        from raven_ai_agent.skills.migration_fixer.executor import execute_stage
+        executor_env.return_value = _census(so_refs=["SO-00752-LEGOSAN AB"])
+        frappe_mock.db.exists = MagicMock(return_value=True)
+        frappe_mock.new_doc = MagicMock()
+        body = execute_stage(752, "batch", execute=True)
+        frappe_mock.new_doc.assert_not_called()
+        assert "REFUSED" in body and "refuse_no_work_order" in body
+        assert "work_order_ref" in body
 
 
 class TestUnautomatedStagesRefuse:
