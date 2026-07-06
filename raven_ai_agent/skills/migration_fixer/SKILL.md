@@ -1,147 +1,104 @@
 ---
 name: migration-fixer
 description: >
-  FoxPro to ERPNext migration validation and repair.
-  Trigger: When scanning, comparing, or fixing migration issues for quotations/sales orders.
+  FoxPro to ERPNext migration close (v2): 11-stage gap census, sequencing and
+  mapping, gated draft-only repair.
+  Trigger: migrate scan / migrate folio / migration validation and repair.
 license: MIT
 metadata:
   author: AMB-Wellness
-  version: "1.0"
+  version: "2.0"
   scope: [root, skills]
   auto_invoke:
-    - "Scanning migration status"
-    - "Fixing quotation data"
+    - "Censusing migration gaps (migrate scan)"
+    - "Planning/executing a folio stage (migrate folio)"
     - "Comparing FoxPro vs ERPNext"
     - "Generating migration reports"
   requires:
     doctypes: ["Quotation", "Sales Order"]
-  folio_ranges:
-    2024: {start: "00752", end: "00980"}
-    2025: {start: "00980", end: "01160"}
 allowed-tools: Read, Edit, Write, Bash
 ---
 
-# Migration Fixer Skill
+# Migration Fixer Skill v2
 
-## CRITICAL RULES
-- **ALWAYS** preview before applying fixes (`fix folio XXXXX` → `fix folio XXXXX confirm`)
-- **NEVER** bulk apply without reviewing preview first
-- **ALWAYS** verify FoxPro JSON source exists before attempting fix
+## CRITICAL RULES (v2 discipline)
+- **Census/plan by default** — a write happens ONLY on the `!` prefix.
+- **Draft-only writes** — the skill never submits a document; every create is
+  guarded with `frappe.db.exists` and re-verified after insert (honesty layer:
+  never report Created without a row → DoD JSON carries `verified`).
+- **Orchestrate, don't duplicate** — BOM → bom-agent · Batch → Batch AMB
+  controller APIs (amb_w_spc) · COA → COA AMB2 (amb_w_tds). migration-fixer owns
+  sequencing + mapping only.
+- **STOP means STOP** — every Lesson-One stage is Hugh-gated; D-M1
+  (posting-date policy) must be passed explicitly (`date-policy=historical|current`)
+  before any dated document is created.
+- **Container C-sources** in doctrine order, stamped per lot:
+  (a) det_trazab distinct BARRIL set `extracted-trazab`
+  (b) tabla_env2 C_INICIAL→C_FINAL where LOTE/FACTURA keys are PROVEN
+      `extracted-env2` (its FOLIO column is a packing namespace — never a key)
+  (c) regenerate per 25 kg cuñete pack standard `regenerated`
+- Bilingual EN/ES key lines in every user-facing response.
 
-## Migration Flow
-```
-FoxPro Invoice (JSON) → Quotation → Sales Order
-                       (skipping Lead/Opportunity)
-```
+## The 11 census stages
+SO → WO → BOM → Batch AMB (lot/sublot/containers/serials) → native Batch
+(projection twin) → Stock Entry→FG/Sell → label → DN → SI → Payment
+(+ Quotation where one exists upstream).
 
----
+Match keys: SO/SI by customer+factura(F-ref)+fecha (migrated twins also follow
+`SO-<folio 5d>-<customer>`); Batch AMB by golden (lote_real) incl.
+leading-zero variants; Item by family item AND `ITEM_<lote>`; BOM by family.
 
 ## Commands
 
-### Scan Migration Status
-```bash
-scan migration 2024              # Scan year 2024 (00752-00980)
-scan migration 2025              # Scan year 2025 (00980-01160)
-scan migration from 00800 to 00850  # Custom range
+### Census (read-only — no writes, ever)
+```
+migrate scan folio 752        # one folio, 11-stage gap table
+migrate scan 2024|2025        # section aggregate (>40 folios -> offline runner)
 ```
 
-### Compare Single Folio
+### Plan / execute (plan by default, `!` executes)
+```
+migrate folio 752                                  # full-chain plan + next gap
+migrate folio 752 stage so                         # stage plan
+!migrate folio 752 stage so date-policy=historical # gated draft-only execute
+!migrate folio 752 stage batch                     # L1 Batch AMB draft
+```
+Stages: `so` · `bom` (delegated) · `batch` · `coa` · others refuse honestly
+until automated.
+
+### Offline section census (scope-2 runner)
 ```bash
-compare folio 00752              # Side-by-side comparison
+bench --site <site> execute \
+  raven_ai_agent.skills.migration_fixer.census_runner.run_section \
+  --kwargs "{'year': 2024}"
+```
+Reports land in the census dir (`migration_census_dir`).
+
+### Legacy v1 (kept working)
+```
+scan migration 2024 · fix folio 00752 [confirm] · compare folio 00752 ·
+migration report [2024|2025]
 ```
 
-### Fix a Folio
-```bash
-fix folio 00752                  # Preview only (DRY RUN)
-fix folio 00752 confirm          # Apply changes
-```
-
-### Generate Report
-```bash
-migration report                 # Full report
-migration report 2024            # Year 2024 only
-```
-
----
-
-## Folio Ranges
-
-| Year | Start | End | Count |
-|------|-------|-----|-------|
-| 2024 | 00752 | 00980 | ~228 |
-| 2025 | 00980 | 01160 | ~180 |
-
----
-
-## What Gets Validated
-
-| Field | Comparison |
-|-------|------------|
-| Customer | Name matching (case-insensitive) |
-| Date | Transaction date exact match |
-| Total | Grand total with 1% tolerance |
-| Lote Real | Custom field for batch tracking |
-| Item Count | Number of line items |
-
----
-
-## What Gets Fixed
-
-1. `custom_lote_real` from FoxPro source
-2. Customer (if exact match found in ERPNext)
-3. Transaction date (if different)
-4. All changes logged for audit
-
----
-
-## Configuration
-
-### site_config.json
+## Configuration (site_config.json)
 ```json
 {
-  "foxpro_json_path": "/home/frappe/foxpro_data"
+  "migration_json_dir": ".../foxpro-staging/json_files",
+  "migration_xlsx_path": ".../reports/migration_summary 1 (1).xlsx",
+  "foxpro_dbf_dir": ".../foxpro-staging/data",
+  "migration_census_dir": ".../migration-close/census"
 }
 ```
 
-### Expected JSON Structure
-```json
-{
-  "folio": "00752",
-  "lote_real": "L001",
-  "customer": "Customer Name",
-  "fecha": "2024-01-15",
-  "total": 15000.00,
-  "items": [{"item": "PROD001", "qty": 10, "rate": 1500}]
-}
+## Example session
 ```
+User: migrate scan folio 752
+Agent: 📋 gap table — SO ✅ SO-00752-LEGOSAN AB · batch_amb ❌ MISSING ·
+       lot 0612185231 → C-source regenerated (6 × 25 kg)
 
----
+User: migrate folio 752 stage batch
+Agent: 🧭 plan (L1 golden → L2 → L3 → serials ×6 → reconcile) — nothing created
 
-## API Reference
-
-| Endpoint | Args | Description |
-|----------|------|-------------|
-| `scan_folios` | year, start_folio, end_folio | Scan range |
-| `validate_folio` | invoice_folio | Validate one |
-| `preview_fix` | invoice_folio | Dry run |
-| `apply_fix` | invoice_folio | Apply fix |
-| `compare_folio` | invoice_folio | Side-by-side |
-| `get_migration_report` | year | Full report |
-
----
-
-## Example Session
-
-```
-User: scan migration 2024
-Agent: 📊 Migration Scan - 228 scanned, 180 OK, 35 warnings, 10 errors
-
-User: compare folio 00760
-Agent: 📋 FoxPro: lote_real='L045' | ERPNext: lote_real='None' ⚠️
-
-User: fix folio 00760
-Agent: 🔍 Preview: custom_lote_real: 'None' → 'L045'
-
-User: fix folio 00760 confirm  
-Agent: ✅ Fixed: custom_lote_real updated to 'L045'
+User: !migrate folio 752 stage batch
+Agent: ✅ VERIFIED: L1 Batch AMB BATCH-AMB-… created (draft) + DoD JSON
 ```
