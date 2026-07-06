@@ -129,8 +129,7 @@ class FolioSources:
         out = set()
         for r in self.xlsx_rows():
             f = r.get("fecha")
-            if r["folio"] is not None and f is not None \
-                    and getattr(f, "year", None) == int(year):
+            if r["folio"] is not None and getattr(f, "year", None) == int(year):
                 out.add(r["folio"])
         return sorted(out)
 
@@ -141,7 +140,9 @@ class FolioSources:
             if r["folio"] is None:
                 continue
             all_f.add(r["folio"])
-            if r.get("fecha") is not None:
+            # 'dated' means a real date object — the xlsx carries the literal
+            # string 'None' for the undated folios, not an empty cell
+            if hasattr(r.get("fecha"), "year"):
                 dated.add(r["folio"])
         return sorted(all_f - dated)
 
