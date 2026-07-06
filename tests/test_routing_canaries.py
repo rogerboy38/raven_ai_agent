@@ -83,6 +83,14 @@ CANARIES = [
     ("bom plan create 0307 powder",     "skill_exact", "bom-agent"),
     ("salud bom",                       "skill_exact", "bom-agent"),
     ("bom help",                        "skill_exact", "bom-agent"),
+    # --- migration-close v2 (EN + ES): migrate scan/folio pin to
+    #     migration-fixer, NOT sales bots / crm / data-quality-scanner -------
+    ("migrate scan folio 752",          "skill_exact", "migration-fixer"),
+    ("migrate scan 2024",               "skill_exact", "migration-fixer"),
+    ("migrate folio 752",               "skill_exact", "migration-fixer"),
+    ("!migrate folio 752 stage so",     "skill_exact", "migration-fixer"),
+    ("migrar folio 752",                "skill_exact", "migration-fixer"),
+    ("censo migración 2024",            "skill_exact", "migration-fixer"),
 ]
 
 
