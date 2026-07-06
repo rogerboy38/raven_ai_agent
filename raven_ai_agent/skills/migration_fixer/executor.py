@@ -273,7 +273,21 @@ def _stage_batch_amb(frappe, folio, data, c, execute):
                 out.append("🚫 **REFUSED** — no Item resolvable for the L1 batch."
                            + _dod("refuse_no_item", f"folio-{folio}:batch_amb", verified=True))
                 continue
+            # work_order_ref is mandatory on Batch AMB (Lesson-One gate-3
+            # finding, 2026-07-06): anchor to the censused WO or refuse.
+            wo_refs = c["stages"]["work_order"]["refs"]
+            if not wo_refs:
+                out.append("🚫 **REFUSED / RECHAZADO** — Batch AMB requires work_order_ref "
+                           "and the census shows no Work Order for this folio; "
+                           "migrate the WO stage first."
+                           + _dod("refuse_no_work_order", f"folio-{folio}:batch_amb",
+                                  verified=True))
+                continue
             doc = frappe.new_doc("Batch AMB")
+            doc.work_order_ref = wo_refs[0]
+            so_refs = c["stages"]["sales_order"]["refs"]
+            if so_refs:
+                doc.sales_order_related = so_refs[0]
             doc.item_code = item
             doc.custom_golden_number = lote
             doc.batch_id = lote
