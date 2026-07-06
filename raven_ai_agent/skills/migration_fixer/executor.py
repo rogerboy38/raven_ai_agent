@@ -339,8 +339,25 @@ def _stage_coa(frappe, folio, data, c, execute):
                 out.append(f"✅ COA AMB2 **{existing}** already linked — nothing to create."
                            + _dod("noop_coa_exists", existing, verified=True))
                 continue
+            # product_item is mandatory on COA AMB2 (gate-COA finding
+            # 2026-07-06): the COA extract's own product_code is the truth,
+            # fall back to the lot batch's item, refuse if neither is an Item.
+            product = next((r.get("product_code") for r in revs
+                            if r.get("product_code")
+                            and frappe.db.exists("Item", r.get("product_code"))), None)
+            if not product:
+                batch_item = frappe.db.get_value("Batch AMB", batch_refs[0], "item_code")
+                if batch_item and frappe.db.exists("Item", batch_item):
+                    product = batch_item
+            if not product:
+                out.append("🚫 **REFUSED / RECHAZADO** — no Item for COA product "
+                           "(tried extract product_code + batch item); route to Track A."
+                           + _dod("refuse_no_coa_product_item", f"folio-{folio}:{lote}",
+                                  verified=True))
+                continue
             doc = frappe.new_doc("COA AMB2")
             doc.batch_reference = batch_refs[0]
+            doc.product_item = product
             doc.insert()
             verified = _verify_row("COA AMB2", doc.name)
             if verified:

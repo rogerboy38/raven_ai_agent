@@ -253,6 +253,61 @@ class TestBatchStage:
         assert "work_order_ref" in body
 
 
+class TestCoaStage:
+    """Gate-COA finding (2026-07-06): product_item is mandatory on COA AMB2 —
+    map it from the COA extract's product_code (Item-verified), falling back
+    to the lot batch's item; refuse when neither resolves."""
+
+    def _pilot_with_coa(self):
+        d = dict(PILOT_JSON)
+        d["coa_data"] = {"0612185231": {"revisions": [
+            {"product_code": "0612", "readings": [{"analysis_name": "PH"}]}]}}
+        return d
+
+    def _env(self, frappe_mock, data):
+        src = MagicMock()
+        src.load_folio_json = MagicMock(return_value=data)
+        return patch("raven_ai_agent.skills.migration_fixer.executor.get_sources",
+                     return_value=src)
+
+    def _census_with_batch(self):
+        cen = _census(so_refs=["SO-00752-LEGOSAN AB"], wo_refs=["MFG-WO-03726"])
+        cen["lots"]["0612185231"]["batch_amb"] = {
+            "status": "OK", "refs": ["LOTE-26-28-0001", "LOTE-26-28-0002",
+                                     "LOTE-26-28-0003"], "note": ""}
+        return cen
+
+    def test_coa_create_maps_product_item_from_extract(self, frappe_mock):
+        from raven_ai_agent.skills.migration_fixer.executor import execute_stage
+        with self._env(frappe_mock, self._pilot_with_coa()), \
+             patch("raven_ai_agent.skills.migration_fixer.executor.census_folio",
+                   return_value=self._census_with_batch()):
+            # exists: Items exist; no COA linked yet; verify-after sees the row
+            frappe_mock.db.exists = MagicMock(
+                side_effect=lambda dt, name=None: dt in ("Item", "COA AMB2")
+                and not isinstance(name, dict))
+            doc = MagicMock()
+            doc.name = "COA2-TEST"
+            frappe_mock.new_doc = MagicMock(return_value=doc)
+            body = execute_stage(752, "coa", execute=True)
+        doc.insert.assert_called_once()
+        assert doc.product_item == "0612"
+        assert doc.batch_reference == "LOTE-26-28-0001"  # L1, never L3
+        assert "VERIFIED" in body and '"verified": true' in body
+
+    def test_coa_refuses_without_resolvable_product(self, frappe_mock):
+        from raven_ai_agent.skills.migration_fixer.executor import execute_stage
+        with self._env(frappe_mock, self._pilot_with_coa()), \
+             patch("raven_ai_agent.skills.migration_fixer.executor.census_folio",
+                   return_value=self._census_with_batch()):
+            frappe_mock.db.exists = MagicMock(return_value=False)  # no Items at all
+            frappe_mock.db.get_value = MagicMock(return_value=None)
+            frappe_mock.new_doc = MagicMock()
+            body = execute_stage(752, "coa", execute=True)
+        frappe_mock.new_doc.assert_not_called()
+        assert "REFUSED" in body and "refuse_no_coa_product_item" in body
+
+
 class TestUnautomatedStagesRefuse:
     @pytest.mark.parametrize("stage", ["dn", "si", "payment", "se"])
     def test_honest_refusal(self, frappe_mock, executor_env, stage):
