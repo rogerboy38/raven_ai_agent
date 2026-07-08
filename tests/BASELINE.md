@@ -16,8 +16,17 @@
   `tests/test_pipeline_v2.py tests/test_routing_canaries.py tests/test_migration_fixer_v2.py tests/test_router_consolidation.py tests/test_live_path_e2e.py tests/test_bom_agent_skill.py tests/test_bom_agent_v2.py`
 - Auditors: never quote sandbox full-suite numbers as baseline. Cite bench runs with commit + count.
 
-## Verification command (bench)
+## Verification command (bench) — scope-pinned (F-AUD-1/2 fix)
 ```
-cd apps/raven_ai_agent && ../../env/bin/python -m pytest -q 2>&1 | tail -3
+cd apps/raven_ai_agent && ../../env/bin/python -m pytest tests/ -q 2>&1 | tail -3
 ```
-Expected after this commit: 0 failed (1 xfailed among results).
+Expected after this commit: **0 failed / 1 xfailed / 269 passed / 2 skipped**
+(the 2 skips are pre-existing import-guard skips, reasons in-file).
+
+WHY tests/ is pinned: a whole-app `pytest -q` from the app root is interrupted by
+~13 ENVIRONMENTAL collection errors (bench-python vs module drift in non-tests/
+trees) and runs 0 tests — it can never reach the expected line. Those collection
+errors are pre-existing (main had 15; this branch reduces them to 13) and are
+tracked as follow-up hygiene, not part of this baseline. `tests/` is the
+authoritative suite scope. (Independently verified: vm3 audit
+phase1-audit-20260708T020856Z, findings F-AUD-1/F-AUD-2.)
