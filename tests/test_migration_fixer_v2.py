@@ -242,15 +242,18 @@ class TestBatchStage:
         assert doc.sales_order_related == "SO-00752-LEGOSAN AB"
         assert "VERIFIED" in body and '"verified": true' in body
 
-    def test_l1_refuses_without_work_order(self, frappe_mock, executor_env):
+    def test_l1_refuses_without_any_business_anchor(self, frappe_mock, executor_env):
+        # W1 O-1 hybrid (supersedes the old refuse-without-WO gate): work_order_ref
+        # is no longer mandatory for migrated lots, but a migrated batch still
+        # needs SOME anchor — refuse only when neither a Work Order nor a Sales
+        # Order is censused.
         from raven_ai_agent.skills.migration_fixer.executor import execute_stage
-        executor_env.return_value = _census(so_refs=["SO-00752-LEGOSAN AB"])
+        executor_env.return_value = _census()  # no SO, no WO
         frappe_mock.db.exists = MagicMock(return_value=True)
         frappe_mock.new_doc = MagicMock()
         body = execute_stage(752, "batch", execute=True)
         frappe_mock.new_doc.assert_not_called()
-        assert "REFUSED" in body and "refuse_no_work_order" in body
-        assert "work_order_ref" in body
+        assert "REFUSED" in body and "refuse_no_anchor" in body
 
 
 class TestCoaStage:
@@ -392,3 +395,44 @@ class TestBilingualAndHelp:
                 can, conf = s.can_handle(q)
                 if can and conf >= 0.9:
                     assert s.handle(q) is not None, f"claimed but unhandled: {q!r}"
+
+
+class TestBatchOriginW1:
+    """W1 (Task #36, R-ID-1): the batch stage marks migrated lots
+    origin=Migrated and keeps the legacy golden verbatim; O-1 hybrid lets a
+    WO-less migrated lot anchor on its Sales Order. Companion to amb_w_spc PR-1
+    (which enforces the verbatim golden + relaxes work_order_ref)."""
+
+    def _run_batch_create(self, frappe_mock, executor_env, wo_refs=None, so_refs=None):
+        from raven_ai_agent.skills.migration_fixer.executor import execute_stage
+        executor_env.return_value = _census(
+            so_refs=so_refs, wo_refs=wo_refs, batch_status="MISSING")
+        frappe_mock.db.exists = MagicMock(return_value=True)   # item + row-after
+        frappe_mock.db.get_value = MagicMock(return_value="LEGOSAN AB")
+        doc = MagicMock()
+        doc.name = "LOTE-TEST-0001"
+        frappe_mock.new_doc = MagicMock(return_value=doc)
+        body = execute_stage(752, "batch", execute=True, date_policy="current")
+        return body, doc
+
+    def test_origin_migrated_and_verbatim_golden_with_wo(self, frappe_mock, executor_env):
+        body, doc = self._run_batch_create(
+            frappe_mock, executor_env, wo_refs=["MFG-WO-03726"])
+        doc.insert.assert_called_once()
+        assert doc.custom_batch_origin == "Migrated"
+        assert doc.custom_golden_number == "0612185231"   # lote_real, verbatim
+        assert doc.work_order_ref == "MFG-WO-03726"
+
+    def test_wo_less_migrated_anchors_on_sales_order(self, frappe_mock, executor_env):
+        # O-1 hybrid: no WO but a Sales Order → create anchored on the SO, no refuse
+        body, doc = self._run_batch_create(
+            frappe_mock, executor_env, so_refs=["SO-00752-LEGOSAN AB"])
+        doc.insert.assert_called_once()
+        assert doc.custom_batch_origin == "Migrated"
+        assert doc.sales_order_related == "SO-00752-LEGOSAN AB"
+        assert "REFUSED" not in body
+
+    def test_refuses_when_no_business_anchor(self, frappe_mock, executor_env):
+        body, doc = self._run_batch_create(frappe_mock, executor_env)  # no WO, no SO
+        doc.insert.assert_not_called()
+        assert "REFUSED" in body and "anchor" in body.lower()

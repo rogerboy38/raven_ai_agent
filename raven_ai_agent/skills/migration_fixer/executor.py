@@ -273,19 +273,25 @@ def _stage_batch_amb(frappe, folio, data, c, execute):
                 out.append("🚫 **REFUSED** — no Item resolvable for the L1 batch."
                            + _dod("refuse_no_item", f"folio-{folio}:batch_amb", verified=True))
                 continue
-            # work_order_ref is mandatory on Batch AMB (Lesson-One gate-3
-            # finding, 2026-07-06): anchor to the censused WO or refuse.
+            # W1 / R-ID-1 (O-1 hybrid): every folio migration is a MIGRATED lot —
+            # its legacy golden (lote_real) is kept VERBATIM, never WO-derived.
+            # Link the censused WO when one exists (Lesson-One pattern); a WO-less
+            # migrated lot (e.g. a pre-ERPNext blend) anchors via the Sales Order
+            # directly (work_order_ref is Native-only mandatory after amb_w_spc
+            # W1). Refuse only when there is no business anchor at all.
             wo_refs = c["stages"]["work_order"]["refs"]
-            if not wo_refs:
-                out.append("🚫 **REFUSED / RECHAZADO** — Batch AMB requires work_order_ref "
-                           "and the census shows no Work Order for this folio; "
-                           "migrate the WO stage first."
-                           + _dod("refuse_no_work_order", f"folio-{folio}:batch_amb",
+            so_refs = c["stages"]["sales_order"]["refs"]
+            if not wo_refs and not so_refs:
+                out.append("🚫 **REFUSED / RECHAZADO** — a migrated Batch AMB needs a "
+                           "business anchor: neither a Work Order nor a Sales Order is "
+                           "censused for this folio; migrate the WO or SO stage first."
+                           + _dod("refuse_no_anchor", f"folio-{folio}:batch_amb",
                                   verified=True))
                 continue
             doc = frappe.new_doc("Batch AMB")
-            doc.work_order_ref = wo_refs[0]
-            so_refs = c["stages"]["sales_order"]["refs"]
+            doc.custom_batch_origin = "Migrated"   # legacy golden kept verbatim (never re-minted)
+            if wo_refs:
+                doc.work_order_ref = wo_refs[0]
             if so_refs:
                 doc.sales_order_related = so_refs[0]
             doc.item_code = item
@@ -296,6 +302,20 @@ def _stage_batch_amb(frappe, folio, data, c, execute):
             doc.insert()
             verified = _verify_row("Batch AMB", doc.name)
             if verified:
+                # W1: record FoxPro provenance (invoice folio) on the migrated
+                # batch — best-effort, never blocks the migration.
+                try:
+                    from amb_w_spc.sfc_manufacturing.doctype.batch_amb.batch_amb import (
+                        add_migration_provenance_row,
+                    )
+                    prov = frappe.get_doc("Batch AMB", doc.name)
+                    add_migration_provenance_row(prov, folios=[str(folio)])
+                    prov.save()
+                except Exception as e:
+                    # visible skip note (sandbox review PR-2 note 2): the batch is
+                    # created OK; only the provenance row was skipped.
+                    out.append(f"- ⚠️ provenance row skipped ({type(e).__name__}) — "
+                               "batch created OK; record the FoxPro folios manually.")
                 out.append(f"✅ **VERIFIED**: L1 Batch AMB **{doc.name}** created (draft)."
                            + _dod("create_batch_amb_l1", doc.name, verified=True,
                                   extra={"lote": lote, "c_source": cs["source"]}))
