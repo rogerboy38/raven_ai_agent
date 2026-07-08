@@ -257,3 +257,94 @@ class TestWorkflowOrchestrator(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestValidateQtnDerivation(unittest.TestCase):
+    """Task #34: `validate <SO>` must derive the Quotation from the SO's own
+    link fields (items[].prevdoc_docname), never from digits inside the SO
+    number (SO-118826 previously became folio '11882')."""
+
+    def test_validate_with_so_derives_qtn_from_link(self):
+        from raven_ai_agent.agents import workflow_orchestrator as wo_mod
+
+        with patch.object(wo_mod, "resolve_document_name_safe",
+                          return_value="SO-118826-VABO-N GmbH") as mock_resolve, \
+             patch.object(wo_mod, "frappe") as mock_frappe, \
+             patch("raven_ai_agent.api.truth_hierarchy.validate_pipeline") as mock_validate, \
+             patch("raven_ai_agent.api.truth_hierarchy.format_pipeline_validation",
+                   side_effect=lambda r: f"FORMATTED:{r['target']}"):
+            mock_frappe.get_all.return_value = [
+                {"prevdoc_docname": "SAL-QTN-2026-00009"}]
+            mock_validate.side_effect = lambda name: {"target": name}
+
+            orchestrator = wo_mod.WorkflowOrchestrator()
+            result = orchestrator.process_command("validate SO-118826-VABO-N GmbH")
+
+        # QTN came from the SO's link row, not from SO-number digits
+        mock_validate.assert_called_once_with("SAL-QTN-2026-00009")
+        self.assertIn("FORMATTED:SAL-QTN-2026-00009", result)
+        # the SO (not a folio) was what we resolved
+        mock_resolve.assert_called_once_with("Sales Order", "SO-118826-VABO-N GmbH")
+        # and the link lookup hit Sales Order Item / prevdoc_docname
+        _, kwargs = mock_frappe.get_all.call_args
+        self.assertEqual(kwargs.get("filters", {}).get("parent"),
+                         "SO-118826-VABO-N GmbH")
+
+    def test_validate_with_so_but_no_linked_qtn_is_graceful(self):
+        from raven_ai_agent.agents import workflow_orchestrator as wo_mod
+
+        with patch.object(wo_mod, "resolve_document_name_safe",
+                          return_value="SO-119026-VABO-N GmbH"), \
+             patch.object(wo_mod, "frappe") as mock_frappe, \
+             patch("raven_ai_agent.api.truth_hierarchy.validate_pipeline") as mock_validate:
+            mock_frappe.get_all.return_value = []
+
+            orchestrator = wo_mod.WorkflowOrchestrator()
+            result = orchestrator.process_command("validate SO-119026-VABO-N GmbH")
+
+        mock_validate.assert_not_called()
+        self.assertIn("no linked Quotation", result)
+        self.assertIn("SO-119026-VABO-N GmbH", result)
+        # regression guard: the old bug's signature must be gone
+        self.assertNotIn("11902", result.replace("SO-119026-VABO-N GmbH", ""))
+
+    def test_validate_pure_folio_still_works(self):
+        from raven_ai_agent.agents import workflow_orchestrator as wo_mod
+
+        with patch.object(wo_mod, "resolve_document_name_safe",
+                          return_value="SAL-QTN-2026-00753") as mock_resolve, \
+             patch.object(wo_mod, "frappe"), \
+             patch("raven_ai_agent.api.truth_hierarchy.validate_pipeline") as mock_validate, \
+             patch("raven_ai_agent.api.truth_hierarchy.format_pipeline_validation",
+                   side_effect=lambda r: "FORMATTED"):
+            mock_validate.side_effect = lambda name: {"target": name}
+
+            orchestrator = wo_mod.WorkflowOrchestrator()
+            result = orchestrator.process_command("validate 0753")
+
+        mock_resolve.assert_called_once_with("Quotation", "0753")
+        mock_validate.assert_called_once_with("SAL-QTN-2026-00753")
+        self.assertIn("FORMATTED", result)
+
+    def test_folio_matcher_never_reads_digits_from_doc_tokens(self):
+        """The numeric matcher must ignore digits inside SO-/QTN- tokens."""
+        from raven_ai_agent.agents import workflow_orchestrator as wo_mod
+
+        with patch.object(wo_mod, "resolve_document_name_safe",
+                          return_value=None), \
+             patch.object(wo_mod, "frappe") as mock_frappe, \
+             patch("raven_ai_agent.api.truth_hierarchy.validate_pipeline") as mock_validate, \
+             patch("raven_ai_agent.api.truth_hierarchy.format_pipeline_validation",
+                   side_effect=lambda r: "FORMATTED"):
+            mock_frappe.get_all.return_value = []
+            mock_validate.side_effect = lambda name: {"target": name}
+
+            orchestrator = wo_mod.WorkflowOrchestrator()
+            # resolve returns None -> so_docname falls back to the raw SO
+            # token; no linked QTN -> graceful message. The point: target
+            # must NEVER become '11882'.
+            result = orchestrator.process_command("validate SO-118826-VABO-N GmbH")
+
+        for call in mock_validate.call_args_list:
+            self.assertNotEqual(call.args[0] if call.args else None, "11882")
+        self.assertIn("no linked Quotation", result)
