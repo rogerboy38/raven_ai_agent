@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Architecture: agent stacks, providers, patterns, skills"
+openwiki_generated: true
+---
+
 # Architecture: agent stacks, providers, patterns, skills
 
 ## V1 — `api/agent.py` (live)

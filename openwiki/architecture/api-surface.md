@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Architecture: `api/` surface (classification)"
+openwiki_generated: true
+---
+
 # Architecture: `api/` surface (classification)
 
 40+ modules. Classification at commit `b268ff1c`:

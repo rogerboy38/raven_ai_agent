@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Architecture: routing layers"
+openwiki_generated: true
+---
+
 # Architecture: routing layers
 
 Five routing implementations exist. Only two run in production.

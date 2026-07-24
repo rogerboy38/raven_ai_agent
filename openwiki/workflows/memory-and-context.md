@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Workflow: memory & context"
+openwiki_generated: true
+---
+
 # Workflow: memory & context
 
 Four live systems in `utils/`:

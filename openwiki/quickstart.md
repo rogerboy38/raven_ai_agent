@@ -1,6 +1,15 @@
+---
+type: "Reference"
+title: "raven_ai_agent — OpenWiki Quickstart"
+description: "Entry point for the raven_ai_agent repository wiki, covering the live Raven/Frappe AI agent stack, major architecture and workflow pages, and maintenance guidance for future updates."
+tags: [openwiki, quickstart, raven-ai-agent]
+---
+
 # raven_ai_agent — OpenWiki Quickstart
 
 > Generated 2026-07-04 at commit `b268ff1c`. Maintained via `openwiki --update`.
+
+The repository also includes a scheduled/manual GitHub Actions workflow at `.github/workflows/openwiki-update.yml` that runs `openwiki --update --print` and opens an `openwiki/update` pull request for generated wiki changes.
 
 ## What this repository is
 

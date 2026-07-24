@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Workflow: `@ai` message pipeline (live V1 path)"
+openwiki_generated: true
+---
+
 # Workflow: `@ai` message pipeline (live V1 path)
 
 What actually happens when a user types `@ai diagnose SO-00752` in a Raven channel.
