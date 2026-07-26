@@ -729,7 +729,7 @@ class BaseMixin:
             return executor.create_invoice_from_delivery_note(dn_match.group(1).upper(), confirm=is_confirm)
         
         # Workflow status
-        if "workflow status" in query_lower or "track" in query_lower:
+        if "workflow status" in query_lower or "track order" in query_lower or "track workflow" in query_lower:
             q_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
             so_match = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
             return executor.get_workflow_status(
