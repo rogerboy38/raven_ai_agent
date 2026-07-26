@@ -582,6 +582,58 @@ class WorkflowExecutor:
             "message": f"Workflow complete: {len(steps_completed)} steps"
         }
 
+    def get_workflow_status(self, quotation_name: str = None, so_name: str = None) -> Dict:
+        """C-4 (PATCHSPEC 5265d93f): walk Quotation -> SO -> WO/DN -> Invoice.
+
+        Joins: Sales Order Item.prevdoc_docname (SO <- Quotation),
+        Delivery Note Item.against_sales_order, Sales Invoice Item.sales_order.
+        """
+        try:
+            stages = []
+            if not so_name and quotation_name:
+                rows = frappe.get_all("Sales Order Item",
+                    filters={"prevdoc_docname": quotation_name, "docstatus": ["<", 2]},
+                    fields=["parent"], distinct=True, limit=1)
+                if rows:
+                    so_name = rows[0].parent
+                stages.append({"stage": "Quotation", "name": quotation_name,
+                    "status": frappe.db.get_value("Quotation", quotation_name, "status") or "Unknown"})
+            if not so_name:
+                return {"success": False, "stages": stages,
+                    "message": "No Sales Order found" + (f" for Quotation {quotation_name}" if quotation_name else "")}
+            so = frappe.db.get_value("Sales Order", so_name,
+                ["name", "status", "customer", "grand_total"], as_dict=True)
+            if not so:
+                return {"success": False, "message": f"Sales Order {so_name} not found", "stages": stages}
+            if not quotation_name:
+                q = frappe.get_all("Sales Order Item",
+                    filters={"parent": so_name, "prevdoc_docname": ["is", "set"]},
+                    fields=["prevdoc_docname"], distinct=True, limit=1)
+                if q:
+                    stages.append({"stage": "Quotation", "name": q[0].prevdoc_docname,
+                        "status": frappe.db.get_value("Quotation", q[0].prevdoc_docname, "status") or "Unknown"})
+            stages.append({"stage": "Sales Order", "name": so.name, "status": so.status,
+                "customer": so.customer, "grand_total": so.grand_total})
+            for wo in frappe.get_all("Work Order", filters={"sales_order": so_name},
+                    fields=["name", "status"]):
+                stages.append({"stage": "Work Order", "name": wo.name, "status": wo.status})
+            for dn in {r.parent for r in frappe.get_all("Delivery Note Item",
+                    filters={"against_sales_order": so_name, "docstatus": ["<", 2]},
+                    fields=["parent"], distinct=True)}:
+                stages.append({"stage": "Delivery Note", "name": dn,
+                    "status": frappe.db.get_value("Delivery Note", dn, "status") or "Unknown"})
+            for si in {r.parent for r in frappe.get_all("Sales Invoice Item",
+                    filters={"sales_order": so_name, "docstatus": ["<", 2]},
+                    fields=["parent"], distinct=True)}:
+                stages.append({"stage": "Sales Invoice", "name": si,
+                    "status": frappe.db.get_value("Sales Invoice", si, "status") or "Unknown"})
+            summary = " -> ".join(f"{s['stage']} {s['name']} ({s['status']})" for s in stages)
+            return {"success": True, "stages": stages,
+                "message": summary or f"No downstream documents for {so_name}"}
+        except Exception as e:
+            frappe.log_error(f"get_workflow_status failed: {e}", "raven_ai_agent C-4")
+            return {"success": False, "message": f"workflow status lookup failed: {e}", "stages": []}
+
 
 # =============================================================================
 # MIGRATION CONVENIENCE FUNCTIONS (backward compat)

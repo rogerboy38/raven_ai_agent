@@ -183,7 +183,7 @@ class CommandRouterMixin:
         # custom posting_date. Falls through to dispatch at ~line 237.
 
         # Workflow status
-        if "workflow status" in query_lower or "track" in query_lower:
+        if "workflow status" in query_lower or "track order" in query_lower or "track workflow" in query_lower:
             q_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
             so_match2 = re.search(r'(SAL-ORD-\d+-\d+)', query, re.IGNORECASE)
             return executor.get_workflow_status(

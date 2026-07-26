@@ -226,7 +226,7 @@ def _run_full_workflow(quotation_name: str, channel_id: str,
         _publish_progress(channel_id, "workflow", 5,
                          f"Starting workflow for {quotation_name}...", task_id)
         
-        from raven_ai_agent.api.workflow_executor import WorkflowExecutor
+        from raven_ai_agent.api.workflows import WorkflowExecutor
         executor = WorkflowExecutor(
             user=frappe.session.user,
             dry_run=dry_run
