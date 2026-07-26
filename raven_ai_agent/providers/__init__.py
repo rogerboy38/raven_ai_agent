@@ -9,6 +9,7 @@ from .openai_provider import OpenAIProvider
 from .deepseek import DeepSeekProvider
 from .claude import ClaudeProvider
 from .minimax import MiniMaxProvider
+from .ollama import OllamaProvider
 
 
 def get_provider(provider_name: str, settings: Dict) -> LLMProvider:
@@ -19,7 +20,7 @@ def get_provider(provider_name: str, settings: Dict) -> LLMProvider:
         "deepseek": DeepSeekProvider,
         "claude": ClaudeProvider,
         "minimax": MiniMaxProvider,
-        # "ollama": OllamaProvider,      # Coming soon
+        "ollama": OllamaProvider,
     }
     
     provider_class = providers.get(provider_name.lower())
