@@ -912,3 +912,9 @@ services/claw.env
 services/claude.env
 services/*.env
 services/*.env.bak
+
+# SYM-001: no-trailing-slash entries — dir patterns above do NOT match SYMLINKS,
+# which is how 3 absolute-path links were swept in by blanket-add automation.
+tmp
+raven_ai_agent/tmp
+raven_ai_agent/public/node_modules
