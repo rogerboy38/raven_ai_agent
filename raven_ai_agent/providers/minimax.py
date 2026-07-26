@@ -170,7 +170,9 @@ class MiniMaxProvider(LLMProvider):
             if "error" in data:
                 raise Exception(f"MiniMax API error: {data['error']}")
             
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"]["content"]
+            import re as _re
+            return _re.sub(r"<think>.*?</think>", "", content, flags=_re.S).strip()
     
     def chat_stream(
         self,
