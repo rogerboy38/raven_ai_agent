@@ -667,6 +667,29 @@ class WorkflowOrchestrator:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def _quotation_for_sales_order(self, so_name: str) -> Optional[str]:
+        """Return the Quotation this Sales Order was mapped from, or None.
+
+        Reads the SO items' prevdoc_docname back-link (first non-empty row
+        wins) \u2014 the same field the Quotation->SO mapper writes. Read-only;
+        any lookup failure returns None (caller renders the graceful path).
+        Task #34.
+        """
+        try:
+            rows = frappe.get_all(
+                "Sales Order Item",
+                filters={"parent": so_name, "prevdoc_docname": ["!=", ""]},
+                fields=["prevdoc_docname"],
+                order_by="idx",
+                limit=1,
+            )
+            if rows:
+                value = rows[0].get("prevdoc_docname") if isinstance(rows[0], dict) else rows[0].prevdoc_docname
+                return value or None
+            return None
+        except Exception:
+            return None
+
     # ========== MAIN COMMAND HANDLER ==========
 
     def process_command(self, message: str) -> str:
@@ -700,8 +723,13 @@ class WorkflowOrchestrator:
         qtn_match = re.search(qtn_pattern, message, re.IGNORECASE)
         qtn_name = qtn_match.group(1) if qtn_match else None
         
-        # Also check for numeric-only names like 0753
-        numeric_match = re.search(r'(\d{3,5})', message, re.IGNORECASE)
+        # Also check for numeric-only names like 0753.
+        # Task #34: strip document tokens FIRST so the folio matcher can
+        # never chew digits out of an SO/QTN number (SO-118826 previously
+        # yielded folio '11882' -> "Quotation '11882' not found").
+        message_wo_doc_tokens = re.sub(so_pattern, " ", message, flags=re.IGNORECASE)
+        message_wo_doc_tokens = re.sub(qtn_pattern, " ", message_wo_doc_tokens, flags=re.IGNORECASE)
+        numeric_match = re.search(r'(\d{3,5})', message_wo_doc_tokens, re.IGNORECASE)
         numeric_name = numeric_match.group(1) if numeric_match else None
 
         # ---- HELP ----
@@ -738,14 +766,30 @@ class WorkflowOrchestrator:
             if not subcommand_arg:
                 return self._validate_mini_help()
             
-            # Argument present: run validation
-            # Use qtn_name if found, otherwise try numeric_name
-            target = qtn_name if qtn_name else (numeric_name if numeric_name else subcommand_arg)
-            
-            # Resolve partial/mistyped names
-            resolved = resolve_document_name_safe("Quotation", target)
-            if resolved:
-                target = resolved
+            # Argument present: run validation.
+            # Task #34: an SO token means "validate the quotation this order
+            # came from" -- derive it from the SO's own link fields
+            # (items[].prevdoc_docname), never from digits in the SO number.
+            if so_name and not qtn_name:
+                resolved_so = resolve_document_name_safe("Sales Order", so_name)
+                so_docname = resolved_so if isinstance(resolved_so, str) and resolved_so else so_name
+                qtn_from_so = self._quotation_for_sales_order(so_docname)
+                if not qtn_from_so:
+                    return (
+                        f"\u274c Sales Order '{so_docname}' has no linked Quotation "
+                        f"(no prevdoc reference on its item rows) \u2014 nothing to "
+                        f"validate upstream. If you know the quotation, run "
+                        f"`validate SAL-QTN-...` directly."
+                    )
+                target = qtn_from_so
+            else:
+                # Use qtn_name if found, otherwise try numeric_name
+                target = qtn_name if qtn_name else (numeric_name if numeric_name else subcommand_arg)
+
+                # Resolve partial/mistyped names
+                resolved = resolve_document_name_safe("Quotation", target)
+                if resolved:
+                    target = resolved
             
             try:
                 from raven_ai_agent.api.truth_hierarchy import validate_pipeline, format_pipeline_validation
