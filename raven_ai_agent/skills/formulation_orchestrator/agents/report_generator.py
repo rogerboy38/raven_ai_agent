@@ -83,12 +83,12 @@ class ReportGenerator(BaseSubAgent):
         
         if report_type in ['full', 'compliance']:
             report["compliance"] = self._format_compliance(
-                phases.get('compliance', {})
+                phases.get('tds_compliance', {})
             )
         
         if report_type in ['full', 'cost']:
             report["costs"] = self._format_costs(
-                phases.get('costs', {})
+                phases.get('cost_calculation', {})
             )
         
         if report_type == 'full':
@@ -161,7 +161,7 @@ class ReportGenerator(BaseSubAgent):
         request = workflow_state.get('request', {})
         phases = workflow_state.get('phases', {})
         batch_selection = phases.get('batch_selection', {})
-        costs = phases.get('costs', {})
+        costs = phases.get('cost_calculation', {})
         
         # Build production order structure
         production_order = {
@@ -420,8 +420,8 @@ class ReportGenerator(BaseSubAgent):
         """Generate actionable recommendations based on workflow results."""
         recommendations = []
         
-        compliance = phases.get('compliance', {})
-        costs = phases.get('costs', {})
+        compliance = phases.get('tds_compliance', {})
+        costs = phases.get('cost_calculation', {})
         optimization = phases.get('optimization', {})
         batch_selection = phases.get('batch_selection', {})
         

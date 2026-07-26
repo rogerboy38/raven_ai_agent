@@ -373,8 +373,8 @@ class FormulationOrchestratorSkill(SkillBase):
         
         # Fallback to basic summary
         batch_sel = phases.get('batch_selection', {})
-        compliance = phases.get('compliance', {})
-        costs = phases.get('costs', {})
+        compliance = phases.get('tds_compliance', {})
+        costs = phases.get('cost_calculation', {})
         
         lines = [
             f"🧪 **Formulation Workflow Complete**",
