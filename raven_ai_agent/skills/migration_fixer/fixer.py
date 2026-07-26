@@ -41,6 +41,19 @@ class MigrationFixer:
         """
         self.json_path = json_source_path or frappe.conf.get("foxpro_json_path", "/home/frappe/foxpro_data")
         self.fix_log = []
+        self._folio_fields_ok = None
+
+    def has_folio_fields(self) -> bool:
+        """F-CER-1b guard: some sites do not carry the folio custom fields on
+        Quotation (custom_invoice_folio / custom_lote_real). Degrade gracefully
+        (report, never 1054) when absent; INSTALLING them is a migration-lane
+        design decision (D3/lote_real territory), never a patch here."""
+        if self._folio_fields_ok is None:
+            self._folio_fields_ok = bool(
+                frappe.db.has_column("Quotation", "custom_invoice_folio")
+                and frappe.db.has_column("Quotation", "custom_lote_real")
+            )
+        return self._folio_fields_ok
         
     # ==========================================
     # JSON Source Methods
@@ -97,16 +110,17 @@ class MigrationFixer:
     
     def get_quotation_by_folio(self, invoice_folio: str) -> Optional[Dict]:
         """Find Quotation linked to invoice folio"""
-        # Try custom field first
-        quotations = frappe.get_all(
-            "Quotation",
-            filters={"custom_invoice_folio": invoice_folio},
-            fields=["name", "party_name", "transaction_date", "grand_total", "status", 
-                   "custom_invoice_folio", "custom_lote_real"]
-        )
-        
-        if quotations:
-            return frappe.get_doc("Quotation", quotations[0].name)
+        # Try custom field first (only when this site carries the folio fields)
+        if self.has_folio_fields():
+            quotations = frappe.get_all(
+                "Quotation",
+                filters={"custom_invoice_folio": invoice_folio},
+                fields=["name", "party_name", "transaction_date", "grand_total", "status", 
+                       "custom_invoice_folio", "custom_lote_real"]
+            )
+            
+            if quotations:
+                return frappe.get_doc("Quotation", quotations[0].name)
         
         # Try searching in title/remarks
         quotations = frappe.get_all(
@@ -147,6 +161,8 @@ class MigrationFixer:
     
     def get_quotations_in_range(self, start_folio: str, end_folio: str) -> List[Dict]:
         """Get all quotations in folio range"""
+        if not self.has_folio_fields():
+            return []
         return frappe.get_all(
             "Quotation",
             filters=[
@@ -456,6 +472,13 @@ class MigrationFixer:
         report.append("# Migration Status Report")
         report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         report.append("")
+        
+        if not self.has_folio_fields():
+            report.append("⚠️ The folio custom fields (custom_invoice_folio / custom_lote_real)")
+            report.append("are NOT installed on this site's Quotation doctype — the folio-keyed")
+            report.append("census is unavailable here (F-CER-1b). Installing them is a")
+            report.append("migration-lane design decision; this skill degrades rather than crash.")
+            return "\n".join(report)
         
         for yr in ranges:
             range_info = self.FOLIO_RANGES.get(yr, {})
