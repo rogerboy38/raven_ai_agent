@@ -156,7 +156,7 @@ def compare_folio(invoice_folio: str) -> Dict:
     if quotation:
         result["erpnext"] = {
             "name": quotation.name,
-            "customer": quotation.customer,
+            "customer": quotation.party_name,
             "date": str(quotation.transaction_date),
             "total": float(quotation.grand_total),
             "lote_real": getattr(quotation, 'custom_lote_real', None),

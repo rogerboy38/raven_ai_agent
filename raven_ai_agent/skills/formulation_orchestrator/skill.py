@@ -153,9 +153,17 @@ class FormulationOrchestratorSkill(SkillBase):
         product_match = re.search(r'(?:product|codigo|code)[:\s]*(\d{4})', query, re.IGNORECASE)
         if product_match:
             request["product_code"] = product_match.group(1)
-        
-        # Extract quantity
-        qty_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:kg|kilos?|units?|piezas?)?', query, re.IGNORECASE)
+
+        # Resolve a bare product code to its Item when one exists, so the
+        # report's Item line shows the real document instead of None
+        if not request.get("item_code") and request.get("product_code") \
+                and frappe.db.exists("Item", request["product_code"]):
+            request["item_code"] = request["product_code"]
+
+        # Extract quantity — the unit suffix is REQUIRED: a bare number is not
+        # a quantity (a 4-digit product code would otherwise parse as one, e.g.
+        # "product 0616" -> Quantity 616.0). No quantity = browse the product.
+        qty_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:kg|kilos?|units?|piezas?)\b', query, re.IGNORECASE)
         if qty_match:
             request["quantity_required"] = float(qty_match.group(1))
         

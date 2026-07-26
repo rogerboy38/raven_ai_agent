@@ -236,10 +236,12 @@ class BatchSelectorAgent(BaseSubAgent):
         tds_spec = payload.get('tds_spec')
         cost_priority = payload.get('cost_priority', 0.3)
         
-        # Get FEFO-sorted batches
+        # Get FEFO-sorted batches; fall back to the explicit payload
+        # product_code when the item code is not golden-format (twin of the
+        # AB-001 fix in _select_batches)
         parsed = parse_golden_number(item_code)
-        product_code = parsed['product'] if parsed else None
-        
+        product_code = parsed['product'] if parsed else payload.get('product_code')
+
         available = get_available_batches(product_code, warehouse)
         
         if not available:

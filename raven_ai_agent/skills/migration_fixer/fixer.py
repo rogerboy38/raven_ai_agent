@@ -101,7 +101,7 @@ class MigrationFixer:
         quotations = frappe.get_all(
             "Quotation",
             filters={"custom_invoice_folio": invoice_folio},
-            fields=["name", "customer", "transaction_date", "grand_total", "status", 
+            fields=["name", "party_name", "transaction_date", "grand_total", "status", 
                    "custom_invoice_folio", "custom_lote_real"]
         )
         
@@ -153,7 +153,7 @@ class MigrationFixer:
                 ["custom_invoice_folio", ">=", start_folio],
                 ["custom_invoice_folio", "<=", end_folio]
             ],
-            fields=["name", "customer", "transaction_date", "grand_total", "status",
+            fields=["name", "party_name", "transaction_date", "grand_total", "status",
                    "custom_invoice_folio", "custom_lote_real"],
             order_by="custom_invoice_folio"
         )
@@ -200,7 +200,7 @@ class MigrationFixer:
         
         result["erpnext_data"] = {
             "name": quotation.name,
-            "customer": quotation.customer,
+            "customer": quotation.party_name,
             "date": str(quotation.transaction_date),
             "total": float(quotation.grand_total),
             "items": [{"item": i.item_code, "qty": i.qty, "rate": i.rate} 
@@ -222,9 +222,9 @@ class MigrationFixer:
         
         # Customer comparison
         foxpro_customer = foxpro.get("customer") or foxpro.get("cliente") or foxpro.get("client_name")
-        if foxpro_customer and quotation.customer:
-            if foxpro_customer.lower().strip() not in quotation.customer.lower():
-                issues.append(f"Customer mismatch: FoxPro='{foxpro_customer}' vs ERPNext='{quotation.customer}'")
+        if foxpro_customer and quotation.party_name:
+            if foxpro_customer.lower().strip() not in quotation.party_name.lower():
+                issues.append(f"Customer mismatch: FoxPro='{foxpro_customer}' vs ERPNext='{quotation.party_name}'")
         
         # Total comparison (with 1% tolerance)
         foxpro_total = float(foxpro.get("total") or foxpro.get("grand_total") or foxpro.get("importe") or 0)
@@ -358,10 +358,10 @@ class MigrationFixer:
         if foxpro_customer:
             # Check if customer exists in ERPNext
             customer_match = frappe.db.exists("Customer", {"customer_name": ["like", f"%{foxpro_customer}%"]})
-            if customer_match and customer_match != quotation.customer:
+            if customer_match and customer_match != quotation.party_name:
                 changes.append({
-                    "field": "customer",
-                    "old": quotation.customer,
+                    "field": "party_name",
+                    "old": quotation.party_name,
                     "new": customer_match,
                     "type": "update"
                 })
