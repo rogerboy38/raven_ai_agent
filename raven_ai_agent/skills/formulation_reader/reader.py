@@ -18,7 +18,7 @@ Key Doctypes (from spec):
 - Item: item_code (ITEM_XXXXXXXXXX), custom_foxpro_golden_number, custom_product_key
 - Batch: name (LOTExxxx), batch_id, item, batch_qty, manufacturing_date, expiry_date
 - Bin: item_code, warehouse ('FG to Sell Warehouse - AMB-W'), actual_qty
-- COA AMB: name, customer, item_code, lot_number, child table 'COA Quality Test Parameter'
+- COA AMB: name, customer, item_code, custom_golden_number (COA AMB2: batch_reference), child table 'COA Quality Test Parameter'
   - Child fields: specification (param name!), result (value), numeric, min_value, max_value, status
 
 All operations are READ-ONLY. No data modifications are allowed.
@@ -230,6 +230,12 @@ def get_available_batches(
         List of batch dicts sorted by FEFO key (oldest first), each containing:
         - item_code, batch_name, warehouse, qty, product, folio, year, fefo_key
     """
+    # Fail closed: without a resolved product/item there is nothing valid
+    # to select. (Previously product_code=None admitted EVERY golden bin in
+    # the warehouse, producing arbitrary FEFO-head picks.)
+    if not product_code:
+        return []
+
     # Build filters for Bin query
     filters = {'actual_qty': ['>', 0]}
     if warehouse:
@@ -244,12 +250,15 @@ def get_available_batches(
     results = []
     for bin_record in bins:
         parsed = parse_golden_number(bin_record.item_code)
-        if not parsed:
-            continue
-        
-        # Filter by product code if specified
-        if product_code and parsed['product'] != product_code:
-            continue
+        if parsed:
+            # Golden-format bin: admit only the queried product's batches
+            if parsed['product'] != product_code:
+                continue
+        else:
+            # Plain-named bin (e.g. item_code '0307'): admit only when it
+            # IS the queried product/item code exactly
+            if bin_record.item_code != product_code:
+                continue
         
         # Get batch info for this item
         batches = frappe.get_all('Batch',
@@ -265,10 +274,10 @@ def get_available_batches(
             'batch_name': batch_name,
             'warehouse': bin_record.warehouse,
             'qty': bin_record.actual_qty,
-            'product': parsed['product'],
-            'folio': parsed['folio'],
-            'year': parsed['full_year'],
-            'fefo_key': parsed['fefo_key']
+            'product': parsed['product'] if parsed else bin_record.item_code,
+            'folio': parsed['folio'] if parsed else None,
+            'year': parsed['full_year'] if parsed else None,
+            'fefo_key': parsed['fefo_key'] if parsed else float('inf')
         })
     
     # Sort by FEFO key (oldest first)
@@ -298,8 +307,12 @@ def get_batch_coa_parameters(batch_name: str) -> Optional[Dict[str, Dict[str, An
     coa_name = None
     coa_source = None
     
+    # COA AMB has no lot_number column; it keys COAs by the 10-digit golden
+    # number (custom_golden_number), reachable from a Batch docname via
+    # Batch.batch_id. Keep raw batch_name as fallback for direct-golden callers.
+    golden = frappe.db.get_value('Batch', batch_name, 'batch_id') or batch_name
     coas = frappe.get_all('COA AMB',
-        filters={'lot_number': batch_name},
+        filters={'custom_golden_number': golden},
         fields=['name'],
         limit=1
     )
@@ -310,7 +323,7 @@ def get_batch_coa_parameters(batch_name: str) -> Optional[Dict[str, Dict[str, An
     else:
         # Fallback to COA AMB2 (internal COA)
         coas2 = frappe.get_all('COA AMB2',
-            filters={'lot_number': batch_name},
+            filters={'batch_reference': batch_name},
             fields=['name'],
             limit=1
         )

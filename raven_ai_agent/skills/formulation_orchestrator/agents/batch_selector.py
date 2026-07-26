@@ -80,9 +80,10 @@ class BatchSelectorAgent(BaseSubAgent):
         self._log(f"Selecting batches for {item_code} in {warehouse}")
         self.send_status("selecting", {"item_code": item_code})
         
-        # Parse item code to get product code
+        # Parse item code to get product code; fall back to the explicit
+        # payload product_code when the item code is not golden-format
         parsed = parse_golden_number(item_code)
-        product_code = parsed['product'] if parsed else None
+        product_code = parsed['product'] if parsed else payload.get('product_code')
         
         # Get all available batches sorted by FEFO
         available = get_available_batches(
