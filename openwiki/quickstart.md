@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "raven_ai_agent — OpenWiki Quickstart"
+openwiki_generated: true
+---
+
 # raven_ai_agent — OpenWiki Quickstart
 
 > Generated 2026-07-04 at commit `b268ff1c`. Maintained via `openwiki --update`.

@@ -1,4 +1,8 @@
 {
-  "updatedAt": "2026-07-04T14:00:00.000Z",
-  "gitHead": "b268ff1cb4774af03f7ae1206cc081f4ba2fcc10"
+  "updatedAt": "2026-08-03T14:17:18.896Z",
+  "command": "update",
+  "gitHead": "303ebbe35fcc3ae63d41b985cbabe8205a4233e0",
+  "model": "gpt-5.5",
+  "status": "complete",
+  "language": "en"
 }

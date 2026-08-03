@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Testing"
+openwiki_generated: true
+---
+
 # Testing
 
 ## The golden bar: 43/43 regression suite
