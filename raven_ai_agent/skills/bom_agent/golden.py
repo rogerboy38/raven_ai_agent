@@ -11,20 +11,32 @@ from typing import Optional, Tuple
 # Source comments disagree on width (DQS spec says 10 digits incl. plant,
 # its own example is 9). Accept both: 10-digit {prod4}{folio3}{yy2}{plant1}
 # first, else 9-digit {prod4}{folio3}{yy2}.
-GOLDEN10_RE = re.compile(r"\b(\d{4})(\d{3})(\d{2})([1-5])\b")
-GOLDEN9_RE = re.compile(r"\b(\d{4})(\d{3})(\d{2})")  # loose tail: tolerates longer runs
+GOLDEN10_RE = re.compile(r"\b(\d{4})(\d{3})(\d{2})([1-5])\b", re.ASCII)
+GOLDEN9_RE = re.compile(r"\b(\d{4})(\d{3})(\d{2})", re.ASCII)  # loose tail: tolerates longer runs
 
 PLANTS = {"1": "Mix", "2": "Dry", "3": "Juice", "4": "Laboratory", "5": "Formulated"}
+
+# Rung 4 year fuse — MIRROR of amb_w_spc golden_number.GOLDEN_YY_FLOOR
+# (drift-tested from the amb_w_spc suite; keep the two values equal). Floor =
+# oldest legacy YY observed across all four golden registers (20, measured
+# 2026-08-16). Upper bound derives from the clock at call time — the year
+# range is this parser's only discriminating tooth besides plant [1-5].
+GOLDEN_YY_FLOOR = 20
+
+
+def _yy_in_window(year: int) -> bool:
+    from datetime import datetime
+    return GOLDEN_YY_FLOOR <= year <= (datetime.now().year + 1) % 100
 
 
 def parse(code: str) -> Optional[dict]:
     m = GOLDEN10_RE.search(code or "")
-    if m:
+    if m and _yy_in_window(int(m.group(3))):
         product, folio, year, plant = m.groups()
         return {"product": product, "folio": int(folio), "year": int(year),
                 "plant": PLANTS.get(plant, plant), "golden": m.group(0)}
     m = GOLDEN9_RE.search(code or "")
-    if m:
+    if m and _yy_in_window(int(m.group(3))):
         product, folio, year = m.groups()
         return {"product": product, "folio": int(folio), "year": int(year),
                 "plant": None, "golden": m.group(0)}
