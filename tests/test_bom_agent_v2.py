@@ -117,6 +117,28 @@ class TestP7GoldenFefo:
         ranked = sorted(codes, key=golden.fefo_key)
         assert ranked == ["0227001251", "0227002251", "0227003261", "NOGOLDEN"]
 
+    def test_year_fuse_gates_parse_and_fefo(self, frappe_mock):
+        # TR-1 regression lock: the year tooth must GATE parse(), not merely
+        # exist — removing the fuse call must turn this red. Probes cover
+        # below-floor, the measured FoxPro false-match class (yy 41), an
+        # absurd year, and one past the clock-derived ceiling, so neither a
+        # gate removal nor a widened window ships quietly.
+        from datetime import datetime
+        from raven_ai_agent.skills.bom_agent import golden
+        past_ceiling = (datetime.now().year + 2) % 100
+        bad = [
+            "0227001191",                    # yy 19 — below GOLDEN_YY_FLOOR
+            "227036241",                     # yy 41 — measured false-match, was FEFO-first
+            "0227001991",                    # yy 99 — absurd
+            f"0227001{past_ceiling:02d}1",   # one past the derived ceiling
+        ]
+        for code in bad:
+            assert golden.parse(code) is None, code
+            assert golden.fefo_key(code) == (99, 999), code
+        ok = golden.parse("0227001251")      # in-window control (yy 25)
+        assert ok is not None and ok["year"] == 25
+        assert golden.fefo_key("0227001251") == (25, 1)
+
     def test_bom_lots_ranks_and_labels(self, frappe_mock):
         rows = [MagicMock(name_=None) for _ in range(2)]
         r1 = MagicMock(batch_qty=10, item="0227"); r1.name = "0227002251"
