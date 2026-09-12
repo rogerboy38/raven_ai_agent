@@ -26,6 +26,8 @@ import re
 from typing import Optional, Dict, List
 from openai import OpenAI
 
+from raven_ai_agent.providers import get_provider
+
 # Import channel utilities for realtime events
 from raven_ai_agent.api.channel_utils import publish_message_created_event
 
@@ -152,12 +154,31 @@ class RaymondLucyAgent(
     def __init__(self, user: str):
         self.user = user
         self.settings = self._get_settings()
-        # Bug fix: Only initialize client if API key is available
-        api_key = self.settings.get("openai_api_key")
-        if api_key:
-            self.client = OpenAI(api_key=api_key)
-        else:
-            self.client = None
+        # Honour `default_provider` on the mention path. This used to build an
+        # OpenAI client unconditionally, so a site configured for MiniMax or
+        # Ollama still billed OpenAI -- and once the OpenAI credit was gone it
+        # returned 429 while the UI showed a local provider.
+        self.provider = None
+        self.client = None
+        provider_name = (self.settings.get("default_provider") or "").strip()
+        if provider_name:
+            try:
+                self.provider = get_provider(provider_name, self.settings)
+            except (ValueError, Exception):
+                # Unknown or mis-configured provider must not take the agent
+                # down; fall through to the OpenAI path below and say so.
+                frappe.log_error(
+                    f"provider {provider_name!r} could not be built; falling back to OpenAI",
+                    "raven_ai_agent provider selection")
+                self.provider = None
+        # OpenAI stays the fallback when `default_provider` is unset or failed.
+        # `self.client` is kept populated for the OpenAI case because other call
+        # sites still reach for the raw SDK client.
+        if self.provider is not None:
+            self.client = getattr(self.provider, "client", None)
+        elif self.settings.get("openai_api_key"):
+            self.provider = get_provider("openai", self.settings)
+            self.client = getattr(self.provider, "client", None)
         self.model = self.settings.get("model", "gpt-4o-mini")
         self.autonomy_level = 1  # Default to COPILOT
 
@@ -167,13 +188,30 @@ class RaymondLucyAgent(
         try:
             settings = frappe.get_single("AI Agent Settings")
             api_key = settings.get_password("openai_api_key")
-            if api_key:
-                return {
+            provider = (settings.get("default_provider") or "").strip()
+            # Previously this returned ONLY when an OpenAI key existed, so a
+            # site configured purely for MiniMax/Ollama fell through to `{}`
+            # and no provider could be selected at all.
+            if api_key or provider:
+                out = {
                     "openai_api_key": api_key,
+                    "default_provider": provider,
                     "model": settings.model or "gpt-4o-mini",
                     "max_tokens": settings.max_tokens or 2000,
-                    "confidence_threshold": settings.confidence_threshold or 0.7
+                    "confidence_threshold": settings.confidence_threshold or 0.7,
                 }
+                # Pass the per-provider credentials through so get_provider()
+                # can build something other than OpenAI.
+                for f in ("minimax_api_key", "minimax_cp_key", "deepseek_api_key",
+                          "claude_api_key"):
+                    try:
+                        out[f] = settings.get_password(f)
+                    except Exception:
+                        out[f] = None
+                for f in ("minimax_group_id", "minimax_model", "ollama_base_url",
+                          "ollama_model", "deepseek_model", "claude_model"):
+                    out[f] = settings.get(f)
+                return out
         except Exception:
             pass
 
@@ -311,23 +349,26 @@ class RaymondLucyAgent(
         messages.append({"role": "user", "content": query + autonomy_warning})
 
         # Bug fix: Check if API key is available before calling LLM
-        if not self.client:
+        # `self.provider`, not `self.client`: a MiniMax or Ollama provider has no
+        # OpenAI SDK client, so gating on `self.client` reported "not configured"
+        # for a correctly configured non-OpenAI site.
+        if not self.provider:
             return {
                 "success": False,
-                "response": "❌ AI service not configured. Please configure an API key in AI Agent Settings, Raven Settings, or site config (openai_api_key). Without an API key, I can only perform basic queries that don't require AI.",
-                "error": "OPENAI_API_KEY not configured"
+                "response": "❌ AI service not configured. Please set a Default AI Provider and its key in AI Agent Settings, Raven Settings, or site config. Without one, I can only perform basic queries that don't require AI.",
+                "error": "NO_PROVIDER_CONFIGURED"
             }
 
         # Call LLM
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # Every provider implements chat(); the raw SDK call only ever
+            # worked for OpenAI, which is what pinned this path to OpenAI.
+            answer = self.provider.chat(
                 messages=messages,
+                model=self.model,
                 max_tokens=self.settings.get("max_tokens", 2000),
-                temperature=0.3
+                temperature=0.3,
             )
-
-            answer = response.choices[0].message.content
 
             # Phase 8A: Anti-Hallucination Validation
             # Extract context data from erpnext_context for validation

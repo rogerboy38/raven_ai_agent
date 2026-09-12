@@ -90,9 +90,16 @@ class MiniMaxProvider(LLMProvider):
 
         self.api_key = api_key
         self.group_id = group_id
-        # Use M2.1 for Coding Plan keys (sk-cp-), M2 for regular keys
+        # Use M2.1 for Coding Plan keys (sk-cp-), M2 for regular keys.
         default = "MiniMax-M2.1" if api_key.startswith("sk-cp-") else "MiniMax-M2"
-        self.default_model = settings.get("minimax_model") or default
+        # The key-derived default wins over the stored `minimax_model`, which
+        # was the other way round: a value saved before the Coding Plan key was
+        # issued (e.g. an older model name) silently out-ranked the default the
+        # key itself implies, so an sk-cp- key kept talking to the wrong model.
+        # NOTE this makes `minimax_model` inert while the key implies a model --
+        # see the DoD; the narrower variant is to ignore only values outside the
+        # known-good set.
+        self.default_model = default or settings.get("minimax_model")
         self.model = self.default_model
     
     def chat(

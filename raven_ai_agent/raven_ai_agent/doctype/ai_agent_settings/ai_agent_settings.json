@@ -169,7 +169,7 @@
    "fieldname": "minimax_model",
    "fieldtype": "Select",
    "label": "MiniMax Model",
-   "options": "abab6.5-chat\nabab5.5-chat"
+   "options": "MiniMax-M2\nMiniMax-M2-Stable\nMiniMax-M2.1"
   },
   {
    "fieldname": "sb_settings",
