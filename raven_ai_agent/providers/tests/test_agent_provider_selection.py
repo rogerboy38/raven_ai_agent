@@ -61,6 +61,21 @@ class TestAgentProviderSelection(unittest.TestCase):
                              "minimax_api_key": "abc", "minimax_group_id": "1"})
         self.assertIsInstance(a.provider, MiniMaxProvider)
 
+    def test_openai_model_setting_does_not_override_a_non_openai_provider(self):
+        """Blocker 3. `model` is the OpenAI model name; every provider's chat()
+        does `model = model or self.default_model`, so passing it through made
+        an OpenAI name beat the provider's own default -- MiniMax was being
+        asked for "gpt-4o-mini". Both directions are asserted: suppressed for
+        MiniMax, still honoured for OpenAI."""
+        mm = self.agent_with({"default_provider": "MiniMax", "minimax_api_key": "sk-cp-abc",
+                              "minimax_group_id": "1", "model": "gpt-4o-mini"})
+        self.assertIsNone(mm.model, "an OpenAI model name must not reach MiniMax")
+        self.assertEqual(mm.provider.default_model, "MiniMax-M2.1")
+
+        oa = self.agent_with({"default_provider": "OpenAI", "openai_api_key": "sk-test",
+                              "model": "gpt-4o"})
+        self.assertEqual(oa.model, "gpt-4o", "OpenAI must still receive its configured model")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

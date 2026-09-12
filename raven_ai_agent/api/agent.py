@@ -160,10 +160,12 @@ class RaymondLucyAgent(
         # returned 429 while the UI showed a local provider.
         self.provider = None
         self.client = None
+        self.provider_name = ""
         provider_name = (self.settings.get("default_provider") or "").strip()
         if provider_name:
             try:
                 self.provider = get_provider(provider_name, self.settings)
+                self.provider_name = provider_name.lower()
             except (ValueError, Exception):
                 # Unknown or mis-configured provider must not take the agent
                 # down; fall through to the OpenAI path below and say so.
@@ -178,8 +180,17 @@ class RaymondLucyAgent(
             self.client = getattr(self.provider, "client", None)
         elif self.settings.get("openai_api_key"):
             self.provider = get_provider("openai", self.settings)
+            self.provider_name = "openai"
             self.client = getattr(self.provider, "client", None)
+        # `model` in AI Agent Settings is the OPENAI model name (it lives in the
+        # OpenAI section of the doctype). Every provider's chat() does
+        # `model = model or self.default_model`, so passing it unconditionally
+        # made an OpenAI name win over the provider's own default -- a MiniMax
+        # provider was being asked for "gpt-4o-mini". Only hand it to OpenAI;
+        # everyone else falls through to the model their key implies.
         self.model = self.settings.get("model", "gpt-4o-mini")
+        if self.provider_name and self.provider_name != "openai":
+            self.model = None
         self.autonomy_level = 1  # Default to COPILOT
 
     def _get_settings(self) -> Dict:
