@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import unittest
 
+import frappe
+
 from raven_ai_agent.api.agent import RaymondLucyAgent
 from raven_ai_agent.providers.minimax import MiniMaxProvider
 from raven_ai_agent.providers.openai_provider import OpenAIProvider
@@ -75,6 +77,69 @@ class TestAgentProviderSelection(unittest.TestCase):
         oa = self.agent_with({"default_provider": "OpenAI", "openai_api_key": "sk-test",
                               "model": "gpt-4o"})
         self.assertEqual(oa.model, "gpt-4o", "OpenAI must still receive its configured model")
+
+
+class TestSettingsSurviveAnUndecryptableSecret(unittest.TestCase):
+    """Blocker 1: one undecryptable ciphertext must not hide default_provider.
+
+    This is the regression Node A found on VPT by surgical intervention --
+    repairing decryption for `openai_api_key` alone moved the settings dict from
+    4 keys to 15 with default_provider='MiniMax'. Here the failure is injected
+    instead of repaired, which is the same experiment run from the other end.
+    """
+
+    class _Stub:
+        """An AI Agent Settings whose secrets all fail to decrypt."""
+        model = "gpt-4o-mini"
+        max_tokens = 2000
+        confidence_threshold = 0.7
+
+        def __init__(self, provider):
+            self._provider = provider
+
+        def get_password(self, fieldname):
+            raise Exception("Failed to decrypt key AI Agent Settings." + fieldname)
+
+        def get(self, fieldname, default=None):
+            return {"default_provider": self._provider}.get(fieldname, default)
+
+    def setUp(self):
+        self._orig = frappe.get_single
+
+    def tearDown(self):
+        frappe.get_single = self._orig
+
+    def settings_with(self, provider):
+        # Stub EVERY source, not just Try 1. Without this the "nothing usable"
+        # case falls through to Try 2 (Raven Settings) and Try 3 (site_config)
+        # and picks up whatever real credential the host happens to hold -- the
+        # test then asserts against live secrets, which is both a false failure
+        # and a way to print a production key into a log.
+        frappe.get_single = lambda dt, _p=provider: self._Stub(_p)
+        self._orig_conf = frappe.conf
+        frappe.conf = {}
+        try:
+            return RaymondLucyAgent._get_settings(
+                RaymondLucyAgent.__new__(RaymondLucyAgent))
+        finally:
+            frappe.conf = self._orig_conf
+
+    def test_default_provider_survives_an_undecryptable_openai_key(self):
+        out = self.settings_with("MiniMax")
+        self.assertEqual(out.get("default_provider"), "MiniMax",
+                         "a failed secret read must not hide the plain field beside it")
+        self.assertIsNone(out.get("openai_api_key"))
+
+    def test_dict_is_not_the_four_key_fallback_shape(self):
+        # The observable symptom was the dict's SHAPE: 4 keys and no provider.
+        out = self.settings_with("MiniMax")
+        self.assertGreater(len(out), 4, f"fell back to the degraded shape: {sorted(out)}")
+
+    def test_no_provider_and_no_readable_secret_still_yields_nothing_usable(self):
+        # Both directions: the guard must not invent a configuration either.
+        out = self.settings_with("")
+        self.assertFalse(out.get("default_provider"))
+        self.assertIsNone(out.get("openai_api_key"))
 
 
 if __name__ == "__main__":

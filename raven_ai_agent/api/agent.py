@@ -122,6 +122,19 @@ When showing documents:
 """
 
 
+def _safe_password(doc, fieldname):
+    """Read one encrypted field without letting it take the caller down.
+
+    An undecryptable ciphertext is a per-FIELD failure, not a per-document one;
+    letting it propagate is what made one stale secret hide every plain field
+    beside it.
+    """
+    try:
+        return doc.get_password(fieldname)
+    except Exception:
+        return None
+
+
 class RaymondLucyAgent(
     MemoryMixin,
     ContextMixin,
@@ -198,8 +211,17 @@ class RaymondLucyAgent(
         # Try 1: Our AI Agent Settings doctype
         try:
             settings = frappe.get_single("AI Agent Settings")
-            api_key = settings.get_password("openai_api_key")
+            # Read the UNENCRYPTED field first. `get_password` raises when a
+            # ciphertext was written under a different encryption key -- the
+            # normal state of a restored site -- and because both reads sat in
+            # one `try`, that single failure aborted the branch before
+            # `default_provider` was ever looked at. The dict then fell back to
+            # a 4-key shape with no provider in it, so a site set to MiniMax
+            # silently answered as OpenAI. Node A proved it by repairing
+            # decryption for this one field: 4 keys -> 15, default_provider
+            # 'MiniMax'. One variable, effect flipped.
             provider = (settings.get("default_provider") or "").strip()
+            api_key = _safe_password(settings, "openai_api_key")
             # Previously this returned ONLY when an OpenAI key existed, so a
             # site configured purely for MiniMax/Ollama fell through to `{}`
             # and no provider could be selected at all.
@@ -215,10 +237,7 @@ class RaymondLucyAgent(
                 # can build something other than OpenAI.
                 for f in ("minimax_api_key", "minimax_cp_key", "deepseek_api_key",
                           "claude_api_key"):
-                    try:
-                        out[f] = settings.get_password(f)
-                    except Exception:
-                        out[f] = None
+                    out[f] = _safe_password(settings, f)
                 for f in ("minimax_group_id", "minimax_model", "ollama_base_url",
                           "ollama_model", "deepseek_model", "claude_model"):
                     out[f] = settings.get(f)
