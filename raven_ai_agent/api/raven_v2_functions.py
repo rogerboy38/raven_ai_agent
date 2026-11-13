@@ -8,6 +8,7 @@ to perform ERPNext operations.
 Reference: https://ravenchat.ai/docs/function-calling
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 from typing import Optional, Dict, List
 
@@ -171,6 +172,7 @@ def get_document_details(doctype: str, name: str) -> str:
 # ============================================================================
 
 @frappe.whitelist()
+@agent_guard.guard_endpoint("execute_workflow", "action", shape="json")
 def execute_workflow(action: str, document_name: str, **kwargs) -> str:
     """
     Execute a workflow command on a document.

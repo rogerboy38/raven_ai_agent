@@ -16,6 +16,17 @@ def frappe_mock():
         frappe.logger = MagicMock(return_value=MagicMock())
     if not hasattr(frappe, "conf"):
         frappe.conf = MagicMock()
+    # TASKS-337 slice 2: the turn logic reads roles and the pending-confirmation cache and uses savepoints
+    store = {}
+    cache = MagicMock()
+    cache.get_value.side_effect = store.get
+    cache.set_value.side_effect = lambda k, v, expires_in_sec=None: store.__setitem__(k, v)
+    cache.delete_value.side_effect = store.pop
+    frappe.cache = MagicMock(return_value=cache)
+    frappe.get_roles = MagicMock(return_value=[])
+    frappe.db.savepoint = MagicMock()
+    frappe.db.release_savepoint = MagicMock()
+    frappe.db.rollback = MagicMock()
     return frappe
 
 

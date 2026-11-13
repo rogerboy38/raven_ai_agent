@@ -119,7 +119,23 @@ def process_command(
     status, intent, skill, error_text, response = "Failed", None, None, None, None
 
     try:
-        result = dispatcher.route(query, user)
+        from raven_ai_agent.api import agent_guard
+
+        box = {}
+
+        def _runner(t):
+            _trig, bang, rest = agent_guard.split_trigger(t)
+            box["result"] = dispatcher.route(("!" if bang else "") + rest, user)
+
+        def _say(_channel, text):
+            box["guard_text"] = text
+
+        if not agent_guard.agent_enabled():
+            result = {"success": True, "response": agent_guard.OFF_TEXT, "stage": "guard"}
+        else:
+            # TASKS-337 slice 2: the same two-step turn as the chat door; V2 turns carry no trigger, so add one
+            agent_guard.run_turn(user, channel_id, f"@ai {query}", _runner, _say, message_name=message_name, via="v2")
+            result = box.get("result") or {"success": True, "response": box.get("guard_text"), "stage": "guard"}
         response = result.get("response") or "I could not produce an answer."
         status = "Routed" if result.get("success") else "Failed"
         skill = result.get("skill_used")
