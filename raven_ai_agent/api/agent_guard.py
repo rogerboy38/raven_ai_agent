@@ -371,8 +371,10 @@ def _replay(user, channel_id, p, runner, reply):
     db = frappe.db
     db.savepoint("raven_agent_replay")
     try:
-        with guarded_turn(user, "armed"):
+        with guarded_turn(user, "armed") as st:
             runner(armed_text)
+            if st["blocked"]:                      # a path that swallowed the stop with a bare `except:`
+                raise st["blocked"]
     except AgentWriteBlocked as b:
         db.rollback(save_point="raven_agent_replay")
         reply(channel_id, _refusal(b, True))
