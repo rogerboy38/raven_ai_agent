@@ -3,6 +3,7 @@ BOM Creator AI Agent
 Automates Bill of Materials creation in ERPNext using natural language commands
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 from typing import Dict, List, Optional
 from frappe.utils import nowdate
@@ -251,7 +252,7 @@ class BOMCreatorAgent:
                 return {"success": True, "message": f"BOM Creator '{bom_creator_name}' already submitted"}
             
             bc.flags.ignore_permissions = True
-            bc.submit()
+            agent_guard.submit_doc(bc)
             frappe.db.commit()
             
             # Find created BOMs

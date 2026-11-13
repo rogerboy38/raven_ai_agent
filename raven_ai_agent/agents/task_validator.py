@@ -15,6 +15,7 @@ Quotation is the TRUTH SOURCE. Everything downstream must match.
 
 from __future__ import unicode_literals
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 import re
 from frappe import _
@@ -1410,7 +1411,7 @@ class TaskValidator:
             })
             
             payment.insert()
-            payment.submit()
+            agent_guard.submit_doc(payment)
             frappe.db.commit()
             
             payment_link = f"https://{site_name}/app/payment-entry/{payment.name}"

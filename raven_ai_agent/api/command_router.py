@@ -5,6 +5,7 @@ Split from agent.py - Phase 2 Optimization + Phase 3 Quality Management + Phase 
 Contains: CommandRouterMixin with autonomy determination and workflow command execution.
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 import urllib.parse
 from typing import Optional, Dict
@@ -202,7 +203,7 @@ class CommandRouterMixin:
                     try:
                         bom_doc = frappe.get_doc("BOM", bom_name)
                         if bom_doc.docstatus == 0:  # Draft
-                            bom_doc.submit()
+                            agent_guard.submit_doc(bom_doc)
                             return {
                                 "success": True,
                                 "message": f"✅ BOM '{bom_name}' submitted successfully!\n\n"

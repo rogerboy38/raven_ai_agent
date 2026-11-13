@@ -23,6 +23,7 @@ Exchange Gain/Loss Flow (per Luis P AMB):
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt
@@ -288,7 +289,7 @@ class PaymentAgent:
             # Intelligent: if SI is Draft, auto-submit it first
             if si.docstatus == 0:
                 try:
-                    si.submit()
+                    agent_guard.submit_doc(si)
                     frappe.db.commit()
                     si.reload()
                 except Exception as submit_err:
@@ -549,7 +550,7 @@ class PaymentAgent:
                 frappe.db.commit()
                 pe.reload()
 
-            pe.submit()
+            agent_guard.submit_doc(pe)
             frappe.db.commit()
 
             # Build success message with any fixes applied
@@ -602,7 +603,7 @@ class PaymentAgent:
                         
                         # Retry the payment entry submission
                         pe.reload()
-                        pe.submit()
+                        agent_guard.submit_doc(pe)
                         frappe.db.commit()
                         
                         return {
@@ -747,7 +748,7 @@ class PaymentAgent:
                 }
             if pe.docstatus == 1:
                 # Submitted - cancel normally
-                pe.cancel()
+                agent_guard.cancel_doc(pe)
                 frappe.db.commit()
                 return {
                     "success": True,

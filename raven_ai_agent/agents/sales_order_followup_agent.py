@@ -19,6 +19,7 @@ Changes from original:
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt
 import re
@@ -419,7 +420,7 @@ class SalesOrderFollowupAgent:
             if so.docstatus == 2:
                 return {"success": False, "error": f"Sales Order {so_name} is cancelled."}
 
-            so.submit()
+            agent_guard.submit_doc(so)
             frappe.db.commit()
 
             return {
@@ -864,7 +865,7 @@ class SalesOrderFollowupAgent:
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so_name)
             dn.insert(ignore_permissions=True)
-            dn.submit()
+            agent_guard.submit_doc(dn)
             frappe.db.commit()
 
             return {
@@ -979,7 +980,7 @@ class SalesOrderFollowupAgent:
                 frappe.logger().warning(f"Smart validation warnings: {fix_errors}")
 
             si.insert(ignore_permissions=True)
-            si.submit()
+            agent_guard.submit_doc(si)
             frappe.db.commit()
 
             cfdi_info = ""

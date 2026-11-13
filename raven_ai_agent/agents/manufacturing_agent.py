@@ -18,6 +18,7 @@ Key Intelligence:
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt
@@ -154,7 +155,7 @@ class ManufacturingAgent:
             if wo.docstatus == 2:
                 return {"success": False, "error": f"Work Order {wo_name} is cancelled and cannot be submitted."}
 
-            wo.submit()
+            agent_guard.submit_doc(wo)
             frappe.db.commit()
 
             return {
@@ -321,7 +322,7 @@ class ManufacturingAgent:
             se_dict = make_stock_entry(wo_name, "Manufacture", manufacture_qty)
             se = frappe.get_doc(se_dict)
             se.insert(ignore_permissions=True)
-            se.submit()
+            agent_guard.submit_doc(se)
             frappe.db.commit()
 
             return {
@@ -406,7 +407,7 @@ class ManufacturingAgent:
             se_dict = make_stock_entry(wo_name, "Material Transfer for Manufacture", transfer_qty)
             se = frappe.get_doc(se_dict)
             se.insert(ignore_permissions=True)
-            se.submit()
+            agent_guard.submit_doc(se)
             frappe.db.commit()
 
             return {

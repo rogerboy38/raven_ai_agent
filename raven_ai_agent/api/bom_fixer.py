@@ -8,6 +8,7 @@ Functions:
 - force_fix_submitted_bom(bom_name, label_code) - Direct SQL fix for stubborn BOMs
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 from frappe import _
 from typing import List, Dict, Optional
 
@@ -159,7 +160,7 @@ def check_and_fix_item(item_code: str, auto_fix: bool = False) -> Dict:
                     bom_doc = frappe.get_doc("BOM", bom_name)
                     
                     # Step 1: Cancel
-                    bom_doc.cancel()
+                    agent_guard.cancel_doc(bom_doc)
                     
                     # Step 2: Amend (create new version)
                     new_bom = frappe.copy_doc(bom_doc)
@@ -171,7 +172,7 @@ def check_and_fix_item(item_code: str, auto_fix: bool = False) -> Dict:
                     
                     # Step 4: Save and submit
                     new_bom.insert(ignore_permissions=True)
-                    new_bom.submit()
+                    agent_guard.submit_doc(new_bom)
                     
                     result["boms_fixed"].append({
                         "bom": bom_name,

@@ -2,6 +2,7 @@
 BOM Commands + Label Fixer + Cancel/Revert
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 import re
 import requests
@@ -229,7 +230,7 @@ class BOMMixin:
                             "preview": f"⚠️ **CANCEL BOM {bom_name}?**\n\n  Item: {bom.item}\n  Status: Submitted\n\nThis will cancel the BOM. Say 'confirm' or use `!` prefix."
                         }
                     
-                    bom.cancel()
+                    agent_guard.cancel_doc(bom)
                     frappe.db.commit()
                     return {
                         "success": True,
