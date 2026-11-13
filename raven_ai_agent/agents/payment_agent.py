@@ -178,20 +178,8 @@ class PaymentAgent:
                             update_modified=False)
                     frappe.db.commit()
                 except Exception as db_set_err:
-                    # Fallback: direct SQL update if db.set_value fails
-                    if getattr(customer_doc, 'customer_primary_address', None):
-                        frappe.db.sql(
-                            "UPDATE `tabCustomer` SET customer_primary_address=%s WHERE name=%s",
-                            (customer_doc.customer_primary_address, customer_name)
-                        )
-                        frappe.db.commit()
-                    if getattr(customer_doc, 'customer_primary_contact', None):
-                        frappe.db.sql(
-                            "UPDATE `tabCustomer` SET customer_primary_contact=%s WHERE name=%s",
-                            (customer_doc.customer_primary_contact, customer_name)
-                        )
-                        frappe.db.commit()
-                    fixed.append("(via SQL fallback)")
+                    # TASKS-337 slice 2: no raw-SQL fallback; if the author may not write the customer, say so
+                    errors.append(f"Could not link the customer's primary address/contact ({db_set_err})")
             
             if errors and not fixed:
                 # Construct helpful error message

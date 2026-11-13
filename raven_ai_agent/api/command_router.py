@@ -84,13 +84,6 @@ class CommandRouterMixin:
             query = query.lstrip("!").strip()
             query_lower = query.lower()
 
-        # Auto-confirm for privileged users ONLY on explicit confirm words
-        if not is_force:
-            privileged_roles = ["Sales Manager", "Manufacturing Manager", "Stock Manager", "Accounts Manager", "System Manager"]
-            user_roles = frappe.get_roles(self.user)
-            if any(role in user_roles for role in privileged_roles):
-                pass  # is_confirm stays as-is from keyword check above
-
         # Quotation patterns
         frappe.logger().info(f"[Workflow] qtn_match: {qtn_match}, 'sales order' in query: {'sales order' in query_lower}")
 

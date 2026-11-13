@@ -1211,7 +1211,6 @@ class ManufacturingAgent:
             @manufacturing create wo [item] qty [qty] bom [bom]
             @manufacturing create wo from so [SO-NAME]
             @manufacturing create wo plan for [SO-NAME] ...
-            @manufacturing create batch [NAME] for [ITEM]
             @manufacturing submit wo [WO-NAME]
             @manufacturing manufacture [WO-NAME] qty [qty]
             @manufacturing transfer materials [WO-NAME] [batch BATCH]
@@ -1241,28 +1240,11 @@ class ManufacturingAgent:
         if "help" in message_lower or "capabilities" in message_lower:
             return self._help_text()
 
-        # ---- CREATE NAMED BATCH (GAP-04) ----
+        # ---- CREATE NAMED BATCH (GAP-04) ---- removed by TASKS-337 slice 2 (Hugh's decision 57, no exceptions):
+        # lots are born in the forms (Batch AMB, Almacén / Calidad), never typed into a chat.
         if "create batch" in message_lower:
-            # @ai create batch 0803034251 for ITEM-CODE [expiry 2027-03-07]
-            batch_match = re.search(r'create\s+batch\s+([\w-]+)', message, re.IGNORECASE)
-            item_match = re.search(r'(?:for|item)\s+(.+?)(?:\s+qty\b|\s+bom\b|\s+expiry\b|\s+mfg\b|\s+each\b|\s+from\b|$)', message, re.IGNORECASE)
-            expiry_match = re.search(r'expiry\s+([\d-]+)', message, re.IGNORECASE)
-            mfg_date_match = re.search(r'mfg[_-]?date\s+([\d-]+)', message, re.IGNORECASE)
-            
-            if not batch_match:
-                return "❌ Specify batch name. Example: `@ai create batch 0803034251 for 0803-VARIANT`"
-            if not item_match:
-                return "❌ Specify item. Example: `@ai create batch 0803034251 for 0803-VARIANT`"
-            
-            batch_name = batch_match.group(1).strip()
-            item_code = item_match.group(1).strip()
-            expiry = expiry_match.group(1) if expiry_match else None
-            mfg_date = mfg_date_match.group(1) if mfg_date_match else None
-            
-            result = self.create_named_batch(batch_name, item_code, 
-                                              expiry_date=expiry,
-                                              manufacturing_date=mfg_date)
-            return result.get("message", result.get("error", "Unknown error"))
+            return ("❌ The agent does not create batches. Create the lot in the Batch AMB form. / "
+                    "❌ El agente no crea lotes. Cree el lote en el formulario de Batch AMB.")
 
         # ---- CREATE WO PLAN (GAP-03) ----
         # Format: @ai create wo plan for SO-00763: WO1 qty 1055 lote 0803034251, WO2 qty 600 lote 0803080241
@@ -1407,8 +1389,7 @@ class ManufacturingAgent:
             "`@ai wo plan [SO-NAME]: qty 1055 lote ABC, qty 600 lote DEF` — Custom split with batches\n"
             "_Smart: auto-detects existing allocation, shows dashboard if fully allocated, trims plan to remaining capacity_\n\n"
             "**Batch Management (GAP-04)**\n"
-            "`@ai create batch [NAME] for [ITEM]` — Create named batch/lote\n"
-            "`@ai create batch [NAME] for [ITEM] expiry 2027-12-31` — With expiry date\n\n"
+            "(`create batch` was removed: lots are created in the Batch AMB form)\n\n"
             "**Work Order Actions**\n"
             "`@ai submit wo [WO-NAME]` — Submit Work Order\n"
             "`@ai transfer materials [WO-NAME]` — Transfer materials to WIP\n"

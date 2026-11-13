@@ -657,12 +657,6 @@ class BaseMixin:
             query = query.lstrip("!").strip()
             query_lower = query.lower()
         
-        # Auto-confirm for privileged users (Sales Manager, etc.)
-        privileged_roles = ["Sales Manager", "Manufacturing Manager", "Stock Manager", "Accounts Manager", "System Manager"]
-        user_roles = frappe.get_roles(self.user)
-        if any(role in user_roles for role in privileged_roles):
-            is_confirm = True
-        
         # Quotation patterns
         qtn_match = re.search(r'(SAL-QTN-\d+-\d+)', query, re.IGNORECASE)
         frappe.logger().info(f"[Workflow] qtn_match: {qtn_match}, 'sales order' in query: {'sales order' in query_lower}")
