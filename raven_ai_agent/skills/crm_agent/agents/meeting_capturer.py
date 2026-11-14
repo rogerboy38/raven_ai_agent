@@ -109,6 +109,10 @@ def on_communication_after_insert(doc, method=None):
     on internal notes, system mail, bulk imports, or replies the agent
     itself wrote.
     """
+    from raven_ai_agent.api.agent_guard import agent_enabled
+
+    if not agent_enabled():          # AI Agent Settings `enabled` is the agent's kill switch (TASKS-342)
+        return
     # Agent's own writes set this flag; do not recurse.
     if getattr(doc, "flags", None) and doc.flags.get("from_meeting_capturer"):
         return

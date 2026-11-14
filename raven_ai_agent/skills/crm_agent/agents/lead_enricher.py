@@ -138,6 +138,10 @@ def on_lead_after_insert(doc, method=None):
     the kwarg and accept the small risk of the worker picking up the job
     before the parent transaction commits.
     """
+    from raven_ai_agent.api.agent_guard import agent_enabled
+
+    if not agent_enabled():          # AI Agent Settings `enabled` is the agent's kill switch (TASKS-342)
+        return
     try:
         frappe.enqueue(
             "raven_ai_agent.skills.crm_agent.agents.lead_enricher.enrich_async",

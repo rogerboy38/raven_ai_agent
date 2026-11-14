@@ -77,10 +77,18 @@ class OpportunityMoverAgent(CRMAgentBase):
 
 # Scheduler & hook entrypoints
 def scan_stalled_opportunities():
+    from raven_ai_agent.api.agent_guard import agent_enabled
+
+    if not agent_enabled():          # AI Agent Settings `enabled` is the agent's kill switch (TASKS-342)
+        return
     OpportunityMoverAgent().scan()
 
 
 def on_opportunity_update(doc, method=None):
+    from raven_ai_agent.api.agent_guard import agent_enabled
+
+    if not agent_enabled():          # AI Agent Settings `enabled` is the agent's kill switch (TASKS-342)
+        return
     try:
         OpportunityMoverAgent()._evaluate(doc.name)
     except Exception:
