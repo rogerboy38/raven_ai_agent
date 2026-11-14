@@ -133,9 +133,18 @@ def process_command(
         if not agent_guard.agent_enabled():
             result = {"success": True, "response": agent_guard.OFF_TEXT, "stage": "guard"}
         else:
-            # TASKS-337 slice 2: the same two-step turn as the chat door; V2 turns carry no trigger, so add one
-            agent_guard.run_turn(user, channel_id, f"@ai {query}", _runner, _say, message_name=message_name, via="v2")
-            result = box.get("result") or {"success": True, "response": box.get("guard_text"), "stage": "guard"}
+            # TASKS-337 slice 2: the same turn as the chat door (dry run for a holder of the role, fenced for
+            # everyone else, an exact later `confirm` replays it armed); V2 turns carry no trigger, so add one
+            outcome = agent_guard.run_turn(user, channel_id, f"@ai {query}", _runner, _say,
+                                           message_name=message_name, via="v2", raise_failures=True)
+            guard_result = {"success": True, "response": box.get("guard_text"), "stage": "guard"}
+            if outcome == "done" and box.get("result"):
+                result = box["result"]
+            elif outcome == "replayed" and box.get("result"):
+                result = dict(box["result"])
+                result["response"] = f"{box.get('guard_text') or ''}\n\n{result.get('response') or ''}".strip()
+            else:
+                result = guard_result
         response = result.get("response") or "I could not produce an answer."
         status = "Routed" if result.get("success") else "Failed"
         skill = result.get("skill_used")
