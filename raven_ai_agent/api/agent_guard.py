@@ -226,23 +226,23 @@ _SYSTEM_FIELDS = frozenset({
 })
 _NO_VALUE_TYPES = frozenset({"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading", "Image",
                              "Fold", "Table", "Table MultiSelect"})
-# a generated id (Frappe's hash name) can only sit in a field that points at a document
-_ID_FIELD_TYPES = frozenset({"Link", "Dynamic Link"})
+
 _PARTY_FIELDS = ("customer", "supplier", "party", "employee", "lead", "party_name")
 _DATE_FIELDS = ("posting_date", "transaction_date", "schedule_date", "delivery_date", "due_date", "planned_start_date")
 _TOTAL_FIELDS = ("grand_total", "rounded_total", "total", "net_total", "total_qty", "paid_amount", "qty")
 
 
-# Frappe's auto-generated ids (child row names, hash-named documents) differ between two runs of the same request;
-# a field that merely points at a document created earlier in the same run must not make the two runs "differ".
-_HASH_RE = re.compile(r"^(?=.*\d)(?=.*[a-z])[0-9a-z]{10}$")
-
-
-def _norm(v, may_be_id=False):
+# Frappe's auto-generated ids (child row names, hash-named documents) differ between two runs of the same request. A
+# value is treated as "a generated id" only when THIS pass generated it (recorded when Frappe made it): a field that
+# merely points at a row or document created earlier in the same pass must not make two runs "differ", and a code the
+# user typed can never be mistaken for one.
+def _norm(v):
     if v is None or v == "":
         return None
-    if may_be_id and isinstance(v, str) and _HASH_RE.match(v):
-        return "<generated id>"
+    if isinstance(v, str):
+        st = _state()
+        if st is not None and v in st.get("gen", ()):
+            return "<generated id>"
     if isinstance(v, bool):
         return int(v)
     if isinstance(v, float) or v.__class__.__name__ == "Decimal":
@@ -254,20 +254,17 @@ def _norm(v, may_be_id=False):
 
 def _row_values(d, meta=None) -> dict:
     """The user-meaningful values of a document or child row (system fields and layout left out). A Time field is
-    included unless the document lets the system choose the posting time (`set_posting_time` present and off): a time
-    the author typed changes what posts (valuation order), a time the system stamps differs between two runs."""
+    included only when the author chose the posting time (`set_posting_time` on): that time changes what posts
+    (valuation order); a time the system stamps (`now`) differs between two runs."""
     meta = meta or d.meta
     out = {}
-    try:
-        system_time = bool(meta.has_field("set_posting_time")) and not d.get("set_posting_time")
-    except Exception:
-        system_time = False
+    system_time = not d.get("set_posting_time")
     for f in meta.fields:
         if f.fieldname in _SYSTEM_FIELDS or f.fieldtype in _NO_VALUE_TYPES:
             continue
         if f.fieldtype == "Time" and system_time:
             continue
-        v = _norm(d.get(f.fieldname), f.fieldtype in _ID_FIELD_TYPES)
+        v = _norm(d.get(f.fieldname))
         if v is not None:
             out[f.fieldname] = v
     return out
@@ -906,6 +903,17 @@ def _w_httpx_send(orig):
     return wrapper
 
 
+def _w_genid(orig):
+    @functools.wraps(orig)
+    def wrapper(*a, **kw):
+        v = orig(*a, **kw)
+        s = _state()
+        if s is not None and isinstance(v, str):
+            s.setdefault("gen", set()).add(v)
+        return v
+    return wrapper
+
+
 def _w_rollback(orig):
     """An unqualified rollback inside a turn is a handler cleaning up after a failed step; it must not leave the
     earlier steps behind, and it cannot (the turn owns the transaction): the whole turn is undone instead."""
@@ -957,6 +965,13 @@ def _install():
         _patch_attr(bj, "enqueue", _w_enqueue)
     except Exception:
         pass
+    try:
+        import frappe.model.naming as _naming
+
+        _patch_attr(_naming, "_generate_random_string", _w_genid)
+    except Exception:
+        pass
+    _patch_attr(frappe, "generate_hash", _w_genid)
     _patch_attr(frappe, "sendmail", _w_sendmail)
     _patch_attr(frappe, "publish_realtime", _w_realtime)
     _patch_attr(frappe, "rename_doc", _w_rename)
