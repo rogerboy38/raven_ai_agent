@@ -346,6 +346,17 @@ class TestIssuer(unittest.TestCase):
         r = _AGENT["go"](lambda: _DOC["save"](lambda: _probe(True)))
         self.assertEqual(r, "agent")
 
+    def test_the_guards_own_wrapper_between_save_and__save_does_not_turn_the_agents_write_into_a_consequence(self):
+        wrap = _mod(g.__name__, "def wrapper(f): return f()\n")
+        doc = _mod("frappe.model.document", """
+def submit(f): return save(f)
+def save(f): return WRAP(lambda: _save(f))
+def _save(f): return f()
+""")
+        doc["WRAP"] = wrap["wrapper"]          # the real chain of a submit: submit -> save -> [guard wrapper] -> _save -> hook
+        r = _AGENT["go"](lambda: doc["submit"](lambda: _probe(True)))
+        self.assertEqual(r, "agent")
+
     def test_a_hook_of_our_own_app_under_a_submit_is_a_consequence(self):
         # agent -> submit -> (erpnext on_submit) -> (rnd hook) -> insert of the inspection
         r = _AGENT["go"](lambda: _DOC["submit"](lambda: _ERP["hook"](lambda: _RND["hook"](lambda: _DOC["insert"](lambda: _probe(True))))))
