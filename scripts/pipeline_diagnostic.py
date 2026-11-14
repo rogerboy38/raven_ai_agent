@@ -299,7 +299,7 @@ def print_available_commands():
 Comandos disponibles que deberían funcionar:
 
 1. Verificar estado del pipeline:
-   @ai pipeline status SO-00752-LEGOSAN AB
+   @ai pipeline status SO-00752-EXAMPLE
 
 2. Escanear calidad de datos:
    @ai scan ACC-SINV-2026-00001
@@ -311,7 +311,7 @@ Comandos disponibles que deberían funcionar:
    @payment submit ACC-PAY-2026-00010
 
 5. Ver historial:
-   @ai memory search "LEGOSAN AB payment"
+   @ai memory search "Example Customer payment"
 
 ¡TODO FUNCIONANDO CORRECTAMENTE! 🚀
     """)

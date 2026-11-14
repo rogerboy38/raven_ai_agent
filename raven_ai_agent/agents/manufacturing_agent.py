@@ -58,7 +58,7 @@ class ManufacturingAgent:
             item_code: Item to manufacture (e.g. '0307')
             qty: Quantity to manufacture in Kg or base UOM
             bom: Specific BOM name (e.g. 'BOM-0307-005'). If None, uses default BOM.
-            sales_order: Link to Sales Order (e.g. 'SO-00752-LEGOSAN AB')
+            sales_order: Link to Sales Order (e.g. 'SO-00752-EXAMPLE')
             project: Link to Project (e.g. 'PROJ-0024')
             use_multi_level_bom: 0 = single level (migration), 1 = multi-level (MRP explosion)
         
@@ -184,14 +184,14 @@ class ManufacturingAgent:
         by using the sales BOM which references the correct hierarchy.
         
         Args:
-            so_name: Sales Order name (e.g. 'SO-00752-LEGOSAN AB')
+            so_name: Sales Order name (e.g. 'SO-00752-EXAMPLE')
             bom: Override BOM name. If None, uses the default BOM for the SO item.
         
         Returns:
             Dict with created Work Orders
         """
         try:
-            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-LEGOSAN AB")
+            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-EXAMPLE")
             resolved_so = resolve_document_name_safe("Sales Order", so_name)
             if resolved_so:
                 so_name = resolved_so
@@ -777,7 +777,7 @@ class ManufacturingAgent:
             - fully_allocated: bool
         """
         try:
-            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-LEGOSAN AB")
+            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-EXAMPLE")
             resolved_so = resolve_document_name_safe("Sales Order", so_name)
             if resolved_so:
                 so_name = resolved_so
@@ -1253,7 +1253,7 @@ class ManufacturingAgent:
         has_so_ref = ("from so" in message_lower or "from sales" in message_lower or so_name is not None)
         if has_wo_keyword and has_so_ref and ("create" in message_lower or so_name is not None):
             if not so_name:
-                return "❌ Please specify a Sales Order. Example: `@manufacturing create wo from so SO-00752-LEGOSAN AB`"
+                return "❌ Please specify a Sales Order. Example: `@manufacturing create wo from so SO-00752-EXAMPLE`"
             bom_match = re.search(r'bom\s+(BOM-[\w-]+)', message, re.IGNORECASE)
             bom = bom_match.group(1) if bom_match else None
             result = self.create_work_order_from_so(so_name, bom=bom)

@@ -154,9 +154,6 @@ pytest tests/test_manufacturing_agent.py::TestManufacturingAgent::test_create_wo
 | test_payment_agent_routes_payment_commands | Payment commands route to payment agent |
 | test_manufacturing_agent_routes_manufacturing_commands | Manufacturing commands route to agent |
 | test_adversarial_commands_are_blocked | Adversarial commands are identified |
-| test_delete_operations_blocked_from_alexa_origin | Delete operations blocked for Alexa |
-| test_cancel_operations_blocked_from_alexa_origin | Cancel operations blocked for Alexa |
-| test_submit_operations_blocked_from_alexa_origin | Submit operations blocked for Alexa |
 | test_prompt_injection_detected | Prompt injection attempts are blocked |
 | test_golden_path_coverage | Golden path commands have sufficient coverage |
 | test_edge_case_coverage | Edge cases have sufficient coverage |
@@ -165,15 +162,11 @@ pytest tests/test_manufacturing_agent.py::TestManufacturingAgent::test_create_wo
 
 ### 6. test_safety_guardrails.py
 **Path:** `tests/test_safety_guardrails.py`
-**Test Count:** 14 tests
+**Test Count:** 10 tests
 **Coverage:** Safety guardrails and permission checks
 
 | Test Name | Description |
 |-----------|-------------|
-| test_alexa_delete_blocked | Alexa cannot issue delete commands |
-| test_alexa_cancel_blocked | Alexa cannot issue cancel commands |
-| test_alexa_submit_blocked | Alexa cannot issue submit commands |
-| test_alexa_bulk_delete_blocked | Alexa cannot issue bulk delete commands |
 | test_ignore_previous_instructions_blocked | 'Ignore previous instructions' blocked |
 | test_admin_mode_injection_blocked | 'Admin mode' injection blocked |
 | test_prompt_injection_patterns_identified | Common injection patterns identified |
@@ -241,5 +234,5 @@ pytest tests/test_manufacturing_agent.py -v
 - Mock patterns follow best practices for frappe framework isolation
 - Tests verify both success and failure scenarios
 - Command parsing tests ensure proper regex handling
-- Safety tests validate that destructive operations are blocked from Alexa origin
+- Safety tests validate prompt-injection and secret-exposure handling
 - Utterance library provides comprehensive test coverage for command routing

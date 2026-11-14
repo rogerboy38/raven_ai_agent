@@ -1,9 +1,9 @@
 """
 End-to-End Integration Tests for Raven AI Agent
 
-Tests the full pipeline from Alexa command through to agent routing.
+Tests the pipeline from a chat command through to agent routing.
 These tests verify that:
-1. Alexa-to-Raven API accepts and routes commands correctly
+1. (removed with the Alexa endpoint, TASKS-342 ruling 77)
 2. Command router dispatches to correct handlers
 3. Safety guardrails block dangerous operations
 
@@ -39,7 +39,6 @@ def is_frappe_importable():
 # Tests will skip gracefully if frappe is not available
 
 
-# TestAlexaToRavenAPI removed with the endpoint: its module could not import (TASKS-342 ruling 77)
 
 
 class TestCommandRouting(unittest.TestCase):
@@ -192,41 +191,6 @@ class TestSafetyGuardrails(unittest.TestCase):
         """Set up test fixtures"""
         if not is_frappe_available():
             self.skipTest("Frappe not available")
-
-    def test_delete_operations_blocked_from_alexa_origin(self):
-        """E2E-10: Delete operations blocked for Alexa origin"""
-        # Load utterance that attempts delete
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        delete_cmd = next((u for u in utterances['utterances'] 
-                         if 'delete' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(delete_cmd)
-        self.assertEqual(delete_cmd['expected_tool'], 'blocked')
-        self.assertIn('delete', delete_cmd['expected_outcome'].lower())
-
-    def test_cancel_operations_blocked_from_alexa_origin(self):
-        """E2E-11: Cancel operations blocked for Alexa origin"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        cancel_cmd = next((u for u in utterances['utterances'] 
-                         if 'cancel' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(cancel_cmd)
-        self.assertEqual(cancel_cmd['expected_tool'], 'blocked')
-
-    def test_submit_operations_blocked_from_alexa_origin(self):
-        """E2E-12: Submit operations blocked for Alexa origin"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        submit_cmd = next((u for u in utterances['utterances'] 
-                         if 'submit' in u['utterance'].lower() and 'sales order' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(submit_cmd)
-        self.assertEqual(submit_cmd['expected_tool'], 'blocked')
 
     def test_prompt_injection_detected(self):
         """E2E-13: Prompt injection attempts are blocked"""

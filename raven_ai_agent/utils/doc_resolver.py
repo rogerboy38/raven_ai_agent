@@ -3,7 +3,7 @@ Document Name Resolver Utility
 
 Provides functions to resolve partial document names to full names.
 Handles cases like:
-- "SO-00752" → "SO-00752-LEGOSAN AB"
+- "SO-00752" → "SO-00752-EXAMPLE"
 - "Calipso" → "Calipso s.r.l" (if unique match)
 - "QTN-00752" → "QTN-00752-CUSTOMER NAME"
 
@@ -11,7 +11,7 @@ Usage:
     from raven_ai_agent.utils.doc_resolver import resolve_document_name
     
     full_name = resolve_document_name("Sales Order", "SO-00752")
-    # Returns "SO-00752-LEGOSAN AB" or raises frappe.DoesNotExistError
+    # Returns "SO-00752-EXAMPLE" or raises frappe.DoesNotExistError
 """
 import frappe
 from typing import Optional, List, Dict

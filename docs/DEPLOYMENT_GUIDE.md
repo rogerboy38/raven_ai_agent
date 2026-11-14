@@ -29,8 +29,8 @@ The Raven AI Agent system consists of three primary environments:
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Alexa Skill  │────▶│  Frappe Bench    │────▶│   ERPNext      │
-│  (Voice Input) │     │ (raven_ai_agent)│     │  (ERP System)  │
+│  Chat client   │────▶│  Frappe Bench    │────▶│   ERPNext      │
+│ (Raven users)  │     │ (raven_ai_agent)│     │  (ERP System)  │
 └─────────────────┘     └────────┬─────────┘     └─────────────────┘
                                  │
                                  ▼
@@ -44,7 +44,7 @@ The Raven AI Agent system consists of three primary environments:
 
 | Tier | Component | Description |
 |------|-----------|-------------|
-| Frontend | Alexa Custom Skill | Voice interface for users |
+| Frontend | Raven chat | Chat interface for users |
 | Middleware | Frappe Bench + raven_ai_agent | Core processing logic |
 | Backend | ERPNext | ERP database and business logic |
 | LLM | OpenAI / Claude | AI decision making |
@@ -173,12 +173,7 @@ SAFETY_GUARDRAILS_ENABLED=true
    - OpenAI API key (production) or
    - Anthropic Claude API key
 
-3. **Alexa Developer**
-   - Amazon Developer account
-   - Custom Skill configuration
-   - ASK CLI installed (for deployment)
-
-4. **Monitoring (Optional)**
+3. **Monitoring (Optional)**
    - Sentry DSN for error tracking
    - Slack webhook for alerts
 
@@ -295,7 +290,7 @@ Week 4: 100% of traffic ──────────────────�
 #### Phase 1: Internal Testing (10%)
 
 1. Deploy to staging
-2. Enable for internal Alexa users only
+2. Enable for internal users only
 3. Monitor error rates and latency
 4. Collect feedback from internal users
 
@@ -413,8 +408,7 @@ tail -n 1000 ~/frappe-bench/logs/worker.error.log | grep ERROR
 #### Step 2: Stop Incoming Traffic (Optional)
 
 ```bash
-# Disable Alexa skill in Amazon Developer Console
-# OR set maintenance mode in Frappe
+# Set maintenance mode in Frappe
 bench --site erp.sysmayal2.cloud set-maintenance-mode on
 ```
 

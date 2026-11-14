@@ -93,7 +93,7 @@ migration report [2024|2025]
 ## Example session
 ```
 User: migrate scan folio 752
-Agent: 📋 gap table — SO ✅ SO-00752-LEGOSAN AB · batch_amb ❌ MISSING ·
+Agent: 📋 gap table — SO ✅ SO-00752-EXAMPLE · batch_amb ❌ MISSING ·
        lot 0612185231 → C-source regenerated (6 × 25 kg)
 
 User: migrate folio 752 stage batch

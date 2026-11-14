@@ -102,10 +102,7 @@ class HealthCheck:
         # The Alexa endpoint was removed (TASKS-342 ruling 77: its module could not import): probe the site instead
         url = f"{self.config['site_url']}/api/method/ping"
         
-        payload = {
-            "text": "help",
-            "alexa_user_id": "health_check_user"
-        }
+        payload = {"text": "help"}
         
         try:
             start_time = time.time()

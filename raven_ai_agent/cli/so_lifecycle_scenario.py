@@ -19,7 +19,7 @@ SITE_USER = "administrator@yourcompany.com"  # change if needed
 
 def run_so_lifecycle_scenario(
     user: str = SITE_USER,
-    so_name: str = "SO-00763-LORAND LABORATORIES",
+    so_name: str = "SO-00763-EXAMPLE",
     channel: str = "Raven Golden Runs"
 ) -> list:
     """
@@ -123,7 +123,7 @@ def run_so_lifecycle_scenario(
 
 def run_scenario_2(
     user: str = SITE_USER,
-    so_name: str = "SO-00763-LORAND LABORATORIES",
+    so_name: str = "SO-00763-EXAMPLE",
     channel: str = "Raven Golden Runs"
 ) -> list:
     """
@@ -216,8 +216,8 @@ def run_scenario_2(
     transcript.append((f"@ai next steps {so_name}", response))
     
     # 7) Payment outstanding for specific customer
-    response = send_to_agent("payment", "payment outstanding customer LORAND LABORATORIES LLC")
-    transcript.append(("@ai payment outstanding customer LORAND LABORATORIES LLC", response))
+    response = send_to_agent("payment", "payment outstanding customer Example Customer LLC")
+    transcript.append(("@ai payment outstanding customer Example Customer LLC", response))
     
     # 8) Workflow pipeline status
     response = send_to_agent("workflow_orchestrator", f"pipeline status {so_name}")
@@ -305,7 +305,7 @@ def run_quotation_scenario(
     transcript.append((f"@workflow create so from {qtn_name}", response))
 
     # 3) Show workflow status for resulting SO
-    #    The SO name format is SO-XXXXX-CUSTOMER (e.g., SO-00752-LEGOSAN AB)
+    #    The SO name format is SO-XXXXX-CUSTOMER (e.g., SO-00752-EXAMPLE)
     #    Try to resolve partial name or use known pattern
     so_base = qtn_name.split("-")[-1] if "-" in qtn_name else qtn_name[-4:]
     so_guess = f"SO-{so_base}"

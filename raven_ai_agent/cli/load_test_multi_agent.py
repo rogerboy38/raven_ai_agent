@@ -56,13 +56,13 @@ def _user_thread(user_index: int):
     
     commands = [
         "list recent sales orders",
-        "status SO-00763-LORAND LABORATORIES",
-        "full status SO-00763-LORAND LABORATORIES",
-        "workflow status SO-00763-LORAND LABORATORIES",
-        "pipeline status SO-00763-LORAND LABORATORIES",
-        "mfg status SO-00763-LORAND LABORATORIES",
-        "show work orders for SO-00763-LORAND LABORATORIES",
-        "payment outstanding customer LORAND LABORATORIES LLC",
+        "status SO-00763-EXAMPLE",
+        "full status SO-00763-EXAMPLE",
+        "workflow status SO-00763-EXAMPLE",
+        "pipeline status SO-00763-EXAMPLE",
+        "mfg status SO-00763-EXAMPLE",
+        "show work orders for SO-00763-EXAMPLE",
+        "payment outstanding customer Example Customer LLC",
     ]
 
     turn_count = 0

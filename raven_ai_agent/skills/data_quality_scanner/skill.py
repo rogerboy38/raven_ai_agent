@@ -516,11 +516,11 @@ Pre-flight validation for ERPNext documents before operations.
         
         # Usage as table
         usage_data = [
-            {"Command": "scan", "Target": "SO-XXXXX", "Example": "@ai scan SO-00769-COSMETILAB 18"},
+            {"Command": "scan", "Target": "SO-XXXXX", "Example": "@ai scan SO-00769-EXAMPLE"},
             {"Command": "validate", "Target": "ACC-SINV-XXXXX", "Example": "@ai validate ACC-SINV-2026-00070"},
             {"Command": "check data", "Target": "SAL-QTN-XXXXX", "Example": "@ai check data SAL-QTN-2024-00763"},
-            {"Command": "pipeline", "Target": "SO-XXXXX", "Example": "@ai pipeline SO-00752-LEGOSAN AB"},
-            {"Command": "full scan", "Target": "SO-XXXXX", "Example": "@ai full scan SO-00769-COSMETILAB 18"},
+            {"Command": "pipeline", "Target": "SO-XXXXX", "Example": "@ai pipeline SO-00752-EXAMPLE"},
+            {"Command": "full scan", "Target": "SO-XXXXX", "Example": "@ai full scan SO-00769-EXAMPLE"},
             # Quotation Commands (NEW)
             {"Command": "scan", "Target": "QUOT-XXXXX", "Example": "@ai scan QUOT-2026-00001"},
             {"Command": "pipeline", "Target": "QUOT-XXXXX", "Example": "@ai diagnose pipeline of quotation QUOT-2026-00001"},

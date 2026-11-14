@@ -2,7 +2,7 @@
 Safety Guardrails Tests for Raven AI Agent
 
 Tests verify that:
-1. Alexa-origin messages CANNOT trigger destructive ops (delete, submit, cancel)
+1. (removed: Alexa-origin tests, TASKS-349 ruling 86)
 2. Permission checks work (user without role gets denied)
 3. Prompt injection attempts are blocked
 4. Agent refuses to expose API keys or secrets
@@ -23,56 +23,6 @@ def is_frappe_available():
         return hasattr(frappe, 'local') and hasattr(frappe.local, 'site')
     except ImportError:
         return False
-
-
-class TestAlexaDestructiveOps(unittest.TestCase):
-    """Test that Alexa-origin cannot trigger destructive operations"""
-
-    def test_alexa_delete_blocked(self):
-        """SFT-01: Alexa cannot issue delete commands"""
-        # Load from utterance library
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        delete_cmd = next((u for u in utterances['utterances'] 
-                         if 'delete' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(delete_cmd)
-        self.assertEqual(delete_cmd['expected_tool'], 'blocked')
-        self.assertIn('delete', delete_cmd['expected_outcome'].lower())
-
-    def test_alexa_cancel_blocked(self):
-        """SFT-02: Alexa cannot issue cancel commands"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        cancel_cmd = next((u for u in utterances['utterances'] 
-                         if 'cancel' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(cancel_cmd)
-        self.assertEqual(cancel_cmd['expected_tool'], 'blocked')
-
-    def test_alexa_submit_blocked(self):
-        """SFT-03: Alexa cannot issue submit commands on Sales Orders"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        submit_cmd = next((u for u in utterances['utterances'] 
-                         if 'submit sales order' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(submit_cmd)
-        self.assertEqual(submit_cmd['expected_tool'], 'blocked')
-
-    def test_alexa_bulk_delete_blocked(self):
-        """SFT-04: Alexa cannot issue bulk delete commands"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        bulk_delete = next((u for u in utterances['utterances'] 
-                         if 'delete all' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(bulk_delete)
-        self.assertEqual(bulk_delete['expected_tool'], 'blocked')
 
 
 class TestPromptInjection(unittest.TestCase):

@@ -53,7 +53,7 @@ class SalesOrderFollowupAgent:
         """INTELLIGENT SO LOOKUP - Handle variations in SO name input.
         
         Problems this solves:
-        - Extra spaces: "SO-00769-COSMETILAB 18" vs "SO-00769-COSMETILAB-18"
+        - Extra spaces: "SO-00769-EXAMPLE" vs "SO-00769-EXAMPLE"
         - Extra dashes: "SO--00769" vs "SO-00769"
         - Case sensitivity
         - Partial matches
@@ -1014,7 +1014,7 @@ class SalesOrderFollowupAgent:
     def get_so_status(self, so_name: str) -> Dict:
         """Get detailed status of a specific Sales Order"""
         try:
-            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-LEGOSAN AB")
+            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-EXAMPLE")
             resolved_so = resolve_document_name_safe("Sales Order", so_name)
             if resolved_so:
                 so_name = resolved_so
@@ -1547,8 +1547,8 @@ class SalesOrderFollowupAgent:
             "**Example (Full Cycle)**\n"
             "```\n"
             "@sales_order_follow_up create from quotation SAL-QTN-2024-00752\n"
-            "@sales_order_follow_up submit SO-00752-LEGOSAN AB\n"
-            "@sales_order_follow_up delivery SO-00752-LEGOSAN AB\n"
-            "@sales_order_follow_up invoice SO-00752-LEGOSAN AB\n"
+            "@sales_order_follow_up submit SO-00752-EXAMPLE\n"
+            "@sales_order_follow_up delivery SO-00752-EXAMPLE\n"
+            "@sales_order_follow_up invoice SO-00752-EXAMPLE\n"
             "```"
         )

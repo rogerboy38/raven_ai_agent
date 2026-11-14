@@ -26,9 +26,9 @@ This document provides comprehensive monitoring and alerting guidelines for the 
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐              │
-│  │    Alexa    │     │   Frappe     │     │   ERPNext    │              │
-│  │   Skill     │────▶│    Bench     │────▶│   Database   │              │
-│  │  (External) │     │ (Middleware) │     │   (Backend)  │              │
+│  │  Raven chat │     │   Frappe     │     │   ERPNext    │              │
+│  │   (users)   │────▶│    Bench     │────▶│   Database   │              │
+│  │  (Client)   │     │ (Middleware) │     │   (Backend)  │              │
 │  └──────────────┘     └──────┬───────┘     └──────────────┘              │
 │                              │                                             │
 │                              ▼                                             │
@@ -69,7 +69,7 @@ This document provides comprehensive monitoring and alerting guidelines for the 
 
 ### API Endpoint Monitoring
 
-The Frappe API serves as the primary entry point for Alexa requests.
+The Frappe API serves as the primary entry point for chat requests.
 
 #### Monitored Endpoints
 
@@ -622,14 +622,14 @@ curl -s -o /dev/null -w "WebSocket: %{http_code}\n" \
 
 ### Common Issues and Solutions
 
-#### Issue: High Latency on Alexa Requests
+#### Issue: High Latency on Requests
 
 **Symptoms:** Requests taking > 10 seconds
 
 **Diagnosis:**
 ```bash
 # Check which step is slow
-tail -f ~/frappe-bench/logs/worker.log | grep "alexa_to_raven"
+tail -f ~/frappe-bench/logs/worker.log | grep "handle_raven_message"
 ```
 
 **Solutions:**
@@ -657,7 +657,7 @@ grep ERROR ~/frappe-bench/logs/worker.log | \
 
 #### Issue: Messages Not Delivered to Raven
 
-**Symptoms:** Alexa processes successfully but no message in Raven
+**Symptoms:** the agent processes successfully but no message in Raven
 
 **Diagnosis:**
 ```bash
