@@ -500,30 +500,46 @@ class BOMCreatorAgent:
 @frappe.whitelist()
 def create_bom_from_template(product_code: str, template_bom_name: str) -> Dict:
     """API: Create BOM from template"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     agent = BOMCreatorAgent()
     return agent.create_bom_from_template(product_code, template_bom_name)
 
 @frappe.whitelist()
 def create_bom_from_tds(tds_name: str, template_bom_name: str = None) -> Dict:
     """API: Create BOM from TDS"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     agent = BOMCreatorAgent()
     return agent.create_bom_from_tds(tds_name, template_bom_name)
 
 @frappe.whitelist()
 def validate_bom_creator(bom_creator_name: str) -> Dict:
     """API: Validate BOM Creator"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     agent = BOMCreatorAgent()
     return agent.validate_bom_creator(bom_creator_name)
 
 @frappe.whitelist()
 def submit_bom_creator(bom_creator_name: str) -> Dict:
     """API: Submit BOM Creator"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
+    return _submit_bom_creator(bom_creator_name)
+
+
+def _submit_bom_creator(bom_creator_name: str) -> Dict:
+    """Ungated implementation: the chat command and the Raven v2 function call this one (the agent's own turn runs under
+    the author's rights and the guard), not the whitelisted door above."""
     agent = BOMCreatorAgent()
     return agent.submit_bom_creator(bom_creator_name)
 
 @frappe.whitelist()
 def create_bom_for_batch(batch_name: str, options: str = None) -> Dict:
     """API: Create BOM for a Batch AMB"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
+    return _create_bom_for_batch(batch_name, options)
+
+
+def _create_bom_for_batch(batch_name: str, options: str = None) -> Dict:
+    """Ungated implementation (see `_submit_bom_creator`)."""
     agent = BOMCreatorAgent()
     opts = json.loads(options) if options else {}
     return agent.create_bom_for_batch(batch_name, opts)
@@ -531,5 +547,6 @@ def create_bom_for_batch(batch_name: str, options: str = None) -> Dict:
 @frappe.whitelist()
 def handle_bom_request(message: str) -> Dict:
     """API: Handle natural language BOM request"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     agent = BOMCreatorAgent()
     return agent.handle_bom_request(message)

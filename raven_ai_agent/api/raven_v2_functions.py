@@ -289,8 +289,9 @@ def submit_bom_creator(bom_creator_name: str) -> str:
     Returns:
         JSON with submission result and created BOMs
     """
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     try:
-        from raven_ai_agent.agents.bom_creator_agent import submit_bom_creator as submit_func
+        from raven_ai_agent.agents.bom_creator_agent import _submit_bom_creator as submit_func
         
         result = submit_func(bom_creator_name)
         return json.dumps(result, default=str)

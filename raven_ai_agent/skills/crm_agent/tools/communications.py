@@ -48,6 +48,7 @@ def send_email(
     reference_name: Optional[str] = None,
 ) -> Dict:
     """Send an email via Frappe's mailer + log a Communication."""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     try:
         frappe.sendmail(
             recipients=[r.strip() for r in recipients.split(",") if r.strip()],

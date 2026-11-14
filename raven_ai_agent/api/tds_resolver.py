@@ -230,8 +230,10 @@ def api_resolve_tds_bom(sales_item: str, customer: str = None) -> str:
 @frappe.whitelist()
 def api_create_work_order_from_tds(sales_item: str, quantity: float,
                                     customer: str = None) -> str:
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     return json.dumps(create_work_order_from_tds(sales_item, float(quantity), customer))
 
 @frappe.whitelist()
 def api_create_work_orders_from_so_with_tds(so_name: str) -> str:
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     return json.dumps(create_work_orders_from_sales_order_with_tds(so_name))

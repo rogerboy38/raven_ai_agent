@@ -38,6 +38,7 @@ def submit_weight_reading(barrel_serial, gross_weight, device_id, tara_weight=No
         frappe.PermissionError: If device not allowed
         frappe.ValidationError: If data invalid
     """
+    frappe.only_for(["System Manager", "IoT Sensor Intake"])  # TASKS-349 decision 91 (exception: the IoT device role of decision 81, beside the hard-coded device list)
     try:
         # Validate device_id
         if device_id not in ALLOWED_DEVICES:

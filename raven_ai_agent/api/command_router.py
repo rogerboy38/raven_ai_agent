@@ -214,7 +214,7 @@ class CommandRouterMixin:
 
                 # Fallback: try BOM Creator
                 try:
-                    from raven_ai_agent.agents.bom_creator_agent import submit_bom_creator
+                    from raven_ai_agent.agents.bom_creator_agent import _submit_bom_creator as submit_bom_creator
                     result = submit_bom_creator(bom_name)
                     if result.get("success"):
                         return {
@@ -238,7 +238,7 @@ class CommandRouterMixin:
             if batch_match:
                 batch_name = batch_match.group(1).upper()
                 try:
-                    from raven_ai_agent.agents.bom_creator_agent import create_bom_for_batch
+                    from raven_ai_agent.agents.bom_creator_agent import _create_bom_for_batch as create_bom_for_batch
                     result = create_bom_for_batch(batch_name)
                     if result.get("success"):
                         return {

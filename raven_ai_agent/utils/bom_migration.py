@@ -258,4 +258,5 @@ def export_bom(bom_name: str) -> Dict:
 @frappe.whitelist()
 def import_bom(json_file: str, recreate: bool = False) -> Dict:
     """API: Import BOM Creator"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     return import_bom_creator(json_file, recreate)

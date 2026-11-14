@@ -438,12 +438,14 @@ def get_bom_details(bom_name: str) -> Dict:
 @frappe.whitelist()
 def api_check_and_fix_item(item_code: str, auto_fix: bool = False) -> Dict:
     """API wrapper for check_and_fix_item"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     return check_and_fix_item(item_code, auto_fix=auto_fix)
 
 
 @frappe.whitelist()
 def api_fix_multiple_items(item_codes: str, auto_fix: bool = False) -> Dict:
     """API wrapper for fix_multiple_items"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     import json
     codes = json.loads(item_codes) if isinstance(item_codes, str) else item_codes
     return fix_multiple_items(codes, auto_fix=auto_fix)

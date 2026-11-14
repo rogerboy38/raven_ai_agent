@@ -225,6 +225,7 @@ def manual_extract(sales_order_name):
     """
     Manually trigger PO extraction for a Sales Order
     """
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     # Find PDF attachments
     files = frappe.get_list("File", 
         filters={
