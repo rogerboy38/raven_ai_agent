@@ -188,7 +188,7 @@ class TestRunTurn(unittest.TestCase):
         self.go("a", "confirm please")
         self.assertFalse(g.has_pending("a", "c1"))
 
-    def test_maria_confirm_does_not_confirm_and_cancels(self):
+    def test_other_handle_confirm_does_not_confirm_and_cancels(self):
         self.go("a", "@ai do it", records=self.R)
         with mock.patch.object(g, "_replay") as rp:
             self.go("a", "@colleague confirm")
