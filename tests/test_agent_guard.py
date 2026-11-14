@@ -525,3 +525,46 @@ class TestLockHold(unittest.TestCase):
         s = {"t0": time.monotonic() - 91, "budget": 90, "hold": 30}
         with self.assertRaises(g.AgentWriteBlocked):
             g._tick(s, "x")
+
+
+class TestFailingOperation(unittest.TestCase):
+    class _D:
+        doctype = "Thing"
+        name = "T-1"
+
+    def _run(self, fn, mode="dry", doctype="Thing"):
+        st = {"mode": mode}
+        fr = mock.MagicMock()
+        d = self._D()
+        d.doctype = doctype
+        with mock.patch.object(g, "frappe", fr), mock.patch.object(g, "_state", return_value=st):
+            w = g._w_docop(fn)
+            try:
+                w(d)
+            except Exception:
+                pass
+        return st, fr
+
+    def test_a_failing_operation_is_undone_at_once_and_remembered(self):
+        def boom(self):
+            raise ValueError("no such company")
+        st, fr = self._run(boom)
+        self.assertIn("ValueError", st["op_failed"])
+        self.assertTrue(fr.db.rollback.called)
+        self.assertEqual(fr.db.rollback.call_args.kwargs["save_point"], "raven_op_1")
+
+    def test_a_working_operation_leaves_nothing_behind(self):
+        st, fr = self._run(lambda self: "ok")
+        self.assertNotIn("op_failed", st)
+        self.assertFalse(fr.db.rollback.called)
+        self.assertTrue(fr.db.release_savepoint.called)
+
+    def test_a_failure_of_a_log_document_is_not_a_failed_step(self):
+        def boom(self):
+            raise ValueError("x")
+        st, fr = self._run(boom, doctype="Error Log")
+        self.assertNotIn("op_failed", st)
+
+    def test_a_fenced_turn_is_not_wrapped(self):
+        st, fr = self._run(lambda self: 1, mode="fenced")
+        self.assertFalse(fr.db.savepoint.called)

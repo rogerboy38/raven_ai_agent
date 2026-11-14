@@ -938,6 +938,37 @@ def _w_genid_name(orig):
     return wrapper
 
 
+def _w_docop(orig):
+    """A document operation (insert, save/submit/cancel) that FAILS inside a guarded turn: whatever it wrote before it
+    failed is undone at once (its own savepoint), and the turn remembers that a step failed, so a handler that swallows
+    the error and reports it as text cannot leave a half-done step behind or a reply that says "done" (ruling 85b)."""
+    @functools.wraps(orig)
+    def wrapper(self, *a, **kw):
+        s = _state()
+        if not s or s["mode"] == "fenced":
+            return orig(self, *a, **kw)
+        s["opn"] = s.get("opn", 0) + 1
+        sp = f"raven_op_{s['opn']}"
+        db = frappe.db
+        db.savepoint(sp)
+        try:
+            res = orig(self, *a, **kw)
+        except Exception as exc:                       # AgentWriteBlocked is a BaseException: not caught here
+            try:
+                db.rollback(save_point=sp)
+            except Exception:
+                pass
+            if getattr(self, "doctype", "") not in INFRA_INSERT_DOCTYPES and not s.get("op_failed"):
+                s["op_failed"] = f"{getattr(self, 'doctype', '')} {getattr(self, 'name', '') or ''}: {type(exc).__name__}: {str(exc)[:160]}".strip()
+            raise
+        try:
+            db.release_savepoint(sp)
+        except Exception:
+            pass
+        return res
+    return wrapper
+
+
 def _w_rollback(orig):
     """An unqualified rollback inside a turn is a handler cleaning up after a failed step; it must not leave the
     earlier steps behind, and it cannot (the turn owns the transaction): the whole turn is undone instead."""
@@ -980,6 +1011,8 @@ def _install():
         if owner is not None:
             _patch_attr(owner, name, maker)
     _patch_attr(Document, "db_set", _w_doc_db_set)
+    _patch_attr(Document, "insert", _w_docop)
+    _patch_attr(Document, "_save", _w_docop)
     _patch_attr(BaseDocument, "db_insert", _w_base_db("db_insert"))
     _patch_attr(BaseDocument, "db_update", _w_base_db("db_update"))
     _patch_attr(frappe, "enqueue", _w_enqueue)
@@ -1316,6 +1349,8 @@ def _first_pass(user, channel_id, clean, runner, reply, writer, message_name="",
             runner(_armed_text(clean) if mode == "dry" else clean)
             if st["blocked"]:                      # a path that swallowed the stop with a bare `except:`
                 raise st["blocked"]
+            if st.get("op_failed") and mode == "dry":      # a step failed and the handler reported it as text: no preview of a half
+                _block("handler_rolled_back", st["op_failed"])
         if mode == "dry" and st["records"]:
             records = list(st["records"])
             conseq = dict(st["conseq"])
@@ -1368,6 +1403,8 @@ def _replay(user, channel_id, p, runner, reply, raise_failures=False):
             runner(_armed_text(p["text"]))
             if st["blocked"]:
                 raise st["blocked"]
+            if st.get("op_failed"):                 # a step failed, whatever the handler then said
+                _block("handler_rolled_back", st["op_failed"])
             left = [e["what"] for e in st["expected"]]
             if left:                                # all or nothing (ruling 85b)
                 _block("not_announced", "not done: " + "; ".join(left))
