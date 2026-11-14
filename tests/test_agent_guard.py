@@ -488,8 +488,73 @@ class TestOutbound(unittest.TestCase):
     def _turn(self, mode="dry"):
         return {"mode": mode, "blocked": None, "t0": time.monotonic(), "budget": 90, "hold": 30}
 
-    def test_the_read_only_list_is_empty_until_the_owner_approves_it(self):
-        self.assertEqual(g.READONLY_HOSTS, frozenset())
+    def test_the_read_only_list_is_exactly_what_decision_90_approved(self):
+        self.assertEqual(g.READONLY_HOSTS, frozenset({"html.duckduckgo.com"}))
+
+    def test_get_and_head_to_the_listed_host_pass_post_is_refused(self):
+        for mode in ("fenced", "dry", "armed"):
+            with mock.patch.object(g, "_state", return_value=self._turn(mode)):
+                g._check_outbound("https://html.duckduckgo.com/html/?q=x", "GET")
+                g._check_outbound("https://html.duckduckgo.com/html/?q=x", "HEAD")
+                with self.assertRaises(g.AgentWriteBlocked):
+                    g._check_outbound("https://html.duckduckgo.com/html/", "POST")
+                with self.assertRaises(g.AgentWriteBlocked):
+                    g._check_outbound("https://www.banxico.org.mx/x", "GET")   # not listed: a new ruling adds it
+
+    @contextlib.contextmanager
+    def _wire(self, redirect_to=None):
+        """The guard's wrapper around the REAL `Session.send` (it owns the redirect loop); only the socket layer
+        (`HTTPAdapter.send`) is a stand-in, so no connection is opened."""
+        import requests
+
+        seen = []
+
+        def adapter_send(adapter, request, **kw):
+            seen.append((request.method, request.url))
+            r = requests.Response()
+            r.request = request
+            r.url = request.url
+            r.raw = mock.MagicMock()
+            if redirect_to and request.url.startswith("https://html.duckduckgo.com"):
+                r.status_code = 302
+                r.headers["Location"] = redirect_to
+            else:
+                r.status_code = 200
+                r._content = b"<html></html>"
+            return r
+        wrapped = g._w_requests(requests.sessions.Session.send)
+        with mock.patch.object(requests.adapters.HTTPAdapter, "send", adapter_send), \
+                mock.patch.object(requests.sessions.Session, "send", wrapped):
+            yield seen
+
+    def test_requests_get_to_the_listed_host_passes_and_to_any_other_is_refused(self):
+        import requests
+
+        with mock.patch.object(g, "_state", return_value=self._turn()), self._wire() as seen:
+            self.assertEqual(requests.get("https://html.duckduckgo.com/html/?q=x").status_code, 200)
+            with self.assertRaises(g.AgentWriteBlocked):
+                requests.get("https://rates.example.org/x")
+            with self.assertRaises(g.AgentWriteBlocked):
+                requests.post("https://html.duckduckgo.com/html/", data={"q": "x"})
+        self.assertEqual([u for _, u in seen], ["https://html.duckduckgo.com/html/?q=x"])
+
+    def test_the_listed_host_cannot_redirect_the_agent_to_a_host_that_is_not_listed(self):
+        import requests
+
+        with mock.patch.object(g, "_state", return_value=self._turn()), self._wire(redirect_to="https://rates.example.org/landing") as seen:
+            with self.assertRaises(g.AgentWriteBlocked):
+                requests.get("https://html.duckduckgo.com/html/?q=x", allow_redirects=True)
+        self.assertEqual([u for _, u in seen], ["https://html.duckduckgo.com/html/?q=x"])
+
+    def test_the_chat_url_fetch_is_refused_for_a_host_that_is_not_listed(self):
+        """context_builder `search_web(url=...)`: the model-chosen URL goes to requests.get; the guard refuses it before a
+        byte leaves (a BaseException: the function's `except Exception` does not turn it into a quiet error reply)."""
+        from raven_ai_agent.api.context_builder import ContextMixin
+
+        with mock.patch.object(g, "_state", return_value=self._turn()), self._wire() as seen:
+            with self.assertRaises(g.AgentWriteBlocked):
+                ContextMixin().search_web("address", url="https://customer-site.example.org/contact")
+        self.assertEqual(seen, [])
 
     def test_an_unlisted_host_is_refused_in_every_pass(self):
         for mode in ("fenced", "dry", "armed"):
