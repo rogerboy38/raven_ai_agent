@@ -914,6 +914,19 @@ def _w_genid(orig):
     return wrapper
 
 
+def _w_genid_name(orig):
+    """`make_autoname("hash")` is how Frappe names child rows and hash-named documents."""
+    @functools.wraps(orig)
+    def wrapper(*a, **kw):
+        v = orig(*a, **kw)
+        s = _state()
+        key = a[0] if a else kw.get("key", "")
+        if s is not None and key == "hash" and isinstance(v, str):
+            s.setdefault("gen", set()).add(v)
+        return v
+    return wrapper
+
+
 def _w_rollback(orig):
     """An unqualified rollback inside a turn is a handler cleaning up after a failed step; it must not leave the
     earlier steps behind, and it cannot (the turn owns the transaction): the whole turn is undone instead."""
@@ -968,7 +981,7 @@ def _install():
     try:
         import frappe.model.naming as _naming
 
-        _patch_attr(_naming, "_generate_random_string", _w_genid)
+        _patch_attr(_naming, "make_autoname", _w_genid_name)
     except Exception:
         pass
     _patch_attr(frappe, "generate_hash", _w_genid)
