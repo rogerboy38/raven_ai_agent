@@ -48,14 +48,14 @@ class TestText(unittest.TestCase):
         for ok in ("confirm", " Confirm ", "CONFIRMAR", "@ai confirm", "@AI  confirmar"):
             self.assertTrue(g.is_exact_confirm(ok), ok)
         for bad in ("yes", "proceed", "do it", "execute", "confirm please", "please confirm",
-                    "confirm and submit", "@ai !confirm", "no confirm", "", "@maria confirm", "@mfg confirm"):
+                    "confirm and submit", "@ai !confirm", "no confirm", "", "@colleague confirm", "@mfg confirm"):
             self.assertFalse(g.is_exact_confirm(bad), bad)
 
     def test_cancel_words_only_for_the_agents_own_handle(self):
         self.assertTrue(g.is_cancel("cancel"))
         self.assertTrue(g.is_cancel("@ai cancelar"))
         self.assertFalse(g.is_cancel("cancel the order"))
-        self.assertFalse(g.is_cancel("@maria cancel"))
+        self.assertFalse(g.is_cancel("@colleague cancel"))
 
 
 class TestPending(unittest.TestCase):
@@ -191,7 +191,7 @@ class TestRunTurn(unittest.TestCase):
     def test_maria_confirm_does_not_confirm_and_cancels(self):
         self.go("a", "@ai do it", records=self.R)
         with mock.patch.object(g, "_replay") as rp:
-            self.go("a", "@maria confirm")
+            self.go("a", "@colleague confirm")
             rp.assert_not_called()
         self.assertFalse(g.has_pending("a", "c1"))
 
