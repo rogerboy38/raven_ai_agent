@@ -26,7 +26,7 @@ def submit_sensor_reading(**kwargs):
         notes: Additional notes (optional)
         reading_timestamp: ISO timestamp of reading (optional, defaults to now)
     """
-    frappe.only_for("System Manager")  # TASKS-342 ruling 76: the API user of the RPi must hold System Manager
+    frappe.only_for("IoT Sensor Intake")  # TASKS-344 ruling 81(4): the RPi API user holds this narrow role, not System Manager
     try:
         doc = frappe.get_doc({
             "doctype": "IoT Sensor Reading",

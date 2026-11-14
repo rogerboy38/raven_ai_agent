@@ -24,6 +24,10 @@ TEN = [
 ]
 
 
+# ruling 81(4): the IoT sensor intake has its own narrow role instead of System Manager
+ROLE_OF = {"submit_sensor_reading": "IoT Sensor Intake"}
+
+
 def _func(rel, name):
     tree = ast.parse(open(os.path.join(ROOT, rel), encoding="utf8").read())
     return next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
@@ -36,8 +40,8 @@ class TestGateIsTheFirstStatement(unittest.TestCase):
             body = [s for s in fn.body if not (isinstance(s, ast.Expr) and isinstance(getattr(s, "value", None), ast.Constant))]
             first_calls = [ast.unparse(s) for s in body[:3]]
             self.assertTrue(
-                any(c.startswith("frappe.only_for(") and "System Manager" in c for c in first_calls),
-                f"{rel}:{name} does not gate on System Manager first: {first_calls}",
+                any(c.startswith("frappe.only_for(") and ROLE_OF.get(name, "System Manager") in c for c in first_calls),
+                f"{rel}:{name} does not gate on {ROLE_OF.get(name, 'System Manager')} first: {first_calls}",
             )
             self.assertTrue(any("whitelist" in ast.unparse(d) for d in fn.decorator_list), f"{name} is not whitelisted")
 
