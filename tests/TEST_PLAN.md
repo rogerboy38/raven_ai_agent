@@ -147,8 +147,6 @@ pytest tests/test_manufacturing_agent.py::TestManufacturingAgent::test_create_wo
 
 | Test Name | Description |
 |-----------|-------------|
-| test_alexa_to_raven_creates_message | Alexa command creates Raven message in channel |
-| test_alexa_to_raven_missing_text | API rejects request without text |
 | test_determine_autonomy_level_3_for_dangerous_ops | Dangerous operations get autonomy level 3 |
 | test_determine_autonomy_level_2_for_modifications | Modification operations get autonomy level 2 |
 | test_determine_autonomy_level_1_for_readonly | Read-only queries get autonomy level 1 |

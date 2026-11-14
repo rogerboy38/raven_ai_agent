@@ -99,8 +99,8 @@ class HealthCheck:
         """Check if Raven bot is responding"""
         print("Checking Raven Bot...")
         
-        # Test a simple command
-        url = f"{self.config['site_url']}/api/method/raven_ai_agent.api.alexa_to_raven"
+        # The Alexa endpoint was removed (TASKS-342 ruling 77: its module could not import): probe the site instead
+        url = f"{self.config['site_url']}/api/method/ping"
         
         payload = {
             "text": "help",

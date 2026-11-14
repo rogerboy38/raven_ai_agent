@@ -49,9 +49,10 @@ class TestChatCodeLocks(unittest.TestCase):
                     bad.append(f"{rel}:{n.lineno}")
         self.assertEqual(bad, [])
 
-    def test_the_two_role_test_copies_are_gone(self):
-        for rel in ("api/command_router.py", "api/handlers/base.py"):
-            self.assertNotIn("privileged_roles", open(os.path.join(ROOT, rel), encoding="utf8").read(), rel)
+    def test_the_role_test_copies_are_gone(self):
+        self.assertNotIn("privileged_roles", open(os.path.join(ROOT, "api/command_router.py"), encoding="utf8").read())
+        # TASKS-342 ruling 77: the whole unused handlers/base.py (BaseMixin) is deleted
+        self.assertFalse(os.path.exists(os.path.join(ROOT, "api/handlers/base.py")))
 
     def test_create_batch_command_only_refuses(self):
         src = open(os.path.join(ROOT, "agents/manufacturing_agent.py"), encoding="utf8").read()

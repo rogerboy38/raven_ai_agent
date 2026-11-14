@@ -79,3 +79,6 @@ git add docs/
 git commit -m "docs: Add [document name]"
 git push
 ```
+
+
+> **Removed (TASKS-342, ruling 77):** the `raven_ai_agent.api.alexa_to_raven` endpoint and its module. The module imported `post_message_to_channel`, which `channel_utils` never defined, so it could not load. The Alexa sections of these documents describe a design that is no longer shipped.

@@ -760,66 +760,9 @@ class ManufacturingAgent:
         
         return None
 
-    # ========== NAMED BATCH CREATION (GAP-04) ==========
-
-    def create_named_batch(self, batch_name: str, item_code: str,
-                           expiry_date: str = None,
-                           manufacturing_date: str = None) -> Dict:
-        """Create a batch with a user-defined name.
-        
-        Args:
-            batch_name: The specific batch/lote name (e.g. '0803034251')
-            item_code: Item code that must have has_batch_no=1
-            expiry_date: Optional expiry date (YYYY-MM-DD)
-            manufacturing_date: Optional manufacturing date
-        """
-        try:
-            if not frappe.db.exists("Item", item_code):
-                return {"success": False, "error": f"Item '{item_code}' not found."}
-            
-            has_batch = frappe.db.get_value("Item", item_code, "has_batch_no")
-            if not has_batch:
-                return {"success": False, "error": f"Item '{item_code}' does not have batch tracking enabled."}
-            
-            # Check if batch already exists
-            if frappe.db.exists("Batch", batch_name):
-                existing_item = frappe.db.get_value("Batch", batch_name, "item")
-                if existing_item == item_code:
-                    return {
-                        "success": True,
-                        "batch_name": batch_name,
-                        "message": f"✅ Batch **{batch_name}** already exists for item {item_code}"
-                    }
-                else:
-                    return {"success": False, "error": f"Batch '{batch_name}' exists but belongs to item '{existing_item}', not '{item_code}'."}
-            
-            batch_data = {
-                "doctype": "Batch",
-                "batch_id": batch_name,
-                "item": item_code,
-            }
-            if expiry_date:
-                batch_data["expiry_date"] = expiry_date
-            if manufacturing_date:
-                batch_data["manufacturing_date"] = manufacturing_date
-            
-            batch = frappe.get_doc(batch_data)
-            batch.insert(ignore_permissions=True)
-            frappe.db.commit()
-            
-            return {
-                "success": True,
-                "batch_name": batch.name,
-                "message": (
-                    f"✅ Batch created: **{batch.name}**\n\n"
-                    f"  Item: {item_code}\n"
-                    f"  Batch ID: {batch_name}"
-                    + (f"\n  Expiry: {expiry_date}" if expiry_date else "")
-                    + (f"\n  Mfg Date: {manufacturing_date}" if manufacturing_date else "")
-                )
-            }
-        except Exception as e:
-            return {"success": False, "error": f"Error creating batch: {str(e)}"}
+    # ========== NAMED BATCH CREATION (GAP-04): removed (TASKS-342 ruling 77, decision 57: no exceptions) ==========
+    # The agent no longer creates batches, not even from the work-order plan: a lot is created in the Batch form
+    # (or by the Batch AMB controller) under the user's own rights.
 
     # ========== SO ALLOCATION CHECK (GAP-03) ==========
 
@@ -1022,9 +965,12 @@ class ManufacturingAgent:
                 if batch_name:
                     has_batch = frappe.db.get_value("Item", item_code, "has_batch_no")
                     if has_batch and not frappe.db.exists("Batch", batch_name):
-                        batch_result = self.create_named_batch(batch_name, item_code)
-                        if not batch_result["success"]:
-                            errors.append(f"WO{idx+1}: Batch error — {batch_result['error']}")
+                        # TASKS-342 ruling 77: the agent does not create batches (decision 57, no exceptions)
+                        errors.append(
+                            f"WO{idx+1}: Batch '{batch_name}' does not exist; the agent does not create batches. "
+                            "Create it in the Batch form, then repeat the plan. / "
+                            f"El lote '{batch_name}' no existe; el agente no crea lotes. Créelo en el formulario Lote."
+                        )
                 
                 # Create WO
                 result = self.create_work_order(

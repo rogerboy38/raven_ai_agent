@@ -17,9 +17,14 @@ import requests
 @frappe.whitelist(allow_guest=True)  # Allow OpenAI to call this
 def handler():
     # Security: Verify HMAC signature
-    secret = frappe.get_conf().webhook_secret
+    secret = frappe.get_conf().get("webhook_secret")
     signature = frappe.get_request_header("X-Signature")
     payload = frappe.request.get_data()
+    # TASKS-342 ruling 77: an unset secret or a missing signature must refuse (it used to fail with an AttributeError / TypeError)
+    if not secret:
+        frappe.throw("Webhook secret not configured", frappe.AuthenticationError)
+    if not signature:
+        frappe.throw("Invalid signature", frappe.AuthenticationError)
     
     computed_sig = hmac.new(
         secret.encode(),

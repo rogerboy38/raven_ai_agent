@@ -4,6 +4,8 @@ Original Server Scripts: /api/method/raven_webhook_handler.handle, Raven Webhook
 Type: Whitelisted APIs
 """
 
+import hmac
+
 import frappe
 
 # ============================================================
@@ -32,9 +34,12 @@ def handle_webhook(**kwargs):
 
 @frappe.whitelist(allow_guest=True)
 def handle():
-    # Verify secret if needed
+    # TASKS-342 ruling 77: an UNSET secret must refuse (None == None used to pass); constant-time compare
+    expected = frappe.conf.get("raven_webhook_secret")
+    if not expected:
+        frappe.throw("Webhook secret not configured", frappe.AuthenticationError)
     secret = frappe.get_request_header("X-Raven-Secret")
-    if secret != frappe.conf.raven_webhook_secret:
+    if not secret or not hmac.compare_digest(str(secret).encode("utf-8"), str(expected).encode("utf-8")):
         frappe.throw("Invalid secret", frappe.AuthenticationError)
     
     data = frappe.request.get_json()
