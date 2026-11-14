@@ -75,7 +75,6 @@ The Frappe API serves as the primary entry point for Alexa requests.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/method/raven_ai_agent.api.alexa_to_raven` | POST | Main Alexa entry point |
 | `/api/method/raven_ai_agent.api.get_dashboard` | GET | Dashboard data |
 | `/api/method/raven_ai_agent.api.health_check` | GET | Health check |
 
@@ -101,10 +100,6 @@ tail -f ~/frappe-bench/logs/web.log | grep raven_ai_agent
 # Check worker logs
 tail -f ~/frappe-bench/logs/worker.log | grep raven_ai_agent
 
-# Monitor specific endpoint
-curl -w "%{http_code}\n%{time_total}s\n" \
-  https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -X POST -H "Content-Type: application/json" -d '{}'
 ```
 
 ### Database Monitoring
@@ -215,10 +210,6 @@ def execute_agent(request):
 
 ```bash
 # Test agent responsiveness
-curl -X POST https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -H "Content-Type: application/json" \
-  -d '{"text": "help"}' \
-  -w "\nHTTP Status: %{http_code}\nTime: %{time_total}s\n"
 
 # Check agent logs
 tail -f ~/frappe-bench/logs/worker.log | grep -E "(ERROR|WARN|raven)"
@@ -236,7 +227,6 @@ RATE_LIMIT_CONFIG = {
 }
 
 # Monitor rate limit headers
-curl -I https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven
 # X-RateLimit-Limit: 100
 # X-RateLimit-Remaining: 95
 # X-RateLimit-Reset: 1640995200
@@ -603,8 +593,6 @@ echo "=== Raven AI Agent Quick Diagnostics ==="
 echo ""
 
 echo "1. Checking Frappe API..."
-curl -s -o /dev/null -w "Status: %{http_code}\n" \
-  https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven
 
 echo ""
 echo "2. Checking worker status..."

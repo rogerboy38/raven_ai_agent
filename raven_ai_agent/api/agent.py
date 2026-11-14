@@ -466,6 +466,7 @@ class RaymondLucyAgent(
 
 # ==================== API ENTRY POINTS ====================
 @frappe.whitelist()
+@agent_guard.guard_endpoint("process_message", "message", bang_arg="message")
 def process_message(message: str, conversation_history: str = None) -> Dict:
     """API endpoint for processing messages"""
     user = frappe.session.user

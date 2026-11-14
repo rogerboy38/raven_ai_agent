@@ -1632,3 +1632,190 @@ def apply_workflow_action(doc, action: str):
         return apply_workflow(doc, action)
     finally:
         frappe.flags.raven_agent_via_workflow = prev
+
+
+# --------------------------------------------------------------------------- the whitelisted endpoints
+def _result(shape: str, ok: bool, text: str, **extra):
+    body = {"success": ok, "response": text, "guard": True, **extra}
+    if shape == "json":
+        return json.dumps(body, default=str)
+    return body
+
+
+def _with_bang(kw: dict, bang_arg):
+    """The same call, its text argument armed (`!`) so the path really writes when it is dry-run or confirmed."""
+    out = dict(kw)
+    if bang_arg and isinstance(out.get(bang_arg), str) and not out[bang_arg].lstrip().startswith("!"):
+        out[bang_arg] = "!" + out[bang_arg]
+    return out
+
+
+def guard_endpoint(endpoint: str, confirm_arg: str, shape: str = "dict", bang_arg=None):
+    """Decorator for a whitelisted chat endpoint, under `@frappe.whitelist()`. The same two steps as the chat: a
+    writer's first call is a DRY RUN (every write recorded, with its content, and undone; the answer is
+    `needs_confirmation` with the whole list); a later call whose `confirm_arg` is exactly `confirm` replays the
+    stored call ARMED and bound to that list. A user without the role gets the read-only result. The author is the
+    session user; the pending key is (author, `api:<endpoint>`). `bang_arg` names the text argument that the path
+    reads a leading `!` from (the dry run and the confirmed run carry it)."""
+    import inspect
+
+    channel = f"api:{endpoint}"
+
+    def deco(fn):
+        sig = inspect.signature(fn)
+
+        @functools.wraps(fn)
+        def wrapper(*a, **kw):
+            user = frappe.session.user
+            if not agent_enabled():
+                return _result(shape, False, OFF_TEXT, agent_off=True)
+            args = dict(sig.bind_partial(*a, **kw).arguments)
+            extra = args.pop("kwargs", None) or {}
+            flat = {**args, **extra}
+            word = str(flat.get(confirm_arg) or "")
+            writer = is_writer(user)
+            db = frappe.db
+            sp = "raven_agent_api"
+            if has_pending(user, channel):
+                if is_exact_confirm(word) and writer:
+                    p = take_pending(user, channel)
+                    if not p:
+                        return _result(shape, False, "La confirmación expiró o no coincide. / The confirmation expired or does not match.")
+                    db.savepoint(sp)
+                    st = None
+                    try:
+                        with guarded_turn(user, "armed", expected=p.get("writes")) as st:
+                            res = fn(**_with_bang(p["payload"], bang_arg))
+                            if st["blocked"]:
+                                raise st["blocked"]
+                            if st.get("op_failed"):
+                                _block("handler_rolled_back", st["op_failed"])
+                            left = [e["what"] for e in st["expected"]]
+                            if left:                # all or nothing
+                                _block("not_announced", "not done: " + "; ".join(left))
+                            if "conseq" in p:       # what ERPNext posts must equal what the dry run counted
+                                diff = _conseq_diff(p.get("conseq"), st["conseq"])
+                                if diff:
+                                    _block("not_announced", "ERPNext's own postings differ from what I showed: " + diff)
+                        _flush_realtime(st)
+                        return res
+                    except AgentWriteBlocked as b:
+                        ok = _undo(st, sp, user, channel)
+                        return _result(shape, False, _refusal(b, True) if ok else _failure_text(b, undone=False), refused=b.reason)
+                    except _workflow_errors() as exc:
+                        ok = _undo(st, sp, user, channel)
+                        return _result(shape, False, _workflow_refusal(exc) if ok else _failure_text(exc, undone=False), refused="workflow")
+                    except Exception as exc:
+                        ok = _undo(st, sp, user, channel)
+                        frappe.log_error(title="agent_guard endpoint failed", message=f"{type(exc).__name__}: {exc}")
+                        return _result(shape, False, _failure_text(exc, undone=ok), refused="failed")
+                    finally:
+                        try:
+                            db.release_savepoint(sp)
+                        except Exception:
+                            pass
+                clear_pending(user, channel)
+            mode = "dry" if writer else "fenced"
+            db.savepoint(sp)
+            st = None
+            try:
+                with guarded_turn(user, mode) as st:
+                    res = fn(**(_with_bang(flat, bang_arg) if mode == "dry" else flat))
+                    if st["blocked"]:
+                        raise st["blocked"]
+                    if st.get("op_failed") and mode == "dry":
+                        _block("handler_rolled_back", st["op_failed"])
+                if mode == "dry" and st["records"]:
+                    records = list(st["records"])
+                    conseq = dict(st["conseq"])
+                    ok = _undo(st, sp, user, channel)
+                    if not ok:
+                        return _result(shape, False, _failure_text(RuntimeError("undo"), undone=False), refused="failed")
+                    out = _result(shape, False, _preview(records, conseq).replace("`confirm`", f'{confirm_arg}="confirm"'),
+                                  needs_confirmation=True, preview=[r["what"] for r in records])
+                    store_pending(user, channel, json.dumps(flat, sort_keys=True, default=str), records,
+                                  what=records[0]["what"], via="api", payload=flat, conseq=_conseq_list(conseq))
+                    return out
+                _flush_realtime(st)
+                return res
+            except AgentWriteBlocked as b:
+                ok = _undo(st, sp, user, channel)
+                return _result(shape, False, _refusal(b, writer) if ok else _failure_text(b, undone=False), refused=b.reason, read_only=not writer)
+            except _workflow_errors() as exc:
+                ok = _undo(st, sp, user, channel)
+                return _result(shape, False, _workflow_refusal(exc) if ok else _failure_text(exc, undone=False), refused="workflow")
+            except Exception as exc:
+                ok = _undo(st, sp, user, channel)
+                frappe.log_error(title="agent_guard endpoint failed", message=f"{type(exc).__name__}: {exc}")
+                return _result(shape, False, _failure_text(exc, undone=ok), refused="failed")
+            finally:
+                try:
+                    db.release_savepoint(sp)
+                except Exception:
+                    pass
+
+        return wrapper
+
+    return deco
+
+
+def _active_workflow(doctype: str):
+    try:
+        name = frappe.db.get_value("Workflow", {"document_type": doctype, "is_active": 1})
+        return frappe.get_cached_doc("Workflow", name) if name else None
+    except Exception:
+        return None
+
+
+def _author_roles() -> set:
+    st = _state()
+    return set(frappe.get_roles(st["user"] if st else None))
+
+
+def _move_doc(doc, target: int):
+    """submit (target 1) / cancel (target 2) a document the way its Workflow wants it, for the author.
+    Outside a guarded turn: the plain call, unchanged. In a turn: a doctype without an active Workflow takes the plain
+    call (the armed hook checks the author's own right); with one, the transition that leaves the current state for a
+    state of that docstatus, allowed to the author's roles, is applied through `apply_workflow_action`. No such
+    transition = refuse with the workflow's own reason, naming the roles; a role nobody holds is reported, never
+    worked around."""
+    plain = doc.submit if target == 1 else doc.cancel
+    if not _state():
+        return plain()
+    wf = _active_workflow(doc.doctype)
+    if not wf:
+        return plain()
+    from frappe.model.workflow import WorkflowPermissionError
+
+    state_field = wf.workflow_state_field or "workflow_state"
+    current = doc.get(state_field)
+    docstatus_of = {r.state: int(r.doc_status) for r in wf.states}
+    here = [t for t in wf.transitions if t.state == current and docstatus_of.get(t.next_state) == target]
+    roles = _author_roles()
+    ok = [t for t in here if t.allowed in roles]
+    if not ok:
+        if here:
+            names = ", ".join(sorted({t.allowed for t in here}))
+            holders = {
+                r: frappe.db.count("Has Role", {"role": r, "parenttype": "User"}) for r in {t.allowed for t in here}
+            }
+            empty = [r for r, n in holders.items() if not n]
+            more = f" (nobody holds: {', '.join(sorted(empty))})" if empty else ""
+            frappe.throw(
+                f"The workflow of {doc.doctype} lets only {names} take this step{more}; your roles do not include it.",
+                WorkflowPermissionError,
+            )
+        frappe.throw(
+            f"The workflow of {doc.doctype} has no single step from '{current}' that "
+            f"{'submits' if target == 1 else 'cancels'} the document; the agent does not walk a workflow.",
+            WorkflowPermissionError,
+        )
+    return apply_workflow_action(doc, ok[0].action)
+
+
+def submit_doc(doc):
+    return _move_doc(doc, 1)
+
+
+def cancel_doc(doc):
+    return _move_doc(doc, 2)

@@ -23,6 +23,7 @@ def upload_pedimento(sales_invoice_name: str, file_url: str = None, file_content
     Returns:
         dict with success status, drive_file_name, message
     """
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag writes are for System Manager only
     # Validate Sales Invoice
     if not sales_invoice_name:
         frappe.throw(_("Sales Invoice name is required"))

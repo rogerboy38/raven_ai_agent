@@ -70,7 +70,9 @@ def handler():
     payload = frappe.request.get_data(as_text=True)
     
     if not secret:
-        frappe.throw("Webhook secret not configured")
+        frappe.throw("Webhook secret not configured", frappe.AuthenticationError)
+    if not signature:  # TASKS-342 ruling 77: no header = refuse (compare_digest(None, ...) used to raise a TypeError)
+        frappe.throw("Invalid signature", frappe.AuthenticationError)
     
     computed_sig = hmac.new(
         secret.encode('utf-8'),

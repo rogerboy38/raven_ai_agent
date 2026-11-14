@@ -18,6 +18,7 @@ Key Intelligence:
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt
@@ -154,7 +155,7 @@ class ManufacturingAgent:
             if wo.docstatus == 2:
                 return {"success": False, "error": f"Work Order {wo_name} is cancelled and cannot be submitted."}
 
-            wo.submit()
+            agent_guard.submit_doc(wo)
             frappe.db.commit()
 
             return {
@@ -321,7 +322,7 @@ class ManufacturingAgent:
             se_dict = make_stock_entry(wo_name, "Manufacture", manufacture_qty)
             se = frappe.get_doc(se_dict)
             se.insert(ignore_permissions=True)
-            se.submit()
+            agent_guard.submit_doc(se)
             frappe.db.commit()
 
             return {
@@ -406,7 +407,7 @@ class ManufacturingAgent:
             se_dict = make_stock_entry(wo_name, "Material Transfer for Manufacture", transfer_qty)
             se = frappe.get_doc(se_dict)
             se.insert(ignore_permissions=True)
-            se.submit()
+            agent_guard.submit_doc(se)
             frappe.db.commit()
 
             return {
@@ -759,66 +760,9 @@ class ManufacturingAgent:
         
         return None
 
-    # ========== NAMED BATCH CREATION (GAP-04) ==========
-
-    def create_named_batch(self, batch_name: str, item_code: str,
-                           expiry_date: str = None,
-                           manufacturing_date: str = None) -> Dict:
-        """Create a batch with a user-defined name.
-        
-        Args:
-            batch_name: The specific batch/lote name (e.g. '0803034251')
-            item_code: Item code that must have has_batch_no=1
-            expiry_date: Optional expiry date (YYYY-MM-DD)
-            manufacturing_date: Optional manufacturing date
-        """
-        try:
-            if not frappe.db.exists("Item", item_code):
-                return {"success": False, "error": f"Item '{item_code}' not found."}
-            
-            has_batch = frappe.db.get_value("Item", item_code, "has_batch_no")
-            if not has_batch:
-                return {"success": False, "error": f"Item '{item_code}' does not have batch tracking enabled."}
-            
-            # Check if batch already exists
-            if frappe.db.exists("Batch", batch_name):
-                existing_item = frappe.db.get_value("Batch", batch_name, "item")
-                if existing_item == item_code:
-                    return {
-                        "success": True,
-                        "batch_name": batch_name,
-                        "message": f"✅ Batch **{batch_name}** already exists for item {item_code}"
-                    }
-                else:
-                    return {"success": False, "error": f"Batch '{batch_name}' exists but belongs to item '{existing_item}', not '{item_code}'."}
-            
-            batch_data = {
-                "doctype": "Batch",
-                "batch_id": batch_name,
-                "item": item_code,
-            }
-            if expiry_date:
-                batch_data["expiry_date"] = expiry_date
-            if manufacturing_date:
-                batch_data["manufacturing_date"] = manufacturing_date
-            
-            batch = frappe.get_doc(batch_data)
-            batch.insert(ignore_permissions=True)
-            frappe.db.commit()
-            
-            return {
-                "success": True,
-                "batch_name": batch.name,
-                "message": (
-                    f"✅ Batch created: **{batch.name}**\n\n"
-                    f"  Item: {item_code}\n"
-                    f"  Batch ID: {batch_name}"
-                    + (f"\n  Expiry: {expiry_date}" if expiry_date else "")
-                    + (f"\n  Mfg Date: {manufacturing_date}" if manufacturing_date else "")
-                )
-            }
-        except Exception as e:
-            return {"success": False, "error": f"Error creating batch: {str(e)}"}
+    # ========== NAMED BATCH CREATION (GAP-04): removed (TASKS-342 ruling 77, decision 57: no exceptions) ==========
+    # The agent no longer creates batches, not even from the work-order plan: a lot is created in the Batch form
+    # (or by the Batch AMB controller) under the user's own rights.
 
     # ========== SO ALLOCATION CHECK (GAP-03) ==========
 
@@ -1021,9 +965,12 @@ class ManufacturingAgent:
                 if batch_name:
                     has_batch = frappe.db.get_value("Item", item_code, "has_batch_no")
                     if has_batch and not frappe.db.exists("Batch", batch_name):
-                        batch_result = self.create_named_batch(batch_name, item_code)
-                        if not batch_result["success"]:
-                            errors.append(f"WO{idx+1}: Batch error — {batch_result['error']}")
+                        # TASKS-342 ruling 77: the agent does not create batches (decision 57, no exceptions)
+                        errors.append(
+                            f"WO{idx+1}: Batch '{batch_name}' does not exist; the agent does not create batches. "
+                            "Create it in the Batch form, then repeat the plan. / "
+                            f"El lote '{batch_name}' no existe; el agente no crea lotes. Créelo en el formulario Lote."
+                        )
                 
                 # Create WO
                 result = self.create_work_order(
@@ -1210,7 +1157,6 @@ class ManufacturingAgent:
             @manufacturing create wo [item] qty [qty] bom [bom]
             @manufacturing create wo from so [SO-NAME]
             @manufacturing create wo plan for [SO-NAME] ...
-            @manufacturing create batch [NAME] for [ITEM]
             @manufacturing submit wo [WO-NAME]
             @manufacturing manufacture [WO-NAME] qty [qty]
             @manufacturing transfer materials [WO-NAME] [batch BATCH]
@@ -1240,28 +1186,11 @@ class ManufacturingAgent:
         if "help" in message_lower or "capabilities" in message_lower:
             return self._help_text()
 
-        # ---- CREATE NAMED BATCH (GAP-04) ----
+        # ---- CREATE NAMED BATCH (GAP-04) ---- removed by TASKS-337 slice 2 (Hugh's decision 57, no exceptions):
+        # lots are born in the forms (Batch AMB, Almacén / Calidad), never typed into a chat.
         if "create batch" in message_lower:
-            # @ai create batch 0803034251 for ITEM-CODE [expiry 2027-03-07]
-            batch_match = re.search(r'create\s+batch\s+([\w-]+)', message, re.IGNORECASE)
-            item_match = re.search(r'(?:for|item)\s+(.+?)(?:\s+qty\b|\s+bom\b|\s+expiry\b|\s+mfg\b|\s+each\b|\s+from\b|$)', message, re.IGNORECASE)
-            expiry_match = re.search(r'expiry\s+([\d-]+)', message, re.IGNORECASE)
-            mfg_date_match = re.search(r'mfg[_-]?date\s+([\d-]+)', message, re.IGNORECASE)
-            
-            if not batch_match:
-                return "❌ Specify batch name. Example: `@ai create batch 0803034251 for 0803-VARIANT`"
-            if not item_match:
-                return "❌ Specify item. Example: `@ai create batch 0803034251 for 0803-VARIANT`"
-            
-            batch_name = batch_match.group(1).strip()
-            item_code = item_match.group(1).strip()
-            expiry = expiry_match.group(1) if expiry_match else None
-            mfg_date = mfg_date_match.group(1) if mfg_date_match else None
-            
-            result = self.create_named_batch(batch_name, item_code, 
-                                              expiry_date=expiry,
-                                              manufacturing_date=mfg_date)
-            return result.get("message", result.get("error", "Unknown error"))
+            return ("❌ The agent does not create batches. Create the lot in the Batch AMB form. / "
+                    "❌ El agente no crea lotes. Cree el lote en el formulario de Batch AMB.")
 
         # ---- CREATE WO PLAN (GAP-03) ----
         # Format: @ai create wo plan for SO-00763: WO1 qty 1055 lote 0803034251, WO2 qty 600 lote 0803080241
@@ -1406,8 +1335,7 @@ class ManufacturingAgent:
             "`@ai wo plan [SO-NAME]: qty 1055 lote ABC, qty 600 lote DEF` — Custom split with batches\n"
             "_Smart: auto-detects existing allocation, shows dashboard if fully allocated, trims plan to remaining capacity_\n\n"
             "**Batch Management (GAP-04)**\n"
-            "`@ai create batch [NAME] for [ITEM]` — Create named batch/lote\n"
-            "`@ai create batch [NAME] for [ITEM] expiry 2027-12-31` — With expiry date\n\n"
+            "(`create batch` was removed: lots are created in the Batch AMB form)\n\n"
             "**Work Order Actions**\n"
             "`@ai submit wo [WO-NAME]` — Submit Work Order\n"
             "`@ai transfer materials [WO-NAME]` — Transfer materials to WIP\n"

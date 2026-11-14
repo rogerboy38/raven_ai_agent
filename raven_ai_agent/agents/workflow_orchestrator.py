@@ -21,6 +21,7 @@ Handles:
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt, add_days
@@ -243,7 +244,7 @@ class WorkflowOrchestrator:
             if so.docstatus == 2:
                 return {"step": 3, "success": False, "error": f"Sales Order {so.name} is cancelled."}
 
-            so.submit()
+            agent_guard.submit_doc(so)
             frappe.db.commit()
             return {
                 "step": 3, "success": True,
@@ -322,7 +323,7 @@ class WorkflowOrchestrator:
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so.name)
             dn.insert(ignore_permissions=True)
-            dn.submit()
+            agent_guard.submit_doc(dn)
             frappe.db.commit()
 
             return {
@@ -388,7 +389,7 @@ class WorkflowOrchestrator:
                 si.custom_customer_invoice_currency = so.currency
 
             si.insert(ignore_permissions=True)
-            si.submit()
+            agent_guard.submit_doc(si)
             frappe.db.commit()
 
             return {

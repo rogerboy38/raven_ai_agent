@@ -119,6 +119,13 @@ def idempotency_check(doctype: str, filters: Dict) -> Optional[str]:
 
 @frappe.whitelist()
 def validate_and_fix_bom(bom_name: str, auto_fix: bool = True) -> Dict:
+    """Whitelisted door: System Manager only (TASKS-342 ruling 76). Agent code calls
+    `_validate_and_fix_bom` under the author's own rights (the guard's hooks)."""
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag / raw-SQL writes are for System Manager only
+    return _validate_and_fix_bom(bom_name, auto_fix)
+
+
+def _validate_and_fix_bom(bom_name: str, auto_fix: bool = True) -> Dict:
     """Validates and fixes BOM operation times and workstation assignments.
     
     Based on actual production errors from MFG-WO-02225 type issues.
@@ -162,6 +169,14 @@ def validate_and_fix_bom(bom_name: str, auto_fix: bool = True) -> Dict:
 
 @frappe.whitelist()
 def create_work_order_from_bom(bom_name: str, quantity: float = None,
+                                production_item: str = None) -> Dict:
+    """Whitelisted door: System Manager only (TASKS-342 ruling 76). Agent code calls
+    `_create_work_order_from_bom` under the author's own rights (the guard's hooks)."""
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag / raw-SQL writes are for System Manager only
+    return _create_work_order_from_bom(bom_name, quantity, production_item)
+
+
+def _create_work_order_from_bom(bom_name: str, quantity: float = None,
                                 production_item: str = None) -> Dict:
     """Create a Work Order from a BOM."""
     try:

@@ -2,6 +2,7 @@
 BOM Commands + Label Fixer + Cancel/Revert
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 import re
 import requests
@@ -116,7 +117,7 @@ class BOMMixin:
         # Check BOM labels for item
         if "check bom" in query_lower or "fix bom" in query_lower or "bom label" in query_lower:
             try:
-                from raven_ai_agent.api.bom_fixer import check_and_fix_item, fix_multiple_items, force_fix_submitted_bom
+                from raven_ai_agent.api.bom_fixer import check_and_fix_item, fix_multiple_items
                 
                 # Extract item code(s)
                 item_match = re.search(r'(?:for|item|items?)\s+([^\s,]+(?:\s*,\s*[^\s,]+)*)', query, re.IGNORECASE)
@@ -133,11 +134,13 @@ class BOMMixin:
                         base = bom_name.replace("BOM-", "").split("-")[0]
                         label_code = f"LBL{base}"
                     
-                    result = force_fix_submitted_bom(bom_name, label_code)
-                    if result["success"]:
-                        return {"success": True, "message": f"⚡ **FORCE FIX RESULT**\n\n{result['message']}"}
-                    else:
-                        return {"success": False, "error": result["message"]}
+                    # TASKS-337 slice 2: `force_fix_submitted_bom` rewrites a SUBMITTED BOM with raw SQL; the agent no longer
+                    # offers it (the whitelisted API `api_force_fix_bom` is outside chat and unchanged: see the report).
+                    return {
+                        "success": False,
+                        "error": f"The agent does not force-fix a submitted BOM ({bom_name}). Cancel and amend it in the BOM form. / "
+                                 f"El agente no fuerza la corrección de un BOM enviado ({bom_name}). Cancélelo y enmiéndelo en el formulario.",
+                    }
                 
                 # Check/fix single item
                 elif item_match:
@@ -229,7 +232,7 @@ class BOMMixin:
                             "preview": f"⚠️ **CANCEL BOM {bom_name}?**\n\n  Item: {bom.item}\n  Status: Submitted\n\nThis will cancel the BOM. Say 'confirm' or use `!` prefix."
                         }
                     
-                    bom.cancel()
+                    agent_guard.cancel_doc(bom)
                     frappe.db.commit()
                     return {
                         "success": True,
@@ -238,30 +241,12 @@ class BOMMixin:
                 
                 # Case 2: Revert cancelled BOM to Draft
                 if ("revert" in query_lower or "to draft" in query_lower or "undraft" in query_lower) and bom.docstatus == 2:
-                    if not is_confirm:
-                        return {
-                            "requires_confirmation": True,
-                            "preview": f"🔄 **REVERT BOM {bom_name} TO DRAFT?**\n\n  Item: {bom.item}\n  Current Status: Cancelled (docstatus=2)\n\nThis will reset the BOM to Draft status so you can edit it. Say 'confirm' or use `!` prefix."
-                        }
-                    
-                    # Reset BOM to draft via SQL
-                    frappe.db.sql("""
-                        UPDATE `tabBOM` 
-                        SET docstatus = 0, is_active = 0, is_default = 0
-                        WHERE name = %s
-                    """, bom_name)
-                    
-                    # Reset child tables
-                    frappe.db.sql("UPDATE `tabBOM Item` SET docstatus = 0 WHERE parent = %s", bom_name)
-                    frappe.db.sql("UPDATE `tabBOM Operation` SET docstatus = 0 WHERE parent = %s", bom_name)
-                    frappe.db.sql("UPDATE `tabBOM Explosion Item` SET docstatus = 0 WHERE parent = %s", bom_name)
-                    frappe.db.sql("UPDATE `tabBOM Scrap Item` SET docstatus = 0 WHERE parent = %s", bom_name)
-                    
-                    frappe.db.commit()
-                    
+                    # TASKS-337 slice 2 (Hugh's decision 57, no exceptions): the agent no longer reverts a cancelled
+                    # document to Draft by raw SQL. The ERPNext way is Amend, in the form, under the user's own rights.
                     return {
-                        "success": True,
-                        "message": f"✅ BOM **{bom_name}** reverted to Draft!\n\n  Item: {bom.item}\n  Status: Draft (docstatus=0)\n  is_active: No\n  is_default: No\n\n📝 You can now edit the BOM in ERPNext."
+                        "success": False,
+                        "error": f"The agent does not revert a cancelled BOM to Draft ({bom_name}). Amend it in the BOM form instead. / "
+                                 f"El agente no revierte un BOM cancelado a Borrador ({bom_name}). Use Enmendar en el formulario.",
                     }
                 
                 # Case 3: Already in the target state

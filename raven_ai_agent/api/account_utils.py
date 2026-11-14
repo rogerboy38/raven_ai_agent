@@ -30,6 +30,7 @@ def fix_invoice_debit_to(invoice_name, new_debit_to):
         dict with success status and message
     """
     # Permission check
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag / raw-SQL writes are for System Manager only
     if not frappe.has_permission("Sales Invoice", "write"):
         frappe.throw("You don't have permission to modify Sales Invoices")
     

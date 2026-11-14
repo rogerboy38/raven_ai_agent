@@ -8,7 +8,6 @@ This folder contains project documentation, specifications, and architectural pl
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| [00_ORCHESTRATOR_PROJECT_PLAN.md](./00_ORCHESTRATOR_PROJECT_PLAN.md) | Alexa → Raven → ERPNext voice integration (6-phase plan) | ✅ Active |
 | [AGENTS.md](./AGENTS.md) | Agent configuration and prompt templates | ✅ Active |
 | [FORMULATION_ORCHESTRATOR_SPEC_V4.pdf](./FORMULATION_ORCHESTRATOR_SPEC_V4.pdf) | Aloe powder formulation orchestrator specification | ✅ Active |
 
@@ -50,7 +49,6 @@ This folder contains project documentation, specifications, and architectural pl
 ```
 docs/
 ├── README.md                              # This file
-├── 00_ORCHESTRATOR_PROJECT_PLAN.md        # Voice assistant integration plan
 ├── AGENTS.md                              # Agent configurations
 ├── FORMULATION_ORCHESTRATOR_SPEC_V4.pdf   # Formulation spec (PDF)
 ├── IMPLEMENTATION_ROADMAP_Aloe_Optimization.md   # (To be added)
@@ -79,3 +77,6 @@ git add docs/
 git commit -m "docs: Add [document name]"
 git push
 ```
+
+
+> **Removed (TASKS-342 ruling 77, TASKS-344 ruling 81(6)):** the `raven_ai_agent.api.alexa_to_raven` endpoint and module (the module could not import: `post_message_to_channel` was never defined) and the Alexa orchestrator project plan. What is left of Alexa in `DEPLOYMENT_GUIDE.md` and `MONITORING_ALERTING.md` is prose of a design that is not shipped; the commands that called the removed endpoint were taken out.

@@ -72,10 +72,8 @@ The Raven AI Agent system consists of three primary environments:
 ```bash
 # Environment variables (.env)
 FRAPPE_SITE=dev.site.com
-ALEXA_VERIFY_TOKEN=dev_verify_token
 LLM_PROVIDER=openai
 LLM_API_KEY=sk-dev-xxxxx
-ALEXA_MODE=development
 LOG_LEVEL=DEBUG
 RATE_LIMIT_PER_MINUTE=10
 ```
@@ -83,7 +81,6 @@ RATE_LIMIT_PER_MINUTE=10
 **Features:**
 - Debug logging enabled
 - Relaxed rate limiting
-- Test Alexa payloads accepted
 - Full error stack traces
 - Local file-based logging
 
@@ -106,10 +103,8 @@ RATE_LIMIT_PER_MINUTE=10
 ```bash
 # Environment variables
 FRAPPE_SITE=staging.erp.sysmayal2.cloud
-ALEXA_VERIFY_TOKEN=staging_verify_token
 LLM_PROVIDER=openai
 LLM_API_KEY=sk-stag-xxxxx
-ALEXA_MODE=staging
 LOG_LEVEL=INFO
 RATE_LIMIT_PER_MINUTE=30
 ```
@@ -140,13 +135,10 @@ RATE_LIMIT_PER_MINUTE=30
 ```bash
 # Environment variables (.env)
 FRAPPE_SITE=erp.sysmayal2.cloud
-ALEXA_VERIFY_TOKEN=prod_verify_token_secure
 LLM_PROVIDER=openai
 LLM_API_KEY=sk-prod-xxxxx
-ALEXA_MODE=production
 LOG_LEVEL=WARNING
 RATE_LIMIT_PER_MINUTE=100
-ALEXA_AUTH_ENABLED=true
 SAFETY_GUARDRAILS_ENABLED=true
 ```
 
@@ -283,10 +275,6 @@ bench status
 # Run health check script
 python scripts/health_check.py --env production
 
-# Verify Alexa endpoint
-curl -X POST https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -H "Content-Type: application/json" \
-  -d '{"text": "test", "alexa_verify_token": "..."}'
 ```
 
 ---
@@ -373,7 +361,6 @@ git pull origin v11.0.0-clean
 bench --site green.erp.sysmayal2.cloud migrate
 
 # Test green environment
-curl https://green.erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven
 
 # Switch traffic (DNS or load balancer)
 # Monitor green environment
@@ -421,7 +408,6 @@ Rollback should be triggered automatically if any of these conditions are met:
 tail -n 1000 ~/frappe-bench/logs/worker.error.log | grep ERROR
 
 # Check response times
-curl -w "%{time_total}s" -o /dev/null -s https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven
 ```
 
 #### Step 2: Stop Incoming Traffic (Optional)
@@ -479,10 +465,6 @@ git log --oneline -1
 # Run tests
 python -m pytest tests/ -v
 
-# Test endpoint
-curl -X POST https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -H "Content-Type: application/json" \
-  -d '{"text": "test"}'
 ```
 
 ### Rollback Decision Matrix
@@ -523,23 +505,10 @@ Overall Status: HEALTHY (with known issue)
 ### Smoke Tests
 
 ```bash
-# Test 1: Alexa endpoint
-curl -X POST https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(cat ~/.frappe_token)" \
-  -d '{"text": "what is the status of sales order SO-001"}'
 
 # Test 2: Sales order creation
-curl -X POST https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(cat ~/.frappe_token)" \
-  -d '{"text": "create sales order for test customer"}'
 
 # Test 3: Safety guardrails
-curl -X POST https://erp.sysmayal2.cloud/api/method/raven_ai_agent.api.alexa_to_raven \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(cat ~/.frappe_token)" \
-  -d '{"text": "delete all sales orders"}'
 ```
 
 ### Monitoring Dashboard
