@@ -423,12 +423,8 @@ class TestContentMatch(unittest.TestCase):
             def __init__(self, n, t):
                 self.fieldname, self.fieldtype = n, t
 
-        def __init__(self, has_posting):
+        def __init__(self):
             self.fields = [self.F("posting_time", "Time"), self.F("code", "Data"), self.F("ref", "Link")]
-            self._h = has_posting
-
-        def has_field(self, n):
-            return self._h and n == "set_posting_time"
 
     class _D:
         def __init__(self, meta, **v):
@@ -438,33 +434,32 @@ class TestContentMatch(unittest.TestCase):
             return self._v.get(k)
 
     def test_a_posting_time_the_author_typed_is_part_of_the_match(self):
-        m = self._M(True)
+        m = self._M()
         typed = g._row_values(self._D(m, set_posting_time=1, posting_time="10:00:00"), m)
         later = g._row_values(self._D(m, set_posting_time=1, posting_time="23:59:00"), m)
         self.assertNotEqual(typed, later)
 
     def test_a_posting_time_the_system_stamps_is_not(self):
-        m = self._M(True)
+        m = self._M()
         a = g._row_values(self._D(m, set_posting_time=0, posting_time="10:00:00"), m)
         b = g._row_values(self._D(m, set_posting_time=0, posting_time="10:00:07"), m)
         self.assertEqual(a, b)
+        c = g._row_values(self._D(m, posting_time="10:00:00"), m)          # a document without the switch: system time
+        self.assertNotIn("posting_time", c)
 
-    def test_a_time_field_on_a_document_without_that_switch_is_part_of_the_match(self):
-        m = self._M(False)
-        a = g._row_values(self._D(m, posting_time="10:00:00"), m)
-        b = g._row_values(self._D(m, posting_time="11:00:00"), m)
-        self.assertNotEqual(a, b)
-
-    def test_only_a_link_can_hold_a_generated_id(self):
-        m = self._M(False)
-        # two different user-visible codes of the hash shape stay different in a Data field...
-        a = g._row_values(self._D(m, code="a1b2c3d4e5"), m)
-        b = g._row_values(self._D(m, code="z9y8x7w6v5"), m)
-        self.assertNotEqual(a, b)
-        # ... and collapse in a Link field, where Frappe's own generated name can sit
-        la = g._row_values(self._D(m, ref="a1b2c3d4e5"), m)
-        lb = g._row_values(self._D(m, ref="z9y8x7w6v5"), m)
-        self.assertEqual(la, lb)
+    def test_only_an_id_generated_in_this_pass_is_normalised(self):
+        m = self._M()
+        st = {"gen": {"a1b2c3d4e5"}}
+        with mock.patch.object(g, "_state", return_value=st):
+            # an id Frappe generated in this pass (in any field type) is the same id in the other pass
+            self.assertEqual(g._row_values(self._D(m, code="a1b2c3d4e5"), m), g._row_values(self._D(m, code="a1b2c3d4e5"), m))
+            self.assertEqual(g._norm("a1b2c3d4e5"), "<generated id>")
+            # a code the user typed, even of the same shape, is never mistaken for one
+            a = g._row_values(self._D(m, code="z9y8x7w6v5"), m)
+            b = g._row_values(self._D(m, code="q1q2q3q4q5"), m)
+            self.assertNotEqual(a, b)
+        with mock.patch.object(g, "_state", return_value=None):
+            self.assertEqual(g._norm("a1b2c3d4e5"), "a1b2c3d4e5")
 
 
 class TestOutbound(unittest.TestCase):
