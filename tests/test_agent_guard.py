@@ -158,6 +158,26 @@ class TestRunTurn(unittest.TestCase):
         self.assertTrue(self.go("a", "please run the manufacturing plan"))
         self.assertEqual(self.ran, ["please run the manufacturing plan"])
 
+    def test_a_second_request_of_the_same_author_and_channel_waits_for_the_first(self):
+        self.cache.d[g._run_lock_key("a", "c1")] = 1            # a run of this author in this channel is in progress
+        self.assertEqual(self.go("a", "@ai do one more thing"), "refused")
+        self.assertEqual(self.ran, [])
+        self.assertIn("previous request", self.replies[-1])
+
+    def test_another_author_or_channel_is_not_held_up(self):
+        self.cache.d[g._run_lock_key("a", "c1")] = 1
+        self.assertTrue(self.go("b", "@ai do it"))
+
+    def test_the_lock_is_released_when_the_run_ends(self):
+        self.go("a", "@ai do it")
+        self.assertNotIn(g._run_lock_key("a", "c1"), self.cache.d)
+
+    def test_the_kill_switch_is_read_again_inside_the_run(self):
+        with mock.patch.object(g, "agent_enabled", return_value=False):
+            self.assertEqual(self.go("a", "@ai do it"), "refused")
+        self.assertEqual(self.ran, [])
+        self.assertIn("off", self.replies[-1])
+
     def test_empty_text_is_not_handled(self):
         self.assertFalse(self.go("a", "   "))
 
@@ -228,7 +248,7 @@ class TestAddressedAndPreview(unittest.TestCase):
         recs += [{"ident": ["delete", "Thing", "T-1", "h"], "what": "delete Thing T-1"},
                  {"ident": ["submit", "Thing", "T-2", "h"], "what": "submit Thing T-2"},
                  {"ident": ["sendmail", "", "", ""], "what": "send an e-mail"}]
-        text = g._preview(recs, {("create", "Stock Ledger Entry"): 4})
+        text = g._preview(recs, {("create", "Stock Ledger Entry", ""): {"n": 4, "qty": 0.0, "debit": 0.0, "credit": 0.0}})
         lines = text.split("\n")
         order = [ln for ln in lines if ln[:1].isdigit()]
         self.assertTrue(order[0].endswith("delete Thing T-1"))
@@ -290,3 +310,212 @@ class TestProviderHosts(unittest.TestCase):
 
     def test_a_random_host_is_not_allowed(self):
         self.assertNotIn("example.org", g._provider_hosts())
+
+
+# ------------------------------------------------------------------------------------ TASKS-347 (fourth round)
+import sys as _sys
+
+
+def _mod(name, src):
+    d = {"__name__": name}
+    exec(src, d)
+    return d
+
+
+_DOC = _mod("frappe.model.document", """
+def save(f): return _save(f)
+def _save(f): return f()
+def submit(f): return _submit(f)
+def _submit(f): return save(f)
+def insert(f): return f()
+def run_method(f): return f()
+""")
+_AGENT = _mod("raven_ai_agent.skills.thing", "def go(f): return f()\n")
+_ERP = _mod("erpnext.stock.stock_entry", "def hook(f): return f()\n")
+_RND = _mod("rnd_warehouse_management.qi_automation", "def hook(f): return f()\ndef helper(f): return f()\n")
+
+
+def _probe(own_op):
+    return g._issuer(_sys._getframe(1), own_op=own_op)
+
+
+class TestIssuer(unittest.TestCase):
+    """C-2/C-3: one rule from the stack, whatever app the code lives in."""
+
+    def test_the_agents_own_document_operation_is_the_agents(self):
+        r = _AGENT["go"](lambda: _DOC["save"](lambda: _probe(True)))
+        self.assertEqual(r, "agent")
+
+    def test_a_hook_of_our_own_app_under_a_submit_is_a_consequence(self):
+        # agent -> submit -> (erpnext on_submit) -> (rnd hook) -> insert of the inspection
+        r = _AGENT["go"](lambda: _DOC["submit"](lambda: _ERP["hook"](lambda: _RND["hook"](lambda: _DOC["insert"](lambda: _probe(True))))))
+        self.assertEqual(r, "consequence")
+
+    def test_a_controller_method_run_through_the_event_runner_by_the_agent_is_the_agents(self):
+        r = _AGENT["go"](lambda: _DOC["run_method"](lambda: _ERP["hook"](lambda: _probe(False))))
+        self.assertEqual(r, "agent")
+
+    def test_a_helper_in_another_app_called_by_the_agent_is_the_agents(self):
+        r = _AGENT["go"](lambda: _RND["helper"](lambda: _DOC["insert"](lambda: _probe(True))))
+        self.assertEqual(r, "agent")
+
+    def test_a_framework_function_called_straight_from_the_agent_is_the_agents(self):
+        r = _AGENT["go"](lambda: _ERP["hook"](lambda: _probe(False)))
+        self.assertEqual(r, "agent")
+
+    def test_a_direct_write_under_a_submit_is_a_consequence(self):
+        r = _AGENT["go"](lambda: _DOC["submit"](lambda: _ERP["hook"](lambda: _probe(False))))
+        self.assertEqual(r, "consequence")
+
+    def test_nothing_met_is_judged_as_the_agents(self):
+        self.assertEqual(_probe(False), "agent")
+
+
+class TestConsequences(unittest.TestCase):
+    def _s(self):
+        return {"conseq": {}, "t0": time.monotonic(), "budget": 90, "hold": 30}
+
+    def test_ledger_consequences_name_where_they_post_and_how_much(self):
+        s = self._s()
+        g._consequence(s, "create", "Stock Ledger Entry", "Stores - X", -5.0)
+        g._consequence(s, "create", "Stock Ledger Entry", "Stores - X", -2.0)
+        g._consequence(s, "create", "GL Entry", "Stock In Hand", 0, 100.0, 0)
+        text = g._conseq_text(s["conseq"])
+        self.assertIn("2× create Stock Ledger Entry (Stores - X, qty -7)", text)
+        self.assertIn("1× create GL Entry (Stock In Hand, debit 100)", text)
+
+    def test_the_armed_run_must_post_what_the_dry_run_counted(self):
+        a, b = self._s(), self._s()
+        for s, q in ((a, -5.0), (b, -5.0)):
+            g._consequence(s, "create", "Stock Ledger Entry", "W1", q)
+        stored = g._conseq_list(a["conseq"])
+        self.assertEqual(g._conseq_diff(stored, b["conseq"]), "")
+        c = self._s()
+        g._consequence(c, "create", "Stock Ledger Entry", "W1", -6.0)           # another quantity
+        self.assertIn("qty -5", g._conseq_diff(stored, c["conseq"]))
+        d = self._s()
+        g._consequence(d, "create", "Stock Ledger Entry", "W2", -5.0)           # another warehouse
+        self.assertTrue(g._conseq_diff(stored, d["conseq"]))
+        self.assertTrue(g._conseq_diff(stored, {}))                              # fewer rows
+
+    def test_the_stored_list_survives_json(self):
+        s = self._s()
+        g._consequence(s, "create", "GL Entry", "Debtors", 0, 10.5, 0)
+        import json
+
+        again = json.loads(json.dumps(g._conseq_list(s["conseq"])))
+        self.assertEqual(g._conseq_diff(again, s["conseq"]), "")
+
+    def test_the_pending_digest_binds_the_consequences(self):
+        a = g._digest("u", "c", "t", [], [["create", "GL Entry", "A", 1, 0, 1, 0]])
+        b = g._digest("u", "c", "t", [], [["create", "GL Entry", "A", 1, 0, 2, 0]])
+        self.assertNotEqual(a, b)
+
+    def test_sql_consequences_show_the_verb_and_the_table(self):
+        self.assertEqual(g._sql_signature("update `tabBin` set actual_qty = 3 where name = 'x'"), "update Bin")
+        self.assertTrue(g._HARD_SQL_RE.match("alter table `tabBin` add x int"))
+        self.assertFalse(g._HARD_SQL_RE.match("delete from `tabGL Entry` where voucher_no = 'x'"))
+
+
+class TestContentMatch(unittest.TestCase):
+    class _M:
+        class F:
+            def __init__(self, n, t):
+                self.fieldname, self.fieldtype = n, t
+
+        def __init__(self, has_posting):
+            self.fields = [self.F("posting_time", "Time"), self.F("code", "Data"), self.F("ref", "Link")]
+            self._h = has_posting
+
+        def has_field(self, n):
+            return self._h and n == "set_posting_time"
+
+    class _D:
+        def __init__(self, meta, **v):
+            self.meta, self._v = meta, v
+
+        def get(self, k):
+            return self._v.get(k)
+
+    def test_a_posting_time_the_author_typed_is_part_of_the_match(self):
+        m = self._M(True)
+        typed = g._row_values(self._D(m, set_posting_time=1, posting_time="10:00:00"), m)
+        later = g._row_values(self._D(m, set_posting_time=1, posting_time="23:59:00"), m)
+        self.assertNotEqual(typed, later)
+
+    def test_a_posting_time_the_system_stamps_is_not(self):
+        m = self._M(True)
+        a = g._row_values(self._D(m, set_posting_time=0, posting_time="10:00:00"), m)
+        b = g._row_values(self._D(m, set_posting_time=0, posting_time="10:00:07"), m)
+        self.assertEqual(a, b)
+
+    def test_a_time_field_on_a_document_without_that_switch_is_part_of_the_match(self):
+        m = self._M(False)
+        a = g._row_values(self._D(m, posting_time="10:00:00"), m)
+        b = g._row_values(self._D(m, posting_time="11:00:00"), m)
+        self.assertNotEqual(a, b)
+
+    def test_only_a_link_can_hold_a_generated_id(self):
+        m = self._M(False)
+        # two different user-visible codes of the hash shape stay different in a Data field...
+        a = g._row_values(self._D(m, code="a1b2c3d4e5"), m)
+        b = g._row_values(self._D(m, code="z9y8x7w6v5"), m)
+        self.assertNotEqual(a, b)
+        # ... and collapse in a Link field, where Frappe's own generated name can sit
+        la = g._row_values(self._D(m, ref="a1b2c3d4e5"), m)
+        lb = g._row_values(self._D(m, ref="z9y8x7w6v5"), m)
+        self.assertEqual(la, lb)
+
+
+class TestOutbound(unittest.TestCase):
+    def _turn(self, mode="dry"):
+        return {"mode": mode, "blocked": None, "t0": time.monotonic(), "budget": 90, "hold": 30}
+
+    def test_the_read_only_list_is_empty_until_the_owner_approves_it(self):
+        self.assertEqual(g.READONLY_HOSTS, frozenset())
+
+    def test_an_unlisted_host_is_refused_in_every_pass(self):
+        for mode in ("fenced", "dry", "armed"):
+            with mock.patch.object(g, "_state", return_value=self._turn(mode)):
+                with self.assertRaises(g.AgentWriteBlocked):
+                    g._check_outbound("https://rates.example.org/x", "GET")
+
+    def test_a_listed_host_is_read_only(self):
+        with mock.patch.object(g, "_state", return_value=self._turn()), mock.patch.object(g, "READONLY_HOSTS", frozenset({"rates.example.org"})):
+            g._check_outbound("https://rates.example.org/x", "GET")
+            g._check_outbound("https://rates.example.org/x", "head")
+            with self.assertRaises(g.AgentWriteBlocked):
+                g._check_outbound("https://rates.example.org/x", "POST")
+
+    def test_a_model_provider_may_be_posted_to(self):
+        with mock.patch.object(g, "_state", return_value=self._turn()):
+            g._check_outbound("https://api.openai.com/v1/chat", "POST")
+
+    def test_a_call_after_a_write_is_capped_by_the_time_left(self):
+        s = self._turn()
+        s["t_write"] = time.monotonic() - 10
+        with mock.patch.object(g, "_state", return_value=s):
+            cap = g._check_outbound("https://api.openai.com/v1/chat", "POST")
+        self.assertTrue(1.0 <= cap <= 20.5, cap)
+
+    def test_a_call_with_no_write_yet_is_not_capped(self):
+        with mock.patch.object(g, "_state", return_value=self._turn()):
+            self.assertIsNone(g._check_outbound("https://api.openai.com/v1/chat", "POST"))
+
+
+class TestLockHold(unittest.TestCase):
+    def test_a_run_that_has_held_locks_too_long_is_stopped(self):
+        s = {"t0": time.monotonic(), "budget": 90, "hold": 30, "t_write": time.monotonic() - 31}
+        with self.assertRaises(g.AgentWriteBlocked):
+            g._tick(s, "x")
+
+    def test_a_long_run_before_its_first_write_holds_no_locks(self):
+        s = {"t0": time.monotonic() - 60, "budget": 90, "hold": 30}
+        g._tick(s, "x")                                         # 60 s of thinking, no write yet: fine
+        s["t_write"] = time.monotonic()
+        g._tick(s, "x")
+
+    def test_the_whole_run_budget_still_applies(self):
+        s = {"t0": time.monotonic() - 91, "budget": 90, "hold": 30}
+        with self.assertRaises(g.AgentWriteBlocked):
+            g._tick(s, "x")
