@@ -770,7 +770,10 @@ def _install():
     from frappe.model.base_document import BaseDocument
     from frappe.model.document import Document
 
-    db_cls = type(frappe.local.db)           # frappe.db is a LocalProxy: patch the real class
+    real_db = getattr(frappe.local, "db", None)
+    if real_db is None:                      # no site connected (unit tests with a mocked frappe): nothing to wrap
+        return
+    db_cls = type(real_db)                   # frappe.db is a LocalProxy: patch the real class
     for name, maker in (("set_value", _w_set_value), ("set_single_value", _w_set_single), ("delete", _w_delete),
                         ("bulk_insert", _w_refuse("bulk_insert")), ("sql_ddl", _w_refuse("sql_ddl")),
                         ("truncate", _w_refuse("truncate")), ("sql", _w_sql)):
