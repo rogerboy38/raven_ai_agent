@@ -674,12 +674,40 @@ def _host_of(url) -> str:
         return ""
 
 
+_PROVIDER_HOSTS_CACHE = {}
+
+
 def _provider_hosts() -> frozenset:
+    """The model providers' own hosts: the fixed list, the base URLs written in the provider classes, the Ollama URL
+    in the settings, and a site-config list `raven_agent_outbound_allow`."""
+    hosts = set(PROVIDER_HOSTS)
+    if "classes" not in _PROVIDER_HOSTS_CACHE:
+        found = set()
+        try:
+            import importlib
+
+            for mod in ("minimax", "deepseek", "ollama", "openai_provider", "claude"):
+                m = importlib.import_module(f"raven_ai_agent.providers.{mod}")
+                for attr in ("BASE_URL", "DEFAULT_BASE_URL"):
+                    for obj in vars(m).values():
+                        u = getattr(obj, attr, None) if isinstance(obj, type) else None
+                        if isinstance(u, str) and u.startswith("http"):
+                            found.add(_host_of(u))
+        except Exception:
+            pass
+        _PROVIDER_HOSTS_CACHE["classes"] = {h for h in found if h}
+    hosts |= _PROVIDER_HOSTS_CACHE["classes"]
     try:
-        extra = frappe.conf.get("raven_agent_outbound_allow") or []
+        u = frappe.db.get_single_value("AI Agent Settings", "ollama_base_url")
+        if u:
+            hosts.add(_host_of(u))
     except Exception:
-        extra = []
-    return PROVIDER_HOSTS | frozenset(str(h).lower() for h in extra)
+        pass
+    try:
+        hosts |= {str(h).lower() for h in (frappe.conf.get("raven_agent_outbound_allow") or [])}
+    except Exception:
+        pass
+    return frozenset(hosts)
 
 
 def _check_outbound(url):
