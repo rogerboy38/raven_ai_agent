@@ -271,3 +271,22 @@ class _Doc:
 
     def get_doc_before_save(self):
         return None
+
+
+class TestProviderHosts(unittest.TestCase):
+    def test_every_provider_base_url_in_the_code_is_an_allowed_outbound_host(self):
+        import importlib
+
+        want = set()
+        for mod in ("minimax", "deepseek", "ollama"):
+            m = importlib.import_module(f"raven_ai_agent.providers.{mod}")
+            for obj in vars(m).values():
+                for attr in ("BASE_URL", "DEFAULT_BASE_URL"):
+                    u = getattr(obj, attr, None) if isinstance(obj, type) else None
+                    if isinstance(u, str) and u.startswith("http"):
+                        want.add(g._host_of(u))
+        self.assertTrue(want, "no provider base URL found")
+        self.assertTrue(want <= set(g._provider_hosts()), want - set(g._provider_hosts()))
+
+    def test_a_random_host_is_not_allowed(self):
+        self.assertNotIn("example.org", g._provider_hosts())
