@@ -488,8 +488,8 @@ def _issuer(frame, own_op: bool = False) -> str:
             mod0 = f.f_globals.get("__name__") or ""          # _submit calls save calls _save...)
             while f is not None and n < 400:
                 m = f.f_globals.get("__name__") or ""
-                if m != mod0 and m != "frappe.model.document" and m.split(".", 1)[0] not in _PASS_THROUGH_MODULES:
-                    break
+                if m != mod0 and m != "frappe.model.document" and m != __name__ and m.split(".", 1)[0] not in _PASS_THROUGH_MODULES:
+                    break                                 # (the guard's own wrappers sit between save and _save)
                 f = f.f_back
                 n += 1
     n = 0
