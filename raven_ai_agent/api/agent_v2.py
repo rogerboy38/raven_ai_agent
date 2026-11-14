@@ -462,7 +462,7 @@ class RaymondLucyAgentV2:
 # API Endpoints
 
 @frappe.whitelist()
-@agent_guard.guard_endpoint("process_message_v2", "message")
+@agent_guard.guard_endpoint("process_message_v2", "message", bang_arg="message")
 def process_message_v2(message: str, conversation_history: str = None, provider: str = None) -> Dict:
     """
     API endpoint for V2 agent
@@ -526,7 +526,7 @@ def get_available_skills() -> Dict:
 
 
 @frappe.whitelist()
-@agent_guard.guard_endpoint("route_to_skill", "query")
+@agent_guard.guard_endpoint("route_to_skill", "query", bang_arg="query")
 def route_to_skill(query: str) -> Dict:
     """
     Directly route a query to skills (bypasses LLM).

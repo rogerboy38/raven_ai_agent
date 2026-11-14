@@ -146,7 +146,8 @@ class TestRunTurn(unittest.TestCase):
             if records and w:
                 g.store_pending(u, ch, clean, records, what=records[0]["what"], message_name=mn)
                 rep(ch, g._preview(records))
-            return "previewed" if records and w else "done"
+                return "previewed"
+            return "done"
         with mock.patch.object(g, "is_writer", return_value=writer), mock.patch.object(g, "_first_pass", first_pass):
             return g.run_turn(user, "c1", text, runner, lambda c, t: self.replies.append(t))
 
@@ -210,3 +211,63 @@ class TestReasons(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAddressedAndPreview(unittest.TestCase):
+    """TASKS-344 rulings 83 and 85: only `@ai` (any capitalisation) addresses the agent; the preview shows the weight."""
+
+    def test_only_the_handle_at_the_start_addresses_the_agent(self):
+        for ok in ("@ai create x", "@AI create x", "  @Ai create x", "@ai", "@ai\ncreate"):
+            self.assertTrue(g._addressed(ok), ok)
+        for bad in ("please @ai create x", "@aix create x", "@ai.x create", "ai create x", "@mfg create wo",
+                    "executive summary", ""):
+            self.assertFalse(g._addressed(bad), bad)
+
+    def test_preview_lists_deletes_cancels_and_submits_before_creates_and_never_cuts_them(self):
+        recs = [{"ident": ["create", "Row", "", "h%d" % i], "what": "create Row %d" % i} for i in range(40)]
+        recs += [{"ident": ["delete", "Thing", "T-1", "h"], "what": "delete Thing T-1"},
+                 {"ident": ["submit", "Thing", "T-2", "h"], "what": "submit Thing T-2"},
+                 {"ident": ["sendmail", "", "", ""], "what": "send an e-mail"}]
+        text = g._preview(recs, {("create", "Stock Ledger Entry"): 4})
+        lines = text.split("\n")
+        order = [ln for ln in lines if ln[:1].isdigit()]
+        self.assertTrue(order[0].endswith("delete Thing T-1"))
+        self.assertTrue(any("submit Thing T-2" in ln for ln in order[:3]))
+        self.assertTrue(any("send an e-mail" in ln for ln in order[:3]))
+        self.assertIn("1× delete Thing", text)
+        self.assertIn("40× create Row", text)                    # a count per operation
+        self.assertIn("4× create Stock Ledger Entry", text)      # what ERPNext will also post
+        self.assertLess(len(set(order)), 25)                         # the low-weight tail is summarised, not listed
+
+    def test_a_save_is_matched_on_what_changes_not_only_on_the_name(self):
+        class D:
+            doctype = "Thing"
+            name = "T-1"
+            meta = None
+        self.assertEqual(g._ident(_Doc(qty=5), "submit")[:3], ["submit", "Thing", "T-1"])
+        self.assertNotEqual(g._ident(_Doc(qty=5), "submit")[3], g._ident(_Doc(qty=6), "submit")[3])
+
+
+class _Meta:
+    class F:
+        def __init__(self, fieldname, fieldtype="Float"):
+            self.fieldname, self.fieldtype = fieldname, fieldtype
+    fields = [F("qty"), F("item_code", "Link")]
+
+    def get_table_fields(self):
+        return []
+
+
+class _Doc:
+    doctype = "Thing"
+    name = "T-1"
+    meta = _Meta()
+
+    def __init__(self, qty):
+        self._v = {"qty": qty, "item_code": "I-1"}
+
+    def get(self, k):
+        return self._v.get(k)
+
+    def get_doc_before_save(self):
+        return None
