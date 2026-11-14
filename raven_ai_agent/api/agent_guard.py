@@ -63,13 +63,18 @@ PROVIDER_HOSTS = frozenset({
     "api.minimax.chat", "localhost", "127.0.0.1", "::1",
 })
 
-# Code of these apps is "the framework": a document it creates while a judged write is executing is a CONSEQUENCE of
-# that write (ledger entries, bins...), recorded for the preview but not tested against the author's rights.
-FRAMEWORK_APPS = frozenset({"frappe", "erpnext", "hrms", "payments", "print_designer", "telephony"})
+# Hosts the agent may READ from (GET/HEAD only), by ruling 89. EMPTY until Hugh approves a named list; the default is
+# refusal. The model providers are not in this list (they need POST): see `_provider_hosts`.
+READONLY_HOSTS = frozenset()
+# Code of these apps is "the agent": a write with an agent frame between it and the document operation that caused it is
+# the agent's own act. Everything else running under a document operation (ERPNext's controllers, the hooks of our own
+# apps, a Server Script) is a CONSEQUENCE of that operation: recorded and compared, never tested against the author.
+AGENT_APPS = frozenset({"raven_ai_agent"})
 _PASS_THROUGH_MODULES = frozenset({"contextlib", "functools", "typing", "abc", "pypika", "werkzeug"})
 # Changing these alters the database structure: MariaDB commits DDL implicitly, so the turn could not be undone.
 DDL_DOCTYPES = frozenset({"DocType", "Custom Field", "Customize Form", "Property Setter", "DocField", "DocPerm"})
-DRY_RUN_BUDGET_SEC = 90          # wall-clock bound of one dry or armed run (it holds row locks until it ends)
+DRY_RUN_BUDGET_SEC = 90          # wall-clock bound of one dry or armed run
+LOCK_HOLD_SEC = 30               # bound of the time the run holds row locks: from its FIRST write to its end
 LOCK_WAIT_SEC = 15               # innodb_lock_wait_timeout the background job sets for its session
 _WRITE_SQL_RE = re.compile(
     r"^\s*(insert|update|delete|replace|truncate|alter|drop|create|rename|load|call|lock|unlock|start|begin|commit|set\s+autocommit)\b",
@@ -144,19 +149,22 @@ def _pending_key(user: str, channel_id: str) -> str:
     return f"raven_agent_pending:{user}:{channel_id}"
 
 
-def _digest(user: str, channel_id: str, text: str, writes=None) -> str:
-    blob = f"{user}\x1f{channel_id}\x1f{text}\x1f{json.dumps(writes or [], sort_keys=True)}"
+def _digest(user: str, channel_id: str, text: str, writes=None, conseq=None) -> str:
+    blob = f"{user}\x1f{channel_id}\x1f{text}\x1f{json.dumps(writes or [], sort_keys=True)}\x1f{json.dumps(conseq or [], sort_keys=True)}"
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
 def store_pending(user: str, channel_id: str, text: str, writes=None, what: str = "", message_name: str = "",
-                  via: str = "legacy", payload=None):
-    """`writes` = the list recorded by the dry run: [{"ident": [...], "what": "..."}]."""
+                  via: str = "legacy", payload=None, conseq=None):
+    """`writes` = the list recorded by the dry run: [{"ident": [...], "what": "..."}]; `conseq` = what the framework
+    posted as a consequence (`_conseq_list`): compared with the armed run."""
     writes = list(writes or [])
+    conseq = list(conseq or [])
     frappe.cache().set_value(
         _pending_key(user, channel_id),
         {"user": user, "channel": channel_id, "text": text, "writes": writes, "what": what, "via": via,
-         "payload": payload, "message": message_name, "digest": _digest(user, channel_id, text, writes), "at": time.time()},
+         "payload": payload, "message": message_name, "conseq": conseq,
+         "digest": _digest(user, channel_id, text, writes, conseq), "at": time.time()},
         expires_in_sec=PENDING_TTL_SEC,
     )
 
@@ -184,7 +192,7 @@ def take_pending(user: str, channel_id: str):
             pass
     if p.get("user") != user or p.get("channel") != channel_id:
         return None
-    if p.get("digest") != _digest(user, channel_id, p.get("text", ""), p.get("writes")):
+    if p.get("digest") != _digest(user, channel_id, p.get("text", ""), p.get("writes"), p.get("conseq")):
         return None
     if time.time() - float(p.get("at") or 0) > PENDING_TTL_SEC:
         return None
@@ -217,7 +225,9 @@ _SYSTEM_FIELDS = frozenset({
     "__islocal", "__unsaved",
 })
 _NO_VALUE_TYPES = frozenset({"Section Break", "Column Break", "Tab Break", "HTML", "Button", "Heading", "Image",
-                             "Fold", "Table", "Table MultiSelect", "Time"})
+                             "Fold", "Table", "Table MultiSelect"})
+# a generated id (Frappe's hash name) can only sit in a field that points at a document
+_ID_FIELD_TYPES = frozenset({"Link", "Dynamic Link"})
 _PARTY_FIELDS = ("customer", "supplier", "party", "employee", "lead", "party_name")
 _DATE_FIELDS = ("posting_date", "transaction_date", "schedule_date", "delivery_date", "due_date", "planned_start_date")
 _TOTAL_FIELDS = ("grand_total", "rounded_total", "total", "net_total", "total_qty", "paid_amount", "qty")
@@ -228,10 +238,10 @@ _TOTAL_FIELDS = ("grand_total", "rounded_total", "total", "net_total", "total_qt
 _HASH_RE = re.compile(r"^(?=.*\d)(?=.*[a-z])[0-9a-z]{10}$")
 
 
-def _norm(v):
+def _norm(v, may_be_id=False):
     if v is None or v == "":
         return None
-    if isinstance(v, str) and _HASH_RE.match(v):
+    if may_be_id and isinstance(v, str) and _HASH_RE.match(v):
         return "<generated id>"
     if isinstance(v, bool):
         return int(v)
@@ -243,13 +253,21 @@ def _norm(v):
 
 
 def _row_values(d, meta=None) -> dict:
-    """The user-meaningful values of a document or child row (system fields, layout and Time fields left out)."""
+    """The user-meaningful values of a document or child row (system fields and layout left out). A Time field is
+    included unless the document lets the system choose the posting time (`set_posting_time` present and off): a time
+    the author typed changes what posts (valuation order), a time the system stamps differs between two runs."""
     meta = meta or d.meta
     out = {}
+    try:
+        system_time = bool(meta.has_field("set_posting_time")) and not d.get("set_posting_time")
+    except Exception:
+        system_time = False
     for f in meta.fields:
         if f.fieldname in _SYSTEM_FIELDS or f.fieldtype in _NO_VALUE_TYPES:
             continue
-        v = _norm(d.get(f.fieldname))
+        if f.fieldtype == "Time" and system_time:
+            continue
+        v = _norm(d.get(f.fieldname), f.fieldtype in _ID_FIELD_TYPES)
         if v is not None:
             out[f.fieldname] = v
     return out
@@ -362,19 +380,43 @@ def _has_active_workflow(doctype: str) -> bool:
         return False
 
 
+def _hold_limit() -> float:
+    try:
+        return float(frappe.conf.get("raven_agent_lock_hold_seconds") or LOCK_HOLD_SEC)
+    except Exception:
+        return LOCK_HOLD_SEC
+
+
+def _remaining(s) -> float:
+    """Seconds this run may still take: the whole-run budget, and (once it has written, so holds row locks that other
+    users wait on) the lock-hold bound counted from its FIRST write."""
+    now = time.monotonic()
+    left = s.get("budget", DRY_RUN_BUDGET_SEC) - (now - s.get("t0", now))
+    tw = s.get("t_write")
+    if tw is not None:
+        left = min(left, s.get("hold", LOCK_HOLD_SEC) - (now - tw))
+    return left
+
+
 def _tick(s, what=""):
-    """Bound a dry or armed run in time: it holds row locks (documents saved, series, bins) until it ends."""
-    t0 = s.get("t0")
-    if t0 is not None and time.monotonic() - t0 > s.get("budget", DRY_RUN_BUDGET_SEC):
+    """Bound a dry or armed run in time. It holds row locks (documents saved, series, bins) from its first write until
+    it ends; another user waits on them for up to THEIR OWN lock wait. Checked at every write and every outside call."""
+    if s.get("t0") is not None and _remaining(s) < 0:
         _block("too_slow", what or "the run took too long")
 
 
+def _wrote(s):
+    s.setdefault("t_write", time.monotonic())
+
+
 def _record(s, ident: list, what: str):
+    _wrote(s)
     s["records"].append({"ident": ident, "what": what})
 
 
 def _consume(s, ident: list, what: str):
     """Armed: the write must be one the dry run announced, with the same content (each announced write is used once)."""
+    _wrote(s)
     for i, e in enumerate(s["expected"]):
         if e["ident"] == ident:
             s["expected"].pop(i)
@@ -390,51 +432,127 @@ def _exempt(doctype: str, op: str) -> bool:
 
 
 # ---- who issued a write (one decision, used for documents and for direct writes)
-def _framework_apps() -> frozenset:
+def _agent_apps() -> frozenset:
     try:
-        extra = frappe.conf.get("raven_agent_framework_apps") or []
+        extra = frappe.conf.get("raven_agent_agent_apps") or []
     except Exception:
         extra = []
-    return FRAMEWORK_APPS | frozenset(str(x) for x in extra)
+    return AGENT_APPS | frozenset(str(x) for x in extra)
 
 
 def _root(frame) -> str:
     return (frame.f_globals.get("__name__") or "").split(".", 1)[0]
 
 
-def _issuer(frame) -> str:
-    """Who is behind the write whose hook/wrapper is running, looking up the stack from `frame`. Inside a guarded
-    turn everything that runs is the agent's work, with ONE exception, decided here once:
-    "consequence" framework code (frappe, erpnext...) that is itself running inside a document operation: a
-                   controller's on_submit creating ledger entries, a nested-set update. The framework does it as a
-                   consequence of a judged write; it is recorded for the preview, not tested against the author;
-    "agent"        everything else: agent code, a helper in another app, framework code called straight from agent
-                   code (its inserts are the agent's own act)."""
-    fw = _framework_apps()
+# the frames that ARE a document operation (the caller of one of these asked for the operation; every hook, controller
+# method and validation that runs under it runs as a consequence of it)
+_DOC_OPS = {("frappe.model.document", n) for n in
+            ("insert", "save", "_save", "submit", "_submit", "cancel", "_cancel")} | {("frappe.model.delete_doc", "delete_doc")}
+
+
+def _is_doc_op(f) -> bool:
+    return ((f.f_globals.get("__name__") or ""), f.f_code.co_name) in _DOC_OPS
+
+
+def _issuer(frame, own_op: bool = False) -> str:
+    """Who is behind the write whose hook/wrapper is running: "agent" or "consequence". One rule, from the stack.
+
+    Walk up from `frame` (with `own_op`, first leave the operation of the judged document itself). The first thing met
+    decides:
+      an AGENT frame (raven_ai_agent code)                   -> "agent"   the agent asked for this write, directly or
+                                                                          through a helper or a framework function it called;
+      a DOCUMENT OPERATION of another document (insert, save, submit, cancel, delete) with no agent frame between
+                                                              -> "consequence": a controller's on_submit creating ledger
+                                                                 entries, a hook of one of our own apps creating an
+                                                                 inspection... whatever app the code lives in.
+    Nothing met -> "agent" (the stricter answer). A controller method run through `doc.run_method(...)` straight from
+    agent code has no operation frame under the agent, so it is the agent's own act."""
+    agents = _agent_apps()
     f = frame
-    first = None
     n = 0
-    while f is not None and n < 200:
+    if own_op:
+        while f is not None and n < 400 and not _is_doc_op(f):
+            f = f.f_back
+            n += 1
+        if f is None:                         # the hook was not run under an operation frame: judge from the start
+            f = frame
+        else:                                 # leave ALL frames of the judged document's own operation (submit calls
+            mod0 = f.f_globals.get("__name__") or ""          # _submit calls save calls _save...)
+            while f is not None and n < 400:
+                m = f.f_globals.get("__name__") or ""
+                if m != mod0 and m != "frappe.model.document" and m.split(".", 1)[0] not in _PASS_THROUGH_MODULES:
+                    break
+                f = f.f_back
+                n += 1
+    n = 0
+    while f is not None and n < 400:
         mod = f.f_globals.get("__name__") or ""
-        root = mod.split(".", 1)[0]
-        if mod != __name__ and root != "frappe" and root not in _PASS_THROUGH_MODULES:
-            first = f
-            break
+        if mod != __name__ and mod.split(".", 1)[0] in agents:
+            return "agent"
+        if _is_doc_op(f):
+            return "consequence"
         f = f.f_back
         n += 1
-    if first is None or _root(first) not in fw:
-        return "agent"
-    g = first
-    while g is not None and (_root(g) in fw or _root(g) in _PASS_THROUGH_MODULES):
-        if (g.f_globals.get("__name__") or "") == "frappe.model.document":
-            return "consequence"
-        g = g.f_back
     return "agent"
 
 
-def _consequence(s, op: str, doctype: str):
+def _conseq_detail(doc) -> tuple:
+    """(where, quantity, debit, credit) of a ledger-like consequence, so the preview can say where it posts."""
+    try:
+        dt = doc.doctype
+        g = doc.get
+        if dt == "Stock Ledger Entry":
+            return (g("warehouse") or "", round(float(g("actual_qty") or 0), 4), 0.0, 0.0)
+        if dt == "GL Entry":
+            return (g("account") or "", 0.0, round(float(g("debit") or 0), 2), round(float(g("credit") or 0), 2))
+        if dt == "Payment Ledger Entry":
+            return (g("account") or "", round(float(g("amount") or 0), 2), 0.0, 0.0)
+        if dt == "Stock Reservation Entry":
+            return (g("warehouse") or "", round(float(g("reserved_qty") or 0), 4), 0.0, 0.0)
+        if dt == "Serial and Batch Bundle":
+            return (g("warehouse") or "", round(float(g("total_qty") or 0), 4), 0.0, 0.0)
+    except Exception:
+        pass
+    return ("", 0.0, 0.0, 0.0)
+
+
+def _consequence(s, op: str, doctype: str, where: str = "", qty: float = 0.0, debit: float = 0.0, credit: float = 0.0):
+    _wrote(s)
     c = s["conseq"]
-    c[(op, doctype)] = c.get((op, doctype), 0) + 1
+    e = c.setdefault((op, doctype, where), {"n": 0, "qty": 0.0, "debit": 0.0, "credit": 0.0})
+    e["n"] += 1
+    e["qty"] = round(e["qty"] + qty, 4)
+    e["debit"] = round(e["debit"] + debit, 2)
+    e["credit"] = round(e["credit"] + credit, 2)
+
+
+def _conseq_list(conseq) -> list:
+    """The consequences in a form that is stored with the pending request and compared after the armed run."""
+    return [[op, dt, where, v["n"], v["qty"], v["debit"], v["credit"]]
+            for (op, dt, where), v in sorted(conseq.items(), key=lambda kv: tuple(str(x) for x in kv[0]))]
+
+
+def _conseq_diff(expected, actual) -> str:
+    """"" when the armed run posted what the dry run counted; otherwise a sentence naming the first differences."""
+    exp = {(r[0], r[1], r[2]): [r[3], r[4], r[5], r[6]] for r in (expected or [])}
+    act = {k: [v["n"], v["qty"], v["debit"], v["credit"]] for k, v in actual.items()}
+    out = []
+    for k in sorted(set(exp) | set(act), key=lambda x: tuple(str(i) for i in x)):
+        a, b = exp.get(k, [0, 0.0, 0.0, 0.0]), act.get(k, [0, 0.0, 0.0, 0.0])
+        if a[0] != b[0] or any(abs(x - y) > 0.005 for x, y in zip(a[1:], b[1:])):
+            out.append(f"{k[0]} {k[1]}{(' ' + k[2]) if k[2] else ''}: shown {_conseq_fig(a)}, now {_conseq_fig(b)}")
+    return "; ".join(out[:5]) + (f" (+{len(out) - 5} more)" if len(out) > 5 else "")
+
+
+def _conseq_fig(v) -> str:
+    bits = [f"{v[0]}×"]
+    if v[1]:
+        bits.append(f"qty {v[1]:g}")
+    if v[2]:
+        bits.append(f"debit {v[2]:g}")
+    if v[3]:
+        bits.append(f"credit {v[3]:g}")
+    return " ".join(bits)
 
 
 def _judge_doc(s, op: str, doc, issuer: str):
@@ -442,7 +560,10 @@ def _judge_doc(s, op: str, doc, issuer: str):
     mode = s["mode"]
     _tick(s, what)
     if issuer == "consequence" and mode != "fenced":
-        _consequence(s, op, doc.doctype)         # recorded for the preview, not tested against the author's rights
+        if doc.doctype in DDL_DOCTYPES:
+            _block("cannot_dry_run", f"{what} (changes the database structure)")
+        w, q, dr, cr = _conseq_detail(doc)       # recorded and compared, not tested against the author's rights
+        _consequence(s, op, doc.doctype, w, q, dr, cr)
         return
     if mode == "fenced":
         _block("fenced", what)
@@ -484,12 +605,24 @@ def on_write_event(doc, method=None):
             return
     if _exempt(doc.doctype, op):
         return
-    _judge_doc(s, op, doc, _issuer(sys._getframe(1)))
+    _judge_doc(s, op, doc, _issuer(sys._getframe(1), own_op=True))
 
 
 # --------------------------------------------------------------------- direct writes (no doc event)
-def _direct(kind: str, doctype: str, name: str, always_refuse: str = ""):
-    """Judge a write that no doc event sees. Called from a wrapper: the frame two levels up is the wrapper's caller."""
+_HARD_SQL_RE = re.compile(r"^\s*(alter|drop|create|rename|truncate|load|call|lock|unlock|start|begin|commit|set\s+autocommit)\b", re.I)
+
+
+def _sql_signature(text: str) -> str:
+    """What a raw statement is, for the preview: its verb and the table it names (never its values)."""
+    m = re.match(r"^\s*(\w+)", text or "")
+    verb = (m.group(1).lower() if m else "sql")
+    t = re.search(r"`tab([^`]+)`", text or "")
+    return f"{verb} {t.group(1)}" if t else verb
+
+
+def _direct(kind: str, doctype: str, name: str, always_refuse: str = "", detail: str = "", hard: bool = True):
+    """Judge a write that no doc event sees. Called from a wrapper: the frame two levels up is the wrapper's caller.
+    `always_refuse` is refused for the agent; for a CONSEQUENCE only when `hard` (structure changes, implicit commits)."""
     s = _state()
     if not s:
         return
@@ -497,16 +630,20 @@ def _direct(kind: str, doctype: str, name: str, always_refuse: str = ""):
     while imm is not None and ((imm.f_globals.get("__name__") or "").startswith("frappe.query_builder")
                                or _root(imm) in _PASS_THROUGH_MODULES):
         imm = imm.f_back
-    if imm is not None and _root(imm) == "frappe":
-        return                                # Frappe's own ORM calling its own database layer: judged by its events
     issuer = _issuer(sys._getframe(2))
+    if issuer == "consequence" and imm is not None and _root(imm) == "frappe":
+        return                                # Frappe's own ORM calling its own database layer under a document operation:
+                                              # judged by that operation's events. A framework utility called straight from
+                                              # agent code (no operation frame under the agent) is NOT this case.
     if kind == "db_insert" and doctype in INFRA_INSERT_DOCTYPES:
         return
-    what = f"{kind} {doctype} {name or ''}".strip()
+    what = f"{kind} {doctype} {name or ''}".strip() + (f" ({detail})" if detail else "")
     mode = s["mode"]
     _tick(s, what)
     if issuer == "consequence" and mode != "fenced":
-        _consequence(s, kind, doctype)             # e.g. ERPNext's own raw SQL on the stock queue inside a submit
+        if always_refuse and hard:
+            _block(always_refuse, what)
+        _consequence(s, kind + (f": {detail}" if detail else ""), doctype)   # shown with its statement or table
         return
     if always_refuse:
         _block(always_refuse, what)
@@ -548,16 +685,16 @@ def _w_set_single(orig):
 def _w_delete(orig):
     @functools.wraps(orig)
     def wrapper(self, doctype, *a, **kw):
-        _direct("db.delete", doctype, "", always_refuse="refused_bulk_delete")
+        _direct("db.delete", doctype, "", always_refuse="refused_bulk_delete", hard=False)
         return orig(self, doctype, *a, **kw)
     return wrapper
 
 
-def _w_refuse(kind):
+def _w_refuse(kind, hard=True):
     def maker(orig):
         @functools.wraps(orig)
         def wrapper(self, *a, **kw):
-            _direct(kind, str(a[0]) if a and isinstance(a[0], str) else "", "", always_refuse="refused_raw_sql")
+            _direct(kind, str(a[0]) if a and isinstance(a[0], str) else "", "", always_refuse="refused_raw_sql", hard=hard)
             return orig(self, *a, **kw)
         return wrapper
     return maker
@@ -569,7 +706,8 @@ def _w_sql(orig):
         if _state() is not None:
             text = query if isinstance(query, str) else str(query)       # a query-builder object
             if _WRITE_SQL_RE.match(text):
-                _direct("raw SQL write", "", "", always_refuse="refused_raw_sql")
+                _direct("raw SQL write", "", "", always_refuse="refused_raw_sql", detail=_sql_signature(text),
+                        hard=bool(_HARD_SQL_RE.match(text)))
         return orig(self, query, *a, **kw)
     return wrapper
 
@@ -710,23 +848,31 @@ def _provider_hosts() -> frozenset:
     return frozenset(hosts)
 
 
-def _check_outbound(url):
+def _check_outbound(url, method="GET"):
+    """Ruling 89: a model provider (any method), or a NAMED read-only host (GET/HEAD only); everything else is refused
+    in every pass. The time left to the run caps the call (a model call must not keep locks held beyond the bound)."""
     s = _state()
     if not s:
-        return
+        return None
     host = _host_of(url)
-    if host in _provider_hosts():
-        return
-    what = f"outbound call to {host or 'an outside host'}"
-    if s["mode"] == "armed":
-        _block("not_announced", what)            # a dry run cannot have shown it: it would have been refused
-    _block("cannot_dry_run", what)
+    m = str(method or "GET").upper()
+    ok = host in _provider_hosts() or (host in READONLY_HOSTS and m in ("GET", "HEAD"))
+    if not ok:
+        what = f"outbound {m} to {host or 'an outside host'}"
+        if s["mode"] == "armed":
+            _block("not_announced", what)        # a dry run cannot have shown it: it would have been refused
+        _block("cannot_dry_run", what)
+    _tick(s, f"outbound {m} to {host}")
+    return max(1.0, _remaining(s)) if s.get("t_write") is not None else None
 
 
 def _w_requests(orig):
     @functools.wraps(orig)
     def wrapper(self, method, url, *a, **kw):
-        _check_outbound(url)
+        cap = _check_outbound(url, method)
+        if cap is not None:
+            t = kw.get("timeout")
+            kw["timeout"] = cap if t is None else (min(cap, t) if isinstance(t, (int, float)) else cap)
         return orig(self, method, url, *a, **kw)
     return wrapper
 
@@ -734,7 +880,15 @@ def _w_requests(orig):
 def _w_httpx_send(orig):
     @functools.wraps(orig)
     def wrapper(self, request, *a, **kw):
-        _check_outbound(getattr(request, "url", ""))
+        cap = _check_outbound(getattr(request, "url", ""), getattr(request, "method", "GET"))
+        if cap is not None:
+            try:
+                ext = request.extensions.setdefault("timeout", {})
+                for k in ("connect", "read", "write", "pool"):
+                    cur = ext.get(k)
+                    ext[k] = cap if cur is None else min(cap, cur)
+            except Exception:
+                pass
         return orig(self, request, *a, **kw)
     return wrapper
 
@@ -775,7 +929,7 @@ def _install():
         return
     db_cls = type(real_db)                   # frappe.db is a LocalProxy: patch the real class
     for name, maker in (("set_value", _w_set_value), ("set_single_value", _w_set_single), ("delete", _w_delete),
-                        ("bulk_insert", _w_refuse("bulk_insert")), ("sql_ddl", _w_refuse("sql_ddl")),
+                        ("bulk_insert", _w_refuse("bulk_insert", hard=False)), ("sql_ddl", _w_refuse("sql_ddl")),
                         ("truncate", _w_refuse("truncate")), ("sql", _w_sql)):
         owner = next((c for c in db_cls.__mro__ if name in c.__dict__), None)
         if owner is not None:
@@ -858,7 +1012,7 @@ def guarded_turn(user: str, mode: str, expected=None):
     prev = _state()
     st = {"mode": mode, "user": user, "blocked": None, "records": [], "seen": set(), "keep": [],
           "expected": [dict(e) for e in (expected or [])], "done": [], "rt": [], "cb": _cb_lengths(),
-          "conseq": {}, "t0": time.monotonic(), "budget": _budget()}
+          "conseq": {}, "t0": time.monotonic(), "budget": _budget(), "hold": _hold_limit()}
     frappe.local.raven_agent_guard = st
     db._disable_transaction_control += 1                  # a commit inside the turn is inert
     try:
@@ -949,6 +1103,22 @@ def _drop_legacy_pending(user: str, channel_id: str):
             pass
 
 
+def _conseq_text(conseq) -> str:
+    """What the framework posts as a consequence: how many, where (warehouse, account), the quantities and amounts."""
+    parts = []
+    for (op, dt, where), v in sorted(conseq.items(), key=lambda kv: tuple(str(x) for x in kv[0])):
+        fig = []
+        if v["qty"]:
+            fig.append(f"qty {v['qty']:g}")
+        if v["debit"]:
+            fig.append(f"debit {v['debit']:g}")
+        if v["credit"]:
+            fig.append(f"credit {v['credit']:g}")
+        tail = ", ".join(([where] if where else []) + fig)
+        parts.append(f"{v['n']}× {op} {dt}".strip() + (f" ({tail})" if tail else ""))
+    return "; ".join(parts)
+
+
 def _preview(records, conseq=None) -> str:
     """The whole list, heaviest first; heavy operations (delete, cancel, submit, mail, jobs) are never cut."""
     def weight(r):
@@ -971,11 +1141,30 @@ def _preview(records, conseq=None) -> str:
             hc[k] = hc.get(k, 0) + 1
         lines.append("… " + ", ".join(f"{n}× {k}" for k, n in sorted(hc.items())) + " (lower weight, not listed)")
     if conseq:
-        lines.append("Además se registrará (lo hace ERPNext) / ERPNext will also post: "
-                     + ", ".join(f"{n}× {op} {dt}" for (op, dt), n in sorted(conseq.items())))
+        lines.append("Además se registrará (lo hace ERPNext) / ERPNext will also post: " + _conseq_text(conseq))
     body = "\n".join(lines)
     return (f"Voy a hacer ({len(records)}: {summary}):\n{body}\nResponda exactamente `confirm` para ejecutar solo eso (5 min). / "
             f"I am about to do ({len(records)}: {summary}):\n{body}\nReply exactly `confirm` to run only that (5 min).")
+
+
+def _run_lock_key(user: str, channel_id: str):
+    c = frappe.cache()
+    return c.make_key(f"raven_agent_run:{user}:{channel_id}")
+
+
+def _take_run_lock(user: str, channel_id: str) -> bool:
+    c = frappe.cache()
+    try:
+        return bool(c.set(_run_lock_key(user, channel_id), 1, nx=True, ex=RUN_LOCK_SEC))
+    except AttributeError:                    # a cache without raw redis commands (unit-test fake)
+        return True
+
+
+def _release_run_lock(user: str, channel_id: str):
+    try:
+        frappe.cache().delete(_run_lock_key(user, channel_id))
+    except AttributeError:
+        pass
 
 
 def run_turn(user: str, channel_id: str, text: str, runner, reply, message_name: str = "", via: str = "legacy",
@@ -986,7 +1175,20 @@ def run_turn(user: str, channel_id: str, text: str, runner, reply, message_name:
     "replayed"."""
     trig, _bang, rest = split_trigger(text)
     writer = is_writer(user)
+    if not agent_enabled(raven=True):            # J-3: read again here, so a job queued before the switch went off stops
+        clear_pending(user, channel_id)
+        reply(channel_id, OFF_TEXT)
+        return "refused"
+    if not _take_run_lock(user, channel_id):     # J-1: one run at a time per author and channel
+        reply(channel_id, BUSY_TEXT)
+        return "refused"
+    try:
+        return _run_turn_locked(user, channel_id, text, runner, reply, message_name, via, raise_failures, trig, rest, writer)
+    finally:
+        _release_run_lock(user, channel_id)
 
+
+def _run_turn_locked(user, channel_id, text, runner, reply, message_name, via, raise_failures, trig, rest, writer):
     # 1. a confirm / cancel word that answers a pending request of THIS author in THIS channel
     if has_pending(user, channel_id):
         pk = peek_pending(user, channel_id)
@@ -1069,8 +1271,9 @@ def _first_pass(user, channel_id, clean, runner, reply, writer, message_name="",
             if not ok:
                 reply(channel_id, _failure_text(RuntimeError("undo"), undone=False))
             else:
-                store_pending(user, channel_id, clean, records, what=records[0]["what"], message_name=message_name, via=via)
-                reply(channel_id, _preview(records, conseq))
+                reply(channel_id, _preview(records, conseq))      # the author can only confirm what was posted:
+                store_pending(user, channel_id, clean, records, what=records[0]["what"], message_name=message_name,
+                              via=via, conseq=_conseq_list(conseq))   # a worker lost between the two leaves nothing to confirm
                 status = "previewed"
         else:
             _flush_realtime(st)
@@ -1116,12 +1319,16 @@ def _replay(user, channel_id, p, runner, reply, raise_failures=False):
             left = [e["what"] for e in st["expected"]]
             if left:                                # all or nothing (ruling 85b)
                 _block("not_announced", "not done: " + "; ".join(left))
+            if "conseq" in p:                       # what ERPNext posts must equal what the dry run counted (C-1)
+                diff = _conseq_diff(p.get("conseq"), st["conseq"])
+                if diff:
+                    _block("not_announced", "ERPNext's own postings differ from what I showed: " + diff)
         _flush_realtime(st)
         done = list(st["done"])
         conseq = dict(st["conseq"])
         msg = (f"Hecho ({len(done)}): " + "; ".join(done)) if done else "No se hizo ningún cambio. / No change was made."
         if conseq:
-            msg += " — ERPNext registró / posted: " + ", ".join(f"{n}× {op} {dt}" for (op, dt), n in sorted(conseq.items()))
+            msg += " — ERPNext registró / posted: " + _conseq_text(conseq)
         reply(channel_id, msg)
         status = "replayed"
     except AgentWriteBlocked as b:
@@ -1162,14 +1369,19 @@ def agent_enabled(raven: bool = False) -> bool:
 
 
 OFF_TEXT = "El agente está apagado. / The agent is off."
+BUSY_TEXT = ("Sigo con su petición anterior en este canal; espere mi respuesta y vuelva a enviar esta. / "
+             "I am still on your previous request in this channel; wait for my answer and send this one again.")
+RUN_LOCK_SEC = 330                                     # the queue's job timeout (300 s) and a margin: a killed worker's lock expires
 ACK_TEXT = "⏳ Preparando… si no hay respuesta en 3 minutos, envíe de nuevo. / Working on it… if there is no answer in 3 minutes, send it again."
 _LEGACY = {}                                           # the undecorated handle_raven_message, set by guard_door
 
 
 # -------------------------------------------------------------------------------- legacy-door glue
 def _post_reply(channel_id, text):
-    frappe.get_doc({"doctype": "Raven Message", "channel_id": channel_id, "text": text,
-                    "message_type": "Text", "is_bot_message": 1}).insert(ignore_permissions=True)
+    doc = frappe.get_doc({"doctype": "Raven Message", "channel_id": channel_id, "text": text,
+                          "message_type": "Text", "is_bot_message": 1})
+    doc.insert(ignore_permissions=True)
+    return getattr(doc, "name", None)
 
 
 def _make_runner(d, fn, method):
@@ -1232,14 +1444,14 @@ def guard_door(fn):
                     return _dispatch_v2(d, "confirm", user, channel)
             if not addressed:
                 if has_pending(user, channel) and (is_exact_confirm(plain) or is_cancel(plain)) and is_writer(user):
-                    return _enqueue_job(d, "turn")          # a bare `confirm` / `cancel` answers a pending request
+                    return _enqueue_job(d, "turn", None)    # a bare `confirm` / `cancel` answers a pending request
                 if has_pending(user, channel):
                     clear_pending(user, channel)            # any other message of the author cancels it
                 run_readonly(user, channel, plain, runner, _post_reply)
                 return None
             if is_writer(user):
-                _post_reply(channel, ACK_TEXT)
-                return _enqueue_job(d, "turn")
+                ack = _post_reply(channel, ACK_TEXT)
+                return _enqueue_job(d, "turn", ack)
             run_turn(user, channel, plain, runner, _post_reply, message_name=d.name)
         except Exception as exc:                   # fail CLOSED: never fall through to the unguarded path
             frappe.log_error(title="agent_guard door failed", message=f"{type(exc).__name__}: {exc}")
@@ -1273,12 +1485,12 @@ def _dispatch_v2(d, query: str, user: str, channel: str):
     return None
 
 
-def _enqueue_job(d, kind: str):
+def _enqueue_job(d, kind: str, ack_name=None):
     frappe.enqueue("raven_ai_agent.api.agent_guard.run_door_job", queue="short", timeout=300,
-                   enqueue_after_commit=True, message_name=d.name, kind=kind)
+                   enqueue_after_commit=True, message_name=d.name, kind=kind, ack_name=ack_name)
 
 
-def run_door_job(message_name: str, kind: str = "turn"):
+def run_door_job(message_name: str, kind: str = "turn", ack_name: str = None):
     """Background job of the door: the dry run (or the confirmed run) of one message. Never raises."""
     from bs4 import BeautifulSoup
 
@@ -1306,6 +1518,11 @@ def run_door_job(message_name: str, kind: str = "turn"):
         except Exception:
             pass
     finally:
+        if ack_name:                               # the answer (or the failure notice) is out: the acknowledgement goes
+            try:
+                frappe.delete_doc("Raven Message", ack_name, ignore_permissions=True, force=True)
+            except Exception:
+                pass
         try:
             frappe.db.commit()
         except Exception:
