@@ -1688,6 +1688,8 @@ def guard_endpoint(endpoint: str, confirm_arg: str, shape: str = "dict", bang_ar
                             res = fn(**_with_bang(p["payload"], bang_arg))
                             if st["blocked"]:
                                 raise st["blocked"]
+                            if st.get("op_failed"):
+                                _block("handler_rolled_back", st["op_failed"])
                             left = [e["what"] for e in st["expected"]]
                             if left:                # all or nothing
                                 _block("not_announced", "not done: " + "; ".join(left))
@@ -1721,6 +1723,8 @@ def guard_endpoint(endpoint: str, confirm_arg: str, shape: str = "dict", bang_ar
                     res = fn(**(_with_bang(flat, bang_arg) if mode == "dry" else flat))
                     if st["blocked"]:
                         raise st["blocked"]
+                    if st.get("op_failed") and mode == "dry":
+                        _block("handler_rolled_back", st["op_failed"])
                 if mode == "dry" and st["records"]:
                     records = list(st["records"])
                     conseq = dict(st["conseq"])
