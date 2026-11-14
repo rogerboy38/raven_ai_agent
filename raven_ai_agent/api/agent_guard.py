@@ -223,9 +223,16 @@ _DATE_FIELDS = ("posting_date", "transaction_date", "schedule_date", "delivery_d
 _TOTAL_FIELDS = ("grand_total", "rounded_total", "total", "net_total", "total_qty", "paid_amount", "qty")
 
 
+# Frappe's auto-generated ids (child row names, hash-named documents) differ between two runs of the same request;
+# a field that merely points at a document created earlier in the same run must not make the two runs "differ".
+_HASH_RE = re.compile(r"^(?=.*\d)(?=.*[a-z])[0-9a-z]{10}$")
+
+
 def _norm(v):
     if v is None or v == "":
         return None
+    if isinstance(v, str) and _HASH_RE.match(v):
+        return "<generated id>"
     if isinstance(v, bool):
         return int(v)
     if isinstance(v, float) or v.__class__.__name__ == "Decimal":
