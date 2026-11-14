@@ -447,6 +447,17 @@ class TestContentMatch(unittest.TestCase):
         c = g._row_values(self._D(m, posting_time="10:00:00"), m)          # a document without the switch: system time
         self.assertNotIn("posting_time", c)
 
+    def test_a_datetime_the_system_stamped_a_moment_ago_is_not_content(self):
+        import datetime as dt
+
+        now = dt.datetime.now()
+        self.assertEqual(g._norm(now - dt.timedelta(seconds=3)), "<now>")
+        self.assertEqual(g._norm(now), g._norm(now - dt.timedelta(seconds=40)))
+        typed = dt.datetime(2026, 1, 2, 3, 4, 5)                           # a datetime the author wrote is content
+        self.assertEqual(g._norm(typed), typed.isoformat())
+        self.assertNotEqual(g._norm(typed), g._norm(dt.datetime(2026, 1, 2, 3, 4, 6)))
+        self.assertEqual(g._norm(dt.date.today()), dt.date.today().isoformat())
+
     def test_only_an_id_generated_in_this_pass_is_normalised(self):
         m = self._M()
         st = {"gen": {"a1b2c3d4e5"}}
