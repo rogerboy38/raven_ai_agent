@@ -63,9 +63,10 @@ PROVIDER_HOSTS = frozenset({
     "api.minimax.chat", "localhost", "127.0.0.1", "::1",
 })
 
-# Hosts the agent may READ from (GET/HEAD only), by ruling 89. EMPTY until Hugh approves a named list; the default is
-# refusal. The model providers are not in this list (they need POST): see `_provider_hosts`.
-READONLY_HOSTS = frozenset()
+# Hosts the agent may READ from (GET/HEAD only): the named list of ruling 89, approved by decision 90 (TASKS-349). A
+# host is added only by a new ruling; anything else is refused. The model providers are not in this list (they need
+# POST): see `_provider_hosts`.
+READONLY_HOSTS = frozenset({"html.duckduckgo.com"})
 # Code of these apps is "the agent": a write with an agent frame between it and the document operation that caused it is
 # the agent's own act. Everything else running under a document operation (ERPNext's controllers, the hooks of our own
 # apps, a Server Script) is a CONSEQUENCE of that operation: recorded and compared, never tested against the author.
@@ -888,13 +889,15 @@ def _check_outbound(url, method="GET"):
 
 
 def _w_requests(orig):
+    """Wraps `Session.send`, not `Session.request`: `send` is called once per redirect hop, so a listed host cannot
+    redirect the agent to a host that is not listed."""
     @functools.wraps(orig)
-    def wrapper(self, method, url, *a, **kw):
-        cap = _check_outbound(url, method)
+    def wrapper(self, request, *a, **kw):
+        cap = _check_outbound(getattr(request, "url", ""), getattr(request, "method", "GET"))
         if cap is not None:
             t = kw.get("timeout")
             kw["timeout"] = cap if t is None else (min(cap, t) if isinstance(t, (int, float)) else cap)
-        return orig(self, method, url, *a, **kw)
+        return orig(self, request, *a, **kw)
     return wrapper
 
 
@@ -1038,7 +1041,7 @@ def _install():
     try:
         import requests
 
-        _patch_attr(requests.sessions.Session, "request", _w_requests)
+        _patch_attr(requests.sessions.Session, "send", _w_requests)
     except Exception:
         pass
     try:
