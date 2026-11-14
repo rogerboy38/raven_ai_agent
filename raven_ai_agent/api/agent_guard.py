@@ -248,8 +248,19 @@ def _norm(v):
     if isinstance(v, float) or v.__class__.__name__ == "Decimal":
         return round(float(v), 6)
     if hasattr(v, "isoformat"):
+        if v.__class__.__name__ == "datetime" and _near_now(v):
+            return "<now>"                       # stamped by the system when the pass ran: differs between the two passes
         return v.isoformat()
     return v
+
+
+def _near_now(v) -> bool:
+    try:
+        import datetime as _dt
+
+        return abs((_dt.datetime.now(v.tzinfo) - v).total_seconds()) < 120
+    except Exception:
+        return False
 
 
 def _row_values(d, meta=None) -> dict:
