@@ -609,6 +609,19 @@ def on_write_event(doc, method=None):
 
 
 # --------------------------------------------------------------------- direct writes (no doc event)
+def _inner(orig, *a, **kw):
+    """Run the original of a wrapper that has just been judged: what Frappe itself issues inside it (a `db_set` runs
+    an UPDATE, a `set_value` several statements) is part of that one judged write, not new writes."""
+    s = _state()
+    if not s:
+        return orig(*a, **kw)
+    s["inner"] = s.get("inner", 0) + 1
+    try:
+        return orig(*a, **kw)
+    finally:
+        s["inner"] -= 1
+
+
 _HARD_SQL_RE = re.compile(r"^\s*(alter|drop|create|rename|truncate|load|call|lock|unlock|start|begin|commit|set\s+autocommit)\b", re.I)
 
 
@@ -624,7 +637,7 @@ def _direct(kind: str, doctype: str, name: str, always_refuse: str = "", detail:
     """Judge a write that no doc event sees. Called from a wrapper: the frame two levels up is the wrapper's caller.
     `always_refuse` is refused for the agent; for a CONSEQUENCE only when `hard` (structure changes, implicit commits)."""
     s = _state()
-    if not s:
+    if not s or s.get("inner"):
         return
     imm = sys._getframe(2)                    # the wrapper's caller, the query builder looked through
     while imm is not None and ((imm.f_globals.get("__name__") or "").startswith("frappe.query_builder")
@@ -670,7 +683,7 @@ def _w_set_value(orig):
     @functools.wraps(orig)
     def wrapper(self, dt, dn=None, field=None, val=None, *a, **kw):
         _direct("set_value", dt, dn if isinstance(dn, str) else "")
-        return orig(self, dt, dn, field, val, *a, **kw)
+        return _inner(orig, self, dt, dn, field, val, *a, **kw)
     return wrapper
 
 
@@ -678,7 +691,7 @@ def _w_set_single(orig):
     @functools.wraps(orig)
     def wrapper(self, doctype, fieldname, value=None, *a, **kw):
         _direct("set_single_value", doctype, fieldname if isinstance(fieldname, str) else "")
-        return orig(self, doctype, fieldname, value, *a, **kw)
+        return _inner(orig, self, doctype, fieldname, value, *a, **kw)
     return wrapper
 
 
@@ -686,7 +699,7 @@ def _w_delete(orig):
     @functools.wraps(orig)
     def wrapper(self, doctype, *a, **kw):
         _direct("db.delete", doctype, "", always_refuse="refused_bulk_delete", hard=False)
-        return orig(self, doctype, *a, **kw)
+        return _inner(orig, self, doctype, *a, **kw)
     return wrapper
 
 
@@ -716,7 +729,7 @@ def _w_doc_db_set(orig):
     @functools.wraps(orig)
     def wrapper(self, *a, **kw):
         _direct("db_set", self.doctype, getattr(self, "name", "") or "")
-        return orig(self, *a, **kw)
+        return _inner(orig, self, *a, **kw)
     return wrapper
 
 
@@ -725,7 +738,7 @@ def _w_base_db(kind):
         @functools.wraps(orig)
         def wrapper(self, *a, **kw):
             _direct(kind, self.doctype, getattr(self, "name", "") or "")
-            return orig(self, *a, **kw)
+            return _inner(orig, self, *a, **kw)
         return wrapper
     return maker
 
@@ -736,7 +749,7 @@ def _w_rename(orig):
         dt = a[0] if a and isinstance(a[0], str) else kw.get("doctype", "")
         old = a[1] if len(a) > 1 else kw.get("old", "")
         _direct("rename", dt, old if isinstance(old, str) else "")
-        return orig(*a, **kw)
+        return _inner(orig, *a, **kw)
     return wrapper
 
 
