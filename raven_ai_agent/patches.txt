@@ -1,1 +1,3 @@
 raven_ai_agent.patches.v0_2.register_crm_agent
+
+raven_ai_agent.patches.v13_7.create_ai_agent_operator_role
