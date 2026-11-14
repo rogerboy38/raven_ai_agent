@@ -48,9 +48,13 @@ class MiniMaxProvider(LLMProvider):
         "MiniMax-M2.1": {"input": 0, "output": 0},  # Included in Coding Plan
     }
     
-    DEFAULT_MODEL = "MiniMax-M2.1"  # Default to Coding Plan model
+    # A model name that is no longer served (the provider answers HTTP 404 `not_found_error`, code 2069, as seen on
+    # prod 2026-11-13 for MiniMax-M2.1). A STORED value in this set is ignored with a warning, never sent.
+    RETIRED_MODELS = frozenset({"minimax-m2.1", "abab6.5-chat", "abab6.5s-chat", "abab5.5-chat", "abab5.5s-chat"})
+    # The default is a name from MODELS that is not retired. It is used only when the setting is empty or retired.
+    DEFAULT_MODEL = "MiniMax-M2"
     
-    def __init__(self, settings: Dict):
+    def __init__(self, settings: Dict, model: Optional[str] = None):
         super().__init__(settings)
 
         # Prefer Coding Plan key (sk-cp-...) when available; fall back to regular.
@@ -90,18 +94,30 @@ class MiniMaxProvider(LLMProvider):
 
         self.api_key = api_key
         self.group_id = group_id
-        # Use M2.1 for Coding Plan keys (sk-cp-), M2 for regular keys.
-        default = "MiniMax-M2.1" if api_key.startswith("sk-cp-") else "MiniMax-M2"
-        # The key-derived default wins over the stored `minimax_model`, which
-        # was the other way round: a value saved before the Coding Plan key was
-        # issued (e.g. an older model name) silently out-ranked the default the
-        # key itself implies, so an sk-cp- key kept talking to the wrong model.
-        # NOTE this makes `minimax_model` inert while the key implies a model --
-        # see the DoD; the narrower variant is to ignore only values outside the
-        # known-good set.
-        self.default_model = default or settings.get("minimax_model")
+        # The model is a SETTING (AI Agent Settings.minimax_model). Order: the stored setting (unless retired) >
+        # the constructor argument > the class default. It is NEVER derived from the kind of key: that choice sent
+        # a retired name for a Coding Plan key and made the field inert.
+        self.default_model = self.resolve_model(settings, model)
         self.model = self.default_model
     
+    @classmethod
+    def resolve_model(cls, settings: Dict, model: Optional[str] = None) -> str:
+        """setting > constructor argument > class default; a retired name is skipped with a warning."""
+        for source, value in (("setting minimax_model", (settings or {}).get("minimax_model")),
+                              ("constructor argument", model)):
+            name = (str(value).strip() if value else "")
+            if not name:
+                continue
+            if name.lower() in cls.RETIRED_MODELS:
+                try:
+                    frappe.logger().warning(
+                        f"[MiniMax] the model {name!r} ({source}) is retired by the provider; using {cls.DEFAULT_MODEL}")
+                except Exception:
+                    pass
+                continue
+            return name
+        return cls.DEFAULT_MODEL
+
     def chat(
         self,
         messages: List[Dict],

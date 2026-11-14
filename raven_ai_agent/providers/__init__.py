@@ -12,9 +12,7 @@ from .minimax import MiniMaxProvider
 from .ollama import OllamaProvider
 
 
-def get_provider(provider_name: str, settings: Dict) -> LLMProvider:
-    """Factory function to get the appropriate LLM provider"""
-    
+def _build(provider_name: str, settings: Dict) -> LLMProvider:
     providers = {
         "openai": OpenAIProvider,
         "deepseek": DeepSeekProvider,
@@ -28,6 +26,19 @@ def get_provider(provider_name: str, settings: Dict) -> LLMProvider:
         raise ValueError(f"Unknown provider: {provider_name}. Available: {list(providers.keys())}")
     
     return provider_class(settings)
+
+
+def get_provider(provider_name: str, settings: Dict) -> LLMProvider:
+    """Factory: the provider named, wrapped with the fallback named in `settings["fallback_provider"]` (TASKS-344:
+    a failed call is retried once on it). No wrapper when none is named or it is the same provider."""
+    primary = _build(provider_name, settings)
+    fallback = (settings or {}).get("fallback_provider")
+    if fallback and str(fallback).strip().lower() not in ("", provider_name.lower()):
+        from .failover import FailoverProvider
+
+        fb = str(fallback).strip().lower()
+        return FailoverProvider(primary, fb, lambda: _build(fb, settings))
+    return primary
 
 
 __all__ = [
