@@ -1654,6 +1654,10 @@ def guard_endpoint(endpoint: str, confirm_arg: str, shape: str = "dict", bang_ar
                             left = [e["what"] for e in st["expected"]]
                             if left:                # all or nothing
                                 _block("not_announced", "not done: " + "; ".join(left))
+                            if "conseq" in p:       # what ERPNext posts must equal what the dry run counted
+                                diff = _conseq_diff(p.get("conseq"), st["conseq"])
+                                if diff:
+                                    _block("not_announced", "ERPNext's own postings differ from what I showed: " + diff)
                         _flush_realtime(st)
                         return res
                     except AgentWriteBlocked as b:
@@ -1686,10 +1690,11 @@ def guard_endpoint(endpoint: str, confirm_arg: str, shape: str = "dict", bang_ar
                     ok = _undo(st, sp, user, channel)
                     if not ok:
                         return _result(shape, False, _failure_text(RuntimeError("undo"), undone=False), refused="failed")
+                    out = _result(shape, False, _preview(records, conseq).replace("`confirm`", f'{confirm_arg}="confirm"'),
+                                  needs_confirmation=True, preview=[r["what"] for r in records])
                     store_pending(user, channel, json.dumps(flat, sort_keys=True, default=str), records,
-                                  what=records[0]["what"], via="api", payload=flat)
-                    return _result(shape, False, _preview(records, conseq).replace("`confirm`", f'{confirm_arg}="confirm"'),
-                                   needs_confirmation=True, preview=[r["what"] for r in records])
+                                  what=records[0]["what"], via="api", payload=flat, conseq=_conseq_list(conseq))
+                    return out
                 _flush_realtime(st)
                 return res
             except AgentWriteBlocked as b:
