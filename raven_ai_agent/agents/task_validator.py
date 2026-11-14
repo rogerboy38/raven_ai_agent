@@ -181,7 +181,7 @@ class TaskValidator:
             if bom_match:
                 bom_name = bom_match.group(1)
                 try:
-                    from raven_ai_agent.api.bom_helpers import validate_and_fix_bom
+                    from raven_ai_agent.api.bom_helpers import _validate_and_fix_bom as validate_and_fix_bom
                     result = validate_and_fix_bom(bom_name, auto_fix=True)
                     if result.get("success"):
                         msg = f"✅ **BOM Validation: {bom_name}**\n\n"
@@ -210,7 +210,7 @@ class TaskValidator:
                         default_bom = frappe.db.get_value("BOM", {"item": ["like", f"%{item_code}%"], "is_active": 1, "docstatus": 1}, "name")
                     
                     if default_bom:
-                        from raven_ai_agent.api.bom_helpers import validate_and_fix_bom
+                        from raven_ai_agent.api.bom_helpers import _validate_and_fix_bom as validate_and_fix_bom
                         result = validate_and_fix_bom(default_bom, auto_fix=True)
                         msg = f"✅ **BOM Validation for Item {item_code}** (BOM: {default_bom})\n\n"
                         msg += result.get("message", "Validation complete.")

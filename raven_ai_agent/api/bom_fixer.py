@@ -452,4 +452,5 @@ def api_fix_multiple_items(item_codes: str, auto_fix: bool = False) -> Dict:
 @frappe.whitelist()
 def api_force_fix_bom(bom_name: str, label_code: str) -> Dict:
     """API wrapper for force_fix_submitted_bom"""
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag / raw-SQL writes are for System Manager only
     return force_fix_submitted_bom(bom_name, label_code)

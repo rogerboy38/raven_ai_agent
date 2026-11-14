@@ -58,6 +58,7 @@ def store_memory(content: str, importance: str = "Normal", source: str = "Raven 
     Returns:
         JSON string confirming storage
     """
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76 (ignore-flag write for any logged-in account)
     user = frappe.session.user
     
     doc = frappe.get_doc({

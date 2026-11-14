@@ -23,6 +23,7 @@ def upload_customer_po(sales_order_name: str, file_url: str = None, file_content
     Returns:
         dict with success status, drive_file_name, message
     """
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag writes are for System Manager only
     # Validate Sales Order
     if not sales_order_name:
         frappe.throw(_("Sales Order name is required"))
