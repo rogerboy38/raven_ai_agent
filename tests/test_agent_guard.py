@@ -137,13 +137,10 @@ class TestRunTurn(unittest.TestCase):
     def go(self, user, text, writer=True, records=None, block=None):
         def runner(t):
             self.ran.append(t)
-            st = g.frappe.local  # unused: the fake turn owns the state
             if block:
                 raise block
             # the fake turn dict is created per call; surface records through the preview path instead
         # emulate the turn: a dry run that recorded writes
-        orig_first = g._first_pass
-
         def first_pass(u, ch, clean, r, rep, w, mn=""):
             r(clean)
             if records and w:
