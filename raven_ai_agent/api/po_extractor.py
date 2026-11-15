@@ -43,7 +43,7 @@ def on_file_added(doc, method):
     # Check if attached to Sales Order
     if doc.attached_to_doctype == 'Sales Order':
         frappe.enqueue(
-            "raven_ai_agent.api.po_extractor.extract_po_from_attachment",
+            "raven_ai_agent.api.po_extractor._extract_po_from_attachment",
             file_docname=doc.name,
             sales_order_name=doc.attached_to_name,
             timeout=300,
@@ -54,6 +54,13 @@ def on_file_added(doc, method):
 
 @frappe.whitelist()
 def extract_po_from_attachment(file_docname, sales_order_name):
+    """Whitelisted door: System Manager only (TASKS-342 ruling 76). The background job and the File
+    doc-event enqueue `_extract_po_from_attachment` (not whitelisted), which keeps working for everyone."""
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76: ignore-flag / raw-SQL writes are for System Manager only
+    return _extract_po_from_attachment(file_docname, sales_order_name)
+
+
+def _extract_po_from_attachment(file_docname, sales_order_name):
     """
     Extract PO data from attachment (background job)
     """
@@ -218,6 +225,7 @@ def manual_extract(sales_order_name):
     """
     Manually trigger PO extraction for a Sales Order
     """
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     # Find PDF attachments
     files = frappe.get_list("File", 
         filters={
@@ -233,7 +241,7 @@ def manual_extract(sales_order_name):
     
     # Trigger extraction
     frappe.enqueue(
-        "raven_ai_agent.api.po_extractor.extract_po_from_attachment",
+        "raven_ai_agent.api.po_extractor._extract_po_from_attachment",
         file_docname=files[0].name,
         sales_order_name=sales_order_name,
         timeout=300,

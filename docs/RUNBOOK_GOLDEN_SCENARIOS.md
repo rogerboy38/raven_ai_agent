@@ -47,13 +47,13 @@ run_so_lifecycle_scenario(user="runbook_user@yourcompany.com", channel="Raven Go
 High-level flow:
 
 1. `@ai list recent sales orders` – pending SOs dashboard
-2. `@ai status SO-00763-LORAND LABORATORIES` – quick SO status
-3. `@ai full status SO-00763-LORAND LABORATORIES` – full SO + WOs
-4. `@ai show work orders for SO-00763-LORAND LABORATORIES` – active WOs table
-5. `@ai mfg status SO-00763-LORAND LABORATORIES` – WO allocation dashboard
+2. `@ai status SO-00763-EXAMPLE-A` – quick SO status
+3. `@ai full status SO-00763-EXAMPLE-A` – full SO + WOs
+4. `@ai show work orders for SO-00763-EXAMPLE-A` – active WOs table
+5. `@ai mfg status SO-00763-EXAMPLE-A` – WO allocation dashboard
 6. `@ai payment outstanding` – global outstanding invoices
-7. `@ai run SO-00763-LORAND LABORATORIES` – full workflow execution (8-step pipeline)
-8. `@ai status SO-00763-LORAND LABORATORIES` – updated pipeline dashboard
+7. `@ai run SO-00763-EXAMPLE-A` – full workflow execution (8-step pipeline)
+8. `@ai status SO-00763-EXAMPLE-A` – updated pipeline dashboard
 
 **What this proves:**
 
@@ -74,14 +74,14 @@ run_scenario_2(user="runbook_user@yourcompany.com", channel="Raven Golden Runs")
 
 Commands:
 
-1. `@ai workflow status SO-00763-LORAND LABORATORIES` – 8-step pipeline dashboard
-2. `@ai mfg status SO-00763-LORAND LABORATORIES` – WO allocation (fully allocated)
-3. `@ai show work orders for SO-00763-LORAND LABORATORIES` – WO table (4 completed WOs)
-4. `@ai full status SO-00763-LORAND LABORATORIES` – SO status + linked WOs
-5. `@ai diagnose SO-00763-LORAND LABORATORIES` – diagnosis + next actions
-6. `@ai next steps SO-00763-LORAND LABORATORIES` – explicit next-step checklist
-7. `@ai payment outstanding customer LORAND LABORATORIES LLC` – per-customer outstanding (ACC-SINV-2026-00071, 107,884.42 USD)
-8. `@ai pipeline status SO-00763-LORAND LABORATORIES` – same pipeline view, confirming state
+1. `@ai workflow status SO-00763-EXAMPLE-A` – 8-step pipeline dashboard
+2. `@ai mfg status SO-00763-EXAMPLE-A` – WO allocation (fully allocated)
+3. `@ai show work orders for SO-00763-EXAMPLE-A` – WO table (4 completed WOs)
+4. `@ai full status SO-00763-EXAMPLE-A` – SO status + linked WOs
+5. `@ai diagnose SO-00763-EXAMPLE-A` – diagnosis + next actions
+6. `@ai next steps SO-00763-EXAMPLE-A` – explicit next-step checklist
+7. `@ai payment outstanding customer EXAMPLE CUSTOMER B` – per-customer outstanding (ACC-SINV-2026-00071, 107,884.42 USD)
+8. `@ai pipeline status SO-00763-EXAMPLE-A` – same pipeline view, confirming state
 
 **What this proves:**
 
@@ -96,7 +96,7 @@ Commands:
 For each new environment (staging, then production):
 
 1. Ensure demo data (or anonymized equivalents) for:
-   - A representative long-running SO (e.g. SO-00763-LORAND LABORATORIES)
+   - A representative long-running SO (e.g. SO-00763-EXAMPLE-A)
    - At least one outstanding invoice for the same customer.
 
 2. Run the golden transcripts command against that site:

@@ -166,11 +166,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "abab6.5-chat",
+   "default": "MiniMax-M2",
    "fieldname": "minimax_model",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "label": "MiniMax Model",
-   "options": "MiniMax-M2\nMiniMax-M2-Stable\nMiniMax-M2.1"
+   "description": "The model name sent to MiniMax. Empty or a retired name = MiniMax-M2. Change it here when the provider renames or retires a model."
   },
   {
    "fieldname": "sb_settings",

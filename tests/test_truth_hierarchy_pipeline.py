@@ -98,7 +98,7 @@ class TestValidatePipelineNameResolution(unittest.TestCase):
     def test_validate_pipeline_resolves_partial_so_name(self, mock_resolve, mock_frappe):
         """Test that validate_pipeline resolves partial SO name (e.g., SO-00752)"""
         
-        # Arrange: mock to resolve SO-00752 -> SO-00752-LEGOSAN AB
+        # Arrange: mock to resolve SO-00752 -> SO-00752-EXAMPLE-A
         def resolve_side_effect(doctype, partial_name):
             if doctype == "Quotation" and partial_name == "SO-00752":
                 # When given SO name, it tries Quotation first and may not find it

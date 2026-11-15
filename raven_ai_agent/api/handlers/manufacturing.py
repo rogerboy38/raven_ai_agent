@@ -2,6 +2,7 @@
 Manufacturing SOP Commands + Stock Entry Management
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 import re
 import requests
@@ -176,7 +177,7 @@ class ManufacturingMixin:
                             "requires_confirmation": True,
                             "preview": f"🚀 START PRODUCTION FOR {wo_name}?\n\n  Item: {wo.production_item}\n  Qty: {wo.qty}\n  Sales Order: {wo.sales_order or 'None'}\n\nThis will submit the Work Order. Say 'confirm' or use `!` prefix to proceed."
                         }
-                    wo.submit()
+                    agent_guard.submit_doc(wo)
                     return {
                         "success": True,
                         "message": f"✅ Work Order **{wo_name}** submitted and started!\n\n  Status: {wo.status}\n  Item: {wo.production_item}"
@@ -273,7 +274,7 @@ class ManufacturingMixin:
                     se_dict = make_stock_entry(wo_name, "Manufacture", produced_qty)
                     se = frappe.get_doc(se_dict)
                     se.insert(ignore_permissions=True)
-                    se.submit()
+                    agent_guard.submit_doc(se)
                     
                     return {
                         "success": True,
@@ -345,7 +346,7 @@ class ManufacturingMixin:
                                 batch.insert(ignore_permissions=True)
                                 item.batch_no = batch.name
                 
-                se.submit()
+                agent_guard.submit_doc(se)
                 
                 return {
                     "success": True,
@@ -399,7 +400,7 @@ class ManufacturingMixin:
                                 batch.insert(ignore_permissions=True)
                                 item.batch_no = batch.name
                 
-                se.submit()
+                agent_guard.submit_doc(se)
                 
                 return {
                     "success": True,
@@ -549,7 +550,7 @@ class ManufacturingMixin:
                 
                 se.append("items", item_entry)
                 se.insert(ignore_permissions=True)
-                se.submit()
+                agent_guard.submit_doc(se)
                 
                 total_value = qty * price if price else 0
                 batch_info = f"\n  Batch: {batch_id}" if batch_id else ""
@@ -606,7 +607,7 @@ class ManufacturingMixin:
                             item.batch_no = batch.name
                 
                 se.save()
-                se.submit()
+                agent_guard.submit_doc(se)
                 
                 return {
                     "success": True,

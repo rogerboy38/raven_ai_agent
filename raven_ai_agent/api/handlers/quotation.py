@@ -36,44 +36,12 @@ class QuotationMixin:
                 if end_num - start_num > 50:
                     return {"success": False, "error": "Range too large (max 50 quotations at once)."}
                 
-                site_name = frappe.local.site
-                fixed = []
-                skipped = []
-                errors = []
-                
-                for num in range(start_num, end_num + 1):
-                    qtn_name = f"SAL-QTN-{start_year}-{num:05d}"
-                    try:
-                        qtn = frappe.get_doc("Quotation", qtn_name)
-                        if qtn.docstatus == 2:  # Cancelled
-                            frappe.db.sql("""
-                                UPDATE `tabQuotation` 
-                                SET docstatus = 0, status = 'Draft'
-                                WHERE name = %s
-                            """, qtn_name)
-                            frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus = 0 WHERE parent = %s", qtn_name)
-                            fixed.append(f"[{qtn_name}](https://{site_name}/app/quotation/{qtn_name})")
-                        elif qtn.docstatus == 0:
-                            skipped.append(f"{qtn_name} (already Draft)")
-                        elif qtn.docstatus == 1:
-                            skipped.append(f"{qtn_name} (Submitted)")
-                    except frappe.DoesNotExistError:
-                        errors.append(f"{qtn_name} (not found)")
-                    except Exception as e:
-                        errors.append(f"{qtn_name} ({str(e)[:30]})")
-                
-                frappe.db.commit()
-                frappe.clear_cache(doctype="Quotation")
-                
-                msg = f"🔧 **BATCH FIX QUOTATIONS** ({start_name} → {end_name})\n\n"
-                if fixed:
-                    msg += f"✅ **Fixed ({len(fixed)}):**\n" + "\n".join([f"  • {q}" for q in fixed]) + "\n\n"
-                if skipped:
-                    msg += f"⏭️ **Skipped ({len(skipped)}):**\n" + "\n".join([f"  • {q}" for q in skipped]) + "\n\n"
-                if errors:
-                    msg += f"❌ **Errors ({len(errors)}):**\n" + "\n".join([f"  • {q}" for q in errors])
-                
-                return {"success": True, "message": msg}
+                # TASKS-337 slice 2 (decision 57): the batch revert of cancelled quotations by raw SQL is gone.
+                return {
+                    "success": False,
+                    "error": "The agent does not revert cancelled quotations to Draft. Amend each one in the form. / "
+                             "El agente no revierte cotizaciones canceladas a Borrador. Enmiéndelas en el formulario.",
+                }
         
         # Fix single quotation: @ai fix quotation SAL-QTN-XXXX or @ai !fix quotation SAL-QTN-XXXX
         if "fix" in query_lower and "quotation" in query_lower:
@@ -85,43 +53,14 @@ class QuotationMixin:
                     site_name = frappe.local.site
                     qtn_link = f"https://{site_name}/app/quotation/{qtn_name}"
                     
-                    # Case 1: Quotation is cancelled - revert to draft
+                    # Case 1: cancelled. TASKS-337 slice 2 (decision 57): no raw-SQL revert; Amend is the way.
                     if qtn.docstatus == 2:
-                        if not is_confirm:
-                            return {
-                                "requires_confirmation": True,
-                                "preview": f"🔧 **FIX QUOTATION {qtn_name}?**\n\n  Customer: {qtn.party_name}\n  Status: Cancelled (docstatus=2)\n  Total: ${qtn.grand_total:,.2f}\n\nThis will reset the quotation to Draft so you can modify it.\n\n⚠️ Use `@ai !fix quotation {qtn_name}` or say 'confirm' to proceed."
-                            }
-                        
-                        # Reset quotation to draft via SQL
-                        frappe.db.sql("""
-                            UPDATE `tabQuotation` 
-                            SET docstatus = 0, status = 'Draft'
-                            WHERE name = %s
-                        """, qtn_name)
-                        
-                        # Reset child tables
-                        frappe.db.sql("UPDATE `tabQuotation Item` SET docstatus = 0 WHERE parent = %s", qtn_name)
-                        
-                        frappe.db.commit()
-                        frappe.clear_cache(doctype="Quotation")
-                        
-                        # Verify the fix persisted
-                        verify = frappe.db.sql(
-                            "SELECT docstatus, status FROM `tabQuotation` WHERE name=%s",
-                            qtn_name, as_dict=1
-                        )
-                        if not verify or verify[0].docstatus != 0:
-                            return {
-                                "success": False,
-                                "error": f"Fix failed! DB still shows docstatus={verify[0].docstatus if verify else 'NOT FOUND'}"
-                            }
-                        
                         return {
-                            "success": True,
-                            "message": f"✅ Quotation **[{qtn_name}]({qtn_link})** fixed!\n\n  Customer: {qtn.party_name}\n  Status: Draft (verified ✓)\n  Total: ${qtn.grand_total:,.2f}\n\n📝 You can now edit the quotation in ERPNext.\n⚠️ Hard-refresh your browser (Ctrl+Shift+R) to see the change."
+                            "success": False,
+                            "error": f"The agent does not revert a cancelled quotation to Draft ({qtn_name}). Amend it in the form. / "
+                                     f"El agente no revierte una cotización cancelada a Borrador ({qtn_name}). Use Enmendar.",
                         }
-                    
+
                     # Case 2: Already in draft
                     elif qtn.docstatus == 0:
                         return {

@@ -26,7 +26,7 @@ def _skill():
 
 PILOT_JSON = {
     "folio": 752,
-    "invoice_header": {"folio": 752, "cliente": "LEGOSAN AB", "factura": "F2227",
+    "invoice_header": {"folio": 752, "cliente": "EXAMPLE CUSTOMER A", "factura": "F2227",
                        "fecha": "2024-01-15", "moneda": "USD"},
     "invoice_lines": [{"lote_real": "0612185231", "item_code": "ITEM_0612185231",
                        "descripcion": "ALOE QX ALOE 70%+ GOMA BB 30%",
@@ -49,7 +49,7 @@ def _census(so_refs=None, batch_status="MISSING", wo_refs=None):
         "native_batch": {"status": "MISSING", "refs": [], "note": ""},
         "c_source": {"source": "regenerated", "pack_kg": 25.0, "count": 6},
     }}
-    return {"folio": 752, "header": {"cliente": "LEGOSAN AB", "factura": "F2227",
+    return {"folio": 752, "header": {"cliente": "EXAMPLE CUSTOMER A", "factura": "F2227",
                                      "fecha": "2024-01-15", "lineas": 1},
             "stages": stages, "lots": lots, "issues": []}
 
@@ -100,10 +100,10 @@ class TestCensusReadOnly:
 
     def test_scan_folio_returns_census_table(self, frappe_mock):
         with patch("raven_ai_agent.skills.migration_fixer.census.census_folio",
-                   return_value=_census(so_refs=["SO-00752-LEGOSAN AB"])):
+                   return_value=_census(so_refs=["SO-00752-EXAMPLE-A"])):
             r = _skill().handle("migrate scan folio 752")
         body = r["response"]
-        assert "SO-00752-LEGOSAN AB" in body
+        assert "SO-00752-EXAMPLE-A" in body
         assert "solo lectura" in body.lower() or "read-only" in body.lower()
 
 
@@ -161,7 +161,7 @@ class TestDryRunGating:
         from raven_ai_agent.skills.migration_fixer.executor import execute_stage
         executor_env.return_value = _census()
         frappe_mock.new_doc = MagicMock()
-        frappe_mock.db.get_value = MagicMock(return_value="LEGOSAN AB")
+        frappe_mock.db.get_value = MagicMock(return_value="EXAMPLE CUSTOMER A")
         frappe_mock.db.exists = MagicMock(return_value=True)
         body = execute_stage(752, "so", execute=False)
         frappe_mock.new_doc.assert_not_called()
@@ -182,7 +182,7 @@ class TestHonestyLayer:
     def _run_create(self, frappe_mock, executor_env, row_exists_after):
         from raven_ai_agent.skills.migration_fixer.executor import execute_stage
         executor_env.return_value = _census()
-        frappe_mock.db.get_value = MagicMock(return_value="LEGOSAN AB")
+        frappe_mock.db.get_value = MagicMock(return_value="EXAMPLE CUSTOMER A")
         frappe_mock.db.exists = MagicMock(
             side_effect=lambda dt, name=None: dt == "Item" or
             (dt == "Sales Order" and row_exists_after))
@@ -206,7 +206,7 @@ class TestHonestyLayer:
 
     def test_existing_so_is_noop_not_duplicate(self, frappe_mock, executor_env):
         from raven_ai_agent.skills.migration_fixer.executor import execute_stage
-        executor_env.return_value = _census(so_refs=["SO-00752-LEGOSAN AB"])
+        executor_env.return_value = _census(so_refs=["SO-00752-EXAMPLE-A"])
         frappe_mock.new_doc = MagicMock()
         frappe_mock.db.exists = MagicMock(return_value=True)
         body = execute_stage(752, "so", execute=True, date_policy="historical")
@@ -231,7 +231,7 @@ class TestBatchStage:
     def test_l1_create_sets_work_order_ref_from_census(self, frappe_mock, executor_env):
         from raven_ai_agent.skills.migration_fixer.executor import execute_stage
         executor_env.return_value = _census(
-            so_refs=["SO-00752-LEGOSAN AB"], wo_refs=["MFG-WO-03726"])
+            so_refs=["SO-00752-EXAMPLE-A"], wo_refs=["MFG-WO-03726"])
         frappe_mock.db.exists = MagicMock(return_value=True)
         doc = MagicMock()
         doc.name = "LOTE-TEST-L1"
@@ -239,7 +239,7 @@ class TestBatchStage:
         body = execute_stage(752, "batch", execute=True)
         doc.insert.assert_called_once()
         assert doc.work_order_ref == "MFG-WO-03726"
-        assert doc.sales_order_related == "SO-00752-LEGOSAN AB"
+        assert doc.sales_order_related == "SO-00752-EXAMPLE-A"
         assert "VERIFIED" in body and '"verified": true' in body
 
     def test_l1_refuses_without_any_business_anchor(self, frappe_mock, executor_env):
@@ -274,7 +274,7 @@ class TestCoaStage:
                      return_value=src)
 
     def _census_with_batch(self):
-        cen = _census(so_refs=["SO-00752-LEGOSAN AB"], wo_refs=["MFG-WO-03726"])
+        cen = _census(so_refs=["SO-00752-EXAMPLE-A"], wo_refs=["MFG-WO-03726"])
         cen["lots"]["0612185231"]["batch_amb"] = {
             "status": "OK", "refs": ["LOTE-26-28-0001", "LOTE-26-28-0002",
                                      "LOTE-26-28-0003"], "note": ""}
@@ -408,7 +408,7 @@ class TestBatchOriginW1:
         executor_env.return_value = _census(
             so_refs=so_refs, wo_refs=wo_refs, batch_status="MISSING")
         frappe_mock.db.exists = MagicMock(return_value=True)   # item + row-after
-        frappe_mock.db.get_value = MagicMock(return_value="LEGOSAN AB")
+        frappe_mock.db.get_value = MagicMock(return_value="EXAMPLE CUSTOMER A")
         doc = MagicMock()
         doc.name = "LOTE-TEST-0001"
         frappe_mock.new_doc = MagicMock(return_value=doc)
@@ -426,10 +426,10 @@ class TestBatchOriginW1:
     def test_wo_less_migrated_anchors_on_sales_order(self, frappe_mock, executor_env):
         # O-1 hybrid: no WO but a Sales Order → create anchored on the SO, no refuse
         body, doc = self._run_batch_create(
-            frappe_mock, executor_env, so_refs=["SO-00752-LEGOSAN AB"])
+            frappe_mock, executor_env, so_refs=["SO-00752-EXAMPLE-A"])
         doc.insert.assert_called_once()
         assert doc.custom_batch_origin == "Migrated"
-        assert doc.sales_order_related == "SO-00752-LEGOSAN AB"
+        assert doc.sales_order_related == "SO-00752-EXAMPLE-A"
         assert "REFUSED" not in body
 
     def test_refuses_when_no_business_anchor(self, frappe_mock, executor_env):

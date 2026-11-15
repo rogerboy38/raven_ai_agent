@@ -99,4 +99,8 @@ class PipelineSummarizerAgent(CRMAgentBase):
 
 # Scheduler entrypoint
 def run_daily_digest():
+    from raven_ai_agent.api.agent_guard import agent_enabled
+
+    if not agent_enabled():          # AI Agent Settings `enabled` is the agent's kill switch (TASKS-342)
+        return
     PipelineSummarizerAgent().run_now()

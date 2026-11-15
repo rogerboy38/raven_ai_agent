@@ -72,6 +72,7 @@ def add_note(
     The original line evaluated to ``True`` unconditionally because of the
     ``hasattr`` guard, so the fallback branch was unreachable.
     """
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     try:
         if frappe.db.exists("DocType", "CRM Note"):
             try:

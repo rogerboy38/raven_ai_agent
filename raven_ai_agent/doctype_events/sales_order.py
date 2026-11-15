@@ -300,7 +300,7 @@ frappe.call({
     method: 'your_app.sales_order_pdf_processor.process_sales_order_pdf',
     args: {
         pdf_content: pdfTextContent,
-        sales_order_name: 'SO-01825-Barentz Italia Specchiasol' // optional
+        sales_order_name: 'SO-01825-EXAMPLE' // optional
     },
     callback: function(response) {
         if (response.message.status === 'success') {

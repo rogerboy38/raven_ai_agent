@@ -15,6 +15,7 @@ All @frappe.whitelist() endpoints are preserved here for API compatibility.
 Internal code should import directly from the new modules.
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, add_days, flt
@@ -134,7 +135,7 @@ class WorkflowExecutor:
             if self.dry_run:
                 return {"success": True, "dry_run": True,
                         "message": f"[DRY RUN] Would submit {quotation_name}"}
-            doc.submit()
+            agent_guard.submit_doc(doc)
             frappe.db.commit()
             return {"success": True, "name": quotation_name,
                     "message": f"Quotation {quotation_name} submitted",
@@ -227,7 +228,7 @@ class WorkflowExecutor:
             # BUG 14 fix: Auto-resolve invalid customer_address before submit
             self._fix_customer_address(doc)
             
-            doc.submit()
+            agent_guard.submit_doc(doc)
             frappe.db.commit()
             return {"success": True, "name": so_name,
                     "message": f"Sales Order {so_name} submitted",
@@ -339,7 +340,7 @@ class WorkflowExecutor:
             submit_note = ""
             if confirm and not batch_result.get("issues"):
                 try:
-                    dn.submit()
+                    agent_guard.submit_doc(dn)
                     dn_status = "Submitted"
                 except Exception as submit_err:
                     submit_note = f"\n⚠️ DN created but auto-submit failed: {str(submit_err)[:200]}"
@@ -395,7 +396,7 @@ class WorkflowExecutor:
             for dn_ref in dns:
                 dn_doc = frappe.get_doc("Delivery Note", dn_ref.parent)
                 if dn_doc.docstatus == 0:
-                    dn_doc.submit()
+                    agent_guard.submit_doc(dn_doc)
                     frappe.db.commit()
             
             # Create invoice from SO
@@ -441,7 +442,7 @@ class WorkflowExecutor:
             dn = frappe.get_doc("Delivery Note", dn_name)
             if dn.docstatus != 1:
                 if dn.docstatus == 0 and confirm:
-                    dn.submit()
+                    agent_guard.submit_doc(dn)
                     frappe.db.commit()
                 else:
                     return {"success": False, "error": "DN must be submitted. Use ! to auto-submit."}

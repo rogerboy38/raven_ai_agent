@@ -30,6 +30,7 @@ def acknowledge(name: str) -> dict:
     Sets autonomy_paused=0 and clears alarm flags.  Does NOT delete the
     record (history is valuable).
     """
+    frappe.only_for("System Manager")  # TASKS-342 ruling 76 (ignore-flag write for any logged-in account)
     bug = frappe.get_doc("Raven Agent Bug", name)
     bug.autonomy_paused = 0
     bug.autonomy_paused_at = None

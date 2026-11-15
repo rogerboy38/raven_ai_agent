@@ -16,7 +16,7 @@
 | Company | AMB-Wellness |
 | Currency (Company) | MXN |
 | Currency (Sales) | USD |
-| Pilot SO | SO-00752-LEGOSAN AB |
+| Pilot SO | SO-00752-EXAMPLE-A |
 | Pilot Item (Sales) | 0307 — INNOVALOE ALOE VERA GEL SPRAY DRIED POWDER 200:1 |
 | Pilot Item (Mix) | ITEM_0612185231 — ALOE 70% + GOMA BB 30% |
 | Sales BOM | BOM-0307-001 (0307 + LBL0307) |
@@ -89,10 +89,10 @@
 - WO still In Process (not Completed)
 
 ### MFG-010: Create WO from Sales Order
-**Input:** `@manufacturing create wo from so SO-00752-LEGOSAN AB`
+**Input:** `@manufacturing create wo from so SO-00752-EXAMPLE-A`
 **Expected:**
 - WO created for item 0307 with qty 150
-- WO.sales_order = SO-00752-LEGOSAN AB
+- WO.sales_order = SO-00752-EXAMPLE-A
 - Uses default sales BOM
 
 ### MFG-011: WO Status Check
@@ -120,20 +120,20 @@
 - Response includes SO link
 
 ### SO-002: Submit Sales Order
-**Input:** `@sales_order_follow_up submit SO-00752-LEGOSAN AB`
+**Input:** `@sales_order_follow_up submit SO-00752-EXAMPLE-A`
 **Expected:**
 - SO docstatus 0 → 1
 - Response includes next step hints (manufacturing WO)
 
 ### SO-003: Submit Already-Submitted SO
-**Input:** `@sales_order_follow_up submit SO-00752-LEGOSAN AB` (already submitted)
+**Input:** `@sales_order_follow_up submit SO-00752-EXAMPLE-A` (already submitted)
 **Expected:**
 - Returns "already submitted" with status info
 - No error
 
 ### SO-004: Create Delivery Note — Sufficient Stock
 **Pre-condition:** 150 Kg of 0307 in FG to Sell Warehouse
-**Input:** `@sales_order_follow_up delivery SO-00752-LEGOSAN AB`
+**Input:** `@sales_order_follow_up delivery SO-00752-EXAMPLE-A`
 **Expected:**
 - DN created and submitted
 - Items pulled from FG to Sell
@@ -141,7 +141,7 @@
 
 ### SO-005: Create Delivery Note — Insufficient Stock
 **Pre-condition:** 0 Kg of 0307 in warehouse
-**Input:** `@sales_order_follow_up delivery SO-00752-LEGOSAN AB`
+**Input:** `@sales_order_follow_up delivery SO-00752-EXAMPLE-A`
 **Expected:**
 - Returns error with shortage details
 - Suggests creating Manufacturing WO
@@ -149,7 +149,7 @@
 
 ### SO-006: Create Sales Invoice from DN
 **Pre-condition:** DN exists for SO-00752
-**Input:** `@sales_order_follow_up invoice SO-00752-LEGOSAN AB`
+**Input:** `@sales_order_follow_up invoice SO-00752-EXAMPLE-A`
 **Expected:**
 - SI created from latest Delivery Note
 - mx_cfdi_use = "G03"
@@ -158,13 +158,13 @@
 
 ### SO-007: Create Sales Invoice — No DN
 **Pre-condition:** No DN exists, from_dn=False
-**Input:** `@sales_order_follow_up invoice SO-00752-LEGOSAN AB` (with `from so` modifier)
+**Input:** `@sales_order_follow_up invoice SO-00752-EXAMPLE-A` (with `from so` modifier)
 **Expected:**
 - SI created directly from SO
 - CFDI fields set correctly
 
 ### SO-008: SO Status with Work Orders
-**Input:** `@sales_order_follow_up status SO-00752-LEGOSAN AB`
+**Input:** `@sales_order_follow_up status SO-00752-EXAMPLE-A`
 **Expected:**
 - Shows linked Work Orders with status and progress
 - Shows linked DNs, SIs
@@ -177,7 +177,7 @@
 - Each with customer, status, delivery date, next action
 
 ### SO-010: Next Steps — Manufacturing Aware
-**Input:** `@sales_order_follow_up next SO-00752-LEGOSAN AB`
+**Input:** `@sales_order_follow_up next SO-00752-EXAMPLE-A`
 **Expected:**
 - If no stock: suggests `@manufacturing create wo from so`
 - If WO in progress: shows WO status
@@ -226,16 +226,16 @@
 - Total outstanding amount
 
 ### PAY-007: Outstanding by Customer
-**Input:** `@payment outstanding customer LEGOSAN AB`
+**Input:** `@payment outstanding customer EXAMPLE CUSTOMER A`
 **Expected:**
-- Filtered list for LEGOSAN AB only
+- Filtered list for EXAMPLE CUSTOMER A only
 
 ---
 
 ## Phase 4: Unit Tests — Workflow Orchestrator
 
 ### WF-001: Pipeline Status Dashboard
-**Input:** `@workflow status SO-00752-LEGOSAN AB`
+**Input:** `@workflow status SO-00752-EXAMPLE-A`
 **Expected:**
 - 8-step dashboard table
 - Each step shows: status, document link, complete/pending
@@ -249,14 +249,14 @@
 - Same as SO-001
 
 ### WF-003: Run Full Cycle
-**Input:** `@workflow run SO-00752-LEGOSAN AB mfg-bom BOM-0307-005 sales-bom BOM-0307-001`
+**Input:** `@workflow run SO-00752-EXAMPLE-A mfg-bom BOM-0307-005 sales-bom BOM-0307-001`
 **Expected:**
 - All 8 steps execute in sequence
 - Each step reports success/failure
 - Final summary shows completed count
 
 ### WF-004: Run with Skip Steps
-**Input:** `@workflow run SO-00752-LEGOSAN AB skip [1,2,3]`
+**Input:** `@workflow run SO-00752-EXAMPLE-A skip [1,2,3]`
 **Pre-condition:** Steps 1-3 already done (MFG WO completed, SO submitted)
 **Expected:**
 - Steps 1-3 marked as "Skipped"
@@ -264,7 +264,7 @@
 
 ### WF-005: Full Cycle — Error Handling
 **Pre-condition:** SO not submitted, insufficient stock
-**Input:** `@workflow run SO-00752-LEGOSAN AB`
+**Input:** `@workflow run SO-00752-EXAMPLE-A`
 **Expected:**
 - Pipeline stops at first failing step
 - Shows which steps completed vs failed
@@ -276,7 +276,7 @@
 
 ### INT-001: Complete Folio 0752 Workflow
 **Pre-conditions:**
-- SO-00752-LEGOSAN AB exists (Draft)
+- SO-00752-EXAMPLE-A exists (Draft)
 - BOM-0307-005 submitted (ITEM_0612185231 + LBL4INX6INBL)
 - BOM-0307-001 submitted (0307 + LBL0307)
 - 150 Kg ITEM_0612185231 in FG to Sell
@@ -291,17 +291,17 @@ Step 2: @manufacturing submit wo MFG-WO-XXXXX
         @manufacturing transfer materials MFG-WO-XXXXX
         @manufacturing manufacture MFG-WO-XXXXX
         → Verify: 150 Kg 0307 now in FG to Sell
-Step 3: @sales_order_follow_up submit SO-00752-LEGOSAN AB
+Step 3: @sales_order_follow_up submit SO-00752-EXAMPLE-A
         → Verify: SO submitted
-Step 4: @manufacturing create wo from so SO-00752-LEGOSAN AB
+Step 4: @manufacturing create wo from so SO-00752-EXAMPLE-A
         → Verify: Sales WO created with BOM-0307-001
 Step 5: @manufacturing submit wo MFG-WO-YYYYY
         @manufacturing transfer materials MFG-WO-YYYYY
         @manufacturing manufacture MFG-WO-YYYYY
         → Verify: Labeled 0307 in FG to Sell
-Step 6: @sales_order_follow_up delivery SO-00752-LEGOSAN AB
+Step 6: @sales_order_follow_up delivery SO-00752-EXAMPLE-A
         → Verify: DN created and submitted
-Step 7: @sales_order_follow_up invoice SO-00752-LEGOSAN AB
+Step 7: @sales_order_follow_up invoice SO-00752-EXAMPLE-A
         → Verify: SI created, CFDI G03, USD currency
 Step 8: @payment create [SI-NAME]
         @payment submit [PE-NAME]
@@ -309,12 +309,12 @@ Step 8: @payment create [SI-NAME]
 ```
 
 **Verification:**
-- `@workflow status SO-00752-LEGOSAN AB` → All 8 steps ✅
+- `@workflow status SO-00752-EXAMPLE-A` → All 8 steps ✅
 - All documents linked in correct chain
 - Stock balances correct
 
 ### INT-002: Orchestrator Full Run
-**Input:** `@workflow run SO-00752-LEGOSAN AB mfg-bom BOM-0307-005 sales-bom BOM-0307-001`
+**Input:** `@workflow run SO-00752-EXAMPLE-A mfg-bom BOM-0307-005 sales-bom BOM-0307-001`
 **Expected:** Same result as INT-001 but automated
 
 ### INT-003: Item Mismatch Detection
@@ -336,7 +336,7 @@ Step 8: @payment create [SI-NAME]
 **Expected:** PaymentAgent.process_command receives "outstanding"
 
 ### RTR-003: @workflow Routing
-**Input (in Raven):** `@workflow status SO-00752-LEGOSAN AB`
+**Input (in Raven):** `@workflow status SO-00752-EXAMPLE-A`
 **Expected:** WorkflowOrchestrator.process_command receives the message
 
 ### RTR-004: @ai Backward Compatibility
@@ -344,7 +344,7 @@ Step 8: @payment create [SI-NAME]
 **Expected:** Still routes to RaymondLucyAgent (no regression)
 
 ### RTR-005: @sales_order_follow_up Updated Commands
-**Input (in Raven):** `@sales_order_follow_up delivery SO-00752-LEGOSAN AB`
+**Input (in Raven):** `@sales_order_follow_up delivery SO-00752-EXAMPLE-A`
 **Expected:** Updated agent handles the new "delivery" command
 
 ---

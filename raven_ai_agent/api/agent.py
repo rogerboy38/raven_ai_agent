@@ -100,9 +100,9 @@ When showing documents:
 
 ## EXTERNAL WEB ACCESS
 - You CAN fetch data from external URLs if the user provides a specific URL in their query
-- Example: "find address from http://www.barentz.com/contact" will fetch that website's content
+- Example: "find address from http://www.example.com/contact" will fetch that website's content
 - You CAN also do web searches without URLs using keywords like "search", "find", "look up"
-- Example: "search for barentz italia address" will search the web and return results
+- Example: "search for Example Customer italia address" will search the web and return results
 - When web search results are provided, summarize the relevant information for the user
 
 ## DYNAMIC DATA ACCESS
@@ -466,6 +466,7 @@ class RaymondLucyAgent(
 
 # ==================== API ENTRY POINTS ====================
 @frappe.whitelist()
+@agent_guard.guard_endpoint("process_message", "message", bang_arg="message")
 def process_message(message: str, conversation_history: str = None) -> Dict:
     """API endpoint for processing messages"""
     user = frappe.session.user

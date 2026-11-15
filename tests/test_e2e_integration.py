@@ -1,9 +1,9 @@
 """
 End-to-End Integration Tests for Raven AI Agent
 
-Tests the full pipeline from Alexa command through to agent routing.
+Tests the pipeline from a chat command through to agent routing.
 These tests verify that:
-1. Alexa-to-Raven API accepts and routes commands correctly
+1. (removed with the Alexa endpoint, TASKS-342 ruling 77)
 2. Command router dispatches to correct handlers
 3. Safety guardrails block dangerous operations
 
@@ -39,86 +39,6 @@ def is_frappe_importable():
 # Tests will skip gracefully if frappe is not available
 
 
-@unittest.skipUnless(is_frappe_importable(), "Frappe not importable - skipping API tests")
-class TestAlexaToRavenAPI(unittest.TestCase):
-    """Test cases for the Alexa to Raven API endpoint"""
-
-    def setUp(self):
-        """Set up test fixtures"""
-        self.maxDiff = None
-        # Try to import, skip test if import fails
-        try:
-            import raven_ai_agent.api.alexa_to_raven
-            self.alexa_api = raven_ai_agent.api.alexa_to_raven
-        except ImportError as e:
-            self.skipTest(f"Cannot import alexa_to_raven: {e}")
-
-    @patch('raven_ai_agent.api.alexa_to_raven.post_message_to_channel')
-    @patch('raven_ai_agent.api.alexa_to_raven._log_alexa_request')
-    @patch('raven_ai_agent.api.alexa_to_raven._resolve_alexa_user')
-    def test_alexa_to_raven_creates_message(self, mock_resolve, mock_log, mock_post):
-        """E2E-01: Alexa command creates Raven message in channel"""
-        if not hasattr(self, 'alexa_api'):
-            self.skipTest("alexa_to_raven module not importable")
-        alexa_api = self.alexa_api
-        
-        # Mock the authorization check
-        with patch('raven_ai_agent.api.alexa_to_raven._validate_bearer_or_token'):
-            # Mock user resolution
-            mock_resolve.return_value = {
-                'name': 'Alexa-001',
-                'frappe_user': 'test.user@example.com',
-                'default_workspace': 'Test Workspace',
-                'default_channel': 'alexa-commands'
-            }
-            
-            # Mock channel posting
-            mock_post.return_value = {'name': 'Raven-MSG-001'}
-            
-            # Mock frappe request
-            mock_request = MagicMock()
-            mock_request.get_json.return_value = {
-                'alexa_user': 'amzn1.account.ABC123',
-                'text': 'create a sales order for Acme Corp',
-                'intent': 'FreeFormIntent',
-                'session_id': 'session-123'
-            }
-            
-            with patch('frappe.request', mock_request):
-                with patch('frappe.get_request_header', return_value='Bearer test-token'):
-                    result = alexa_api.alexa_to_raven()
-                    
-                    # Verify the response
-                    self.assertTrue(result.get('ok'))
-                    self.assertEqual(result.get('channel'), 'alexa-commands')
-                    
-                    # Verify message was posted to channel
-                    mock_post.assert_called_once()
-                    call_args = mock_post.call_args
-                    self.assertEqual(call_args.kwargs['channel_name'], 'alexa-commands')
-                    self.assertIn('create a sales order', call_args.kwargs['message'])
-                    self.assertIn('@ai', call_args.kwargs['message'])
-
-    @patch('raven_ai_agent.api.alexa_to_raven._validate_bearer_or_token')
-    @patch('raven_ai_agent.api.alexa_to_raven._resolve_alexa_user')
-    def test_alexa_to_raven_missing_text(self, mock_resolve, mock_validate):
-        """E2E-02: API rejects request without text"""
-        if not hasattr(self, 'alexa_api'):
-            self.skipTest("alexa_to_raven module not importable")
-        alexa_api = self.alexa_api
-        
-        with patch('frappe.request') as mock_request:
-            mock_request.get_json.return_value = {
-                'alexa_user': 'amzn1.account.ABC123',
-                'text': '',  # Empty text
-            }
-            
-            with patch('frappe.get_request_header', return_value='Bearer test-token'):
-                with self.assertRaises(Exception) as context:
-                    alexa_api.alexa_to_raven()
-                
-                # Should throw validation error for missing text
-                self.assertIn('text', str(context.exception).lower())
 
 
 class TestCommandRouting(unittest.TestCase):
@@ -271,41 +191,6 @@ class TestSafetyGuardrails(unittest.TestCase):
         """Set up test fixtures"""
         if not is_frappe_available():
             self.skipTest("Frappe not available")
-
-    def test_delete_operations_blocked_from_alexa_origin(self):
-        """E2E-10: Delete operations blocked for Alexa origin"""
-        # Load utterance that attempts delete
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        delete_cmd = next((u for u in utterances['utterances'] 
-                         if 'delete' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(delete_cmd)
-        self.assertEqual(delete_cmd['expected_tool'], 'blocked')
-        self.assertIn('delete', delete_cmd['expected_outcome'].lower())
-
-    def test_cancel_operations_blocked_from_alexa_origin(self):
-        """E2E-11: Cancel operations blocked for Alexa origin"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        cancel_cmd = next((u for u in utterances['utterances'] 
-                         if 'cancel' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(cancel_cmd)
-        self.assertEqual(cancel_cmd['expected_tool'], 'blocked')
-
-    def test_submit_operations_blocked_from_alexa_origin(self):
-        """E2E-12: Submit operations blocked for Alexa origin"""
-        with open('tests/test_utterances.json', 'r') as f:
-            utterances = json.load(f)
-        
-        submit_cmd = next((u for u in utterances['utterances'] 
-                         if 'submit' in u['utterance'].lower() and 'sales order' in u['utterance'].lower()), None)
-        
-        self.assertIsNotNone(submit_cmd)
-        self.assertEqual(submit_cmd['expected_tool'], 'blocked')
 
     def test_prompt_injection_detected(self):
         """E2E-13: Prompt injection attempts are blocked"""

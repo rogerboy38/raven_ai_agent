@@ -4,6 +4,8 @@ Original Server Scripts: /api/method/raven_webhook_handler.handle, Raven Webhook
 Type: Whitelisted APIs
 """
 
+import hmac
+
 import frappe
 
 # ============================================================
@@ -13,8 +15,20 @@ import frappe
 from frappe import whitelist
 import frappe
 
+def _require_secret():
+    """TASKS-344 N-11: every guest webhook here needs the shared secret. An UNSET secret refuses (None == None
+    used to pass); constant-time compare."""
+    expected = frappe.conf.get("raven_webhook_secret")
+    if not expected:
+        frappe.throw("Webhook secret not configured", frappe.AuthenticationError)
+    secret = frappe.get_request_header("X-Raven-Secret")
+    if not secret or not hmac.compare_digest(str(secret).encode("utf-8"), str(expected).encode("utf-8")):
+        frappe.throw("Invalid secret", frappe.AuthenticationError)
+
+
 @frappe.whitelist(allow_guest=True)
 def handle_webhook(**kwargs):
+    _require_secret()
     try:
         data = frappe.request.get_json()
         
@@ -32,10 +46,7 @@ def handle_webhook(**kwargs):
 
 @frappe.whitelist(allow_guest=True)
 def handle():
-    # Verify secret if needed
-    secret = frappe.get_request_header("X-Raven-Secret")
-    if secret != frappe.conf.raven_webhook_secret:
-        frappe.throw("Invalid secret", frappe.AuthenticationError)
+    _require_secret()
     
     data = frappe.request.get_json()
     # Process your webhook data here
@@ -50,36 +61,8 @@ def validate(doc, method):
     # Validate at least one trigger is enabled
     if not any(row.enabled for row in doc.get("trigger_events", [])):
         frappe.throw("Please enable at least one trigger event", title="Configuration Error")
-        # In your hooks.py or custom app
-from frappe import whitelist
-
-@whitelist(allow_guest=True)
-def handle_sales_order_webhook():
-    # 1. Verify request
-    verify_webhook()
-    
-    # 2. Get payload
-    payload = frappe.request.get_json()
-    so_name = payload.get('name')
-    
-    # 3. Process based on workflow state
-    if payload.get('workflow_state') == 'Submitted':
-        create_installation_project(payload)
-        reserve_inventory(so_name)
-        notify_team(payload)
-    
-    return {"success": True}
-
-@whitelist(allow_guest=True)
-def create_installation_project(payload):
-    """Create project in Project Management tool"""
-    project = frappe.get_doc({
-        'doctype': 'Project',
-        'project_name': f"Installation - {payload['customer']}",
-        'expected_start_date': payload['delivery_date'],
-        'sales_order': payload['name']
-    }).insert()
-    
+        # (TASKS-344 N-11: handle_sales_order_webhook and create_installation_project removed: dead, no caller;
+        #  the first called undefined verify_webhook(), the second was a guest-callable insert of a Project)
 # In hooks.py
 def handle_sales_order(doc, method):
     if doc.doctype == 'Sales Order' and doc.workflow_state == 'Submitted':

@@ -5,7 +5,7 @@
 **Author:** Orchestrator + RPD  
 **Repo:** [github.com/rogerboy38/raven_ai_agent](https://github.com/rogerboy38/raven_ai_agent)  
 **Site:** erp.sysmayal2.cloud  
-**Pilot:** MFG-WO-03726 / SO-00752-LEGOSAN AB / BOM-0307-005
+**Pilot:** MFG-WO-03726 / SO-00752-EXAMPLE-A / BOM-0307-005
 
 ---
 
@@ -257,7 +257,7 @@ Run on sandbox `v2.sysmayal.cloud`:
 #   - Item 0307 exists with active BOMs (-001, -005)
 #   - ITEM_0612185231 has stock in FG to Sell (≥ 150 Kg)
 #   - LBL4INX6INBL and LBL0307 have stock
-#   - Customer LEGOSAN AB exists with tax regime 601
+#   - Customer EXAMPLE CUSTOMER A exists with tax regime 601
 
 bench --site v2.sysmayal.cloud console
 
@@ -303,7 +303,7 @@ from raven_ai_agent.agents.sales_order_followup_agent import SalesOrderFollowupA
 sales = SalesOrderFollowupAgent()
 
 # Use existing SO-00752 or create from quotation
-so_name = "SO-00752-LEGOSAN AB"  # adjust to your test SO
+so_name = "SO-00752-EXAMPLE-A"  # adjust to your test SO
 result = sales.get_so_status(so_name)
 assert result["success"]
 print(f"SO status: {result['status']}")

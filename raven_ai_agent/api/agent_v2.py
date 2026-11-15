@@ -5,6 +5,7 @@ and auto-learning skill system.
 """
 
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 import uuid
 from typing import Optional, Dict, List
@@ -188,6 +189,8 @@ class RaymondLucyAgentV2:
                 "minimax_api_key": self._safe_get_password(settings, "minimax_api_key") or frappe.conf.get("MINIMAX_API_KEY"),
                 "minimax_cp_key": self._safe_get_password(settings, "minimax_cp_key") or frappe.conf.get("MINIMAX_CP_KEY"),
                 "minimax_group_id": getattr(settings, "minimax_group_id", None),
+                # the model is a real setting (TASKS-344 ruling 79); empty = the provider's working default
+                "minimax_model": getattr(settings, "minimax_model", None),
                 
                 # Ollama (future)
                 "ollama_base_url": getattr(settings, "ollama_base_url", "http://localhost:11434"),
@@ -394,7 +397,8 @@ class RaymondLucyAgentV2:
             
             # Try fallback provider
             fallback = self.settings.get("fallback_provider")
-            if fallback and self.provider is not None and fallback.lower() != self.provider.name:
+            if (fallback and self.provider is not None and fallback.lower() != self.provider.name
+                    and not getattr(e, "fallback_tried", False)):   # the provider layer already tried it once
                 try:
                     fallback_provider = get_provider(fallback.lower(), self.settings)
                     answer = fallback_provider.chat(messages=messages)
@@ -461,6 +465,7 @@ class RaymondLucyAgentV2:
 # API Endpoints
 
 @frappe.whitelist()
+@agent_guard.guard_endpoint("process_message_v2", "message", bang_arg="message")
 def process_message_v2(message: str, conversation_history: str = None, provider: str = None) -> Dict:
     """
     API endpoint for V2 agent
@@ -524,6 +529,7 @@ def get_available_skills() -> Dict:
 
 
 @frappe.whitelist()
+@agent_guard.guard_endpoint("route_to_skill", "query", bang_arg="query")
 def route_to_skill(query: str) -> Dict:
     """
     Directly route a query to skills (bypasses LLM).

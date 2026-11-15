@@ -101,8 +101,7 @@ class TestTrackDefangPins(unittest.TestCase):
     def test_c4_05_command_router_defanged(self):
         self._assert_defanged("api/command_router.py")
 
-    def test_c4_06_handlers_base_defanged(self):
-        self._assert_defanged("api/handlers/base.py")
+    # test_c4_06 (handlers/base.py defanged) removed with the file itself: TASKS-342 ruling 77
 
 
 if __name__ == "__main__":

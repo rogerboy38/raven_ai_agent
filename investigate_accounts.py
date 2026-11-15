@@ -63,10 +63,10 @@ for acc in all_clientes[:15]:  # Show first 15
     print(f"   - {acc.name} [{group_status}] (Currency: {acc.account_currency}, Company: {acc.company})")
 
 # 5. Check what get_party_account returns
-print(f"\n5. Testing get_party_account for LEGOSAN AB")
+print(f"\n5. Testing get_party_account for Example Customer")
 try:
     from erpnext.accounts.party import get_party_account
-    party_account = get_party_account("Customer", "LEGOSAN AB", "AMB-Wellness")
+    party_account = get_party_account("Customer", "Example Customer", "AMB-Wellness")
     print(f"   Party account: {party_account}")
 except Exception as e:
     print(f"   Error: {e}")

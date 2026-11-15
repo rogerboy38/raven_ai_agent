@@ -249,7 +249,7 @@ class ContextMixin:
 
         # Check for web search intent (no URL but wants external info)
         search_keywords = ["search", "buscar", "find on web", "google", "look up", "search for", "search web", "find"]
-        external_entities = ["barentz", "legosan", "website", "company info", "address", "contact", "ubicacion", "direccion", "indirizzo"]
+        external_entities = ["example-customer-a", "example-customer-b", "website", "company info", "address", "contact", "ubicacion", "direccion", "indirizzo"]
 
         # Market research / external knowledge patterns
         market_keywords = ["market", "mercado", "players", "competitors", "suppliers", "manufacturers",
@@ -438,7 +438,7 @@ class ContextMixin:
 
         # Customer-specific sales report
         customer_match = None
-        for word in ["barentz", "legosan", "lorand"]:  # Add common customer names
+        for word in ["example-customer-a", "example-customer-b", "example-customer-c"]:  # Add common customer names
             if word in query_lower:
                 customer_match = word
                 break

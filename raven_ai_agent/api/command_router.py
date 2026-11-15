@@ -5,6 +5,7 @@ Split from agent.py - Phase 2 Optimization + Phase 3 Quality Management + Phase 
 Contains: CommandRouterMixin with autonomy determination and workflow command execution.
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 import urllib.parse
 from typing import Optional, Dict
@@ -82,13 +83,6 @@ class CommandRouterMixin:
             is_confirm = True
             query = query.lstrip("!").strip()
             query_lower = query.lower()
-
-        # Auto-confirm for privileged users ONLY on explicit confirm words
-        if not is_force:
-            privileged_roles = ["Sales Manager", "Manufacturing Manager", "Stock Manager", "Accounts Manager", "System Manager"]
-            user_roles = frappe.get_roles(self.user)
-            if any(role in user_roles for role in privileged_roles):
-                pass  # is_confirm stays as-is from keyword check above
 
         # Quotation patterns
         frappe.logger().info(f"[Workflow] qtn_match: {qtn_match}, 'sales order' in query: {'sales order' in query_lower}")
@@ -202,7 +196,7 @@ class CommandRouterMixin:
                     try:
                         bom_doc = frappe.get_doc("BOM", bom_name)
                         if bom_doc.docstatus == 0:  # Draft
-                            bom_doc.submit()
+                            agent_guard.submit_doc(bom_doc)
                             return {
                                 "success": True,
                                 "message": f"✅ BOM '{bom_name}' submitted successfully!\n\n"
@@ -220,7 +214,7 @@ class CommandRouterMixin:
 
                 # Fallback: try BOM Creator
                 try:
-                    from raven_ai_agent.agents.bom_creator_agent import submit_bom_creator
+                    from raven_ai_agent.agents.bom_creator_agent import _submit_bom_creator as submit_bom_creator
                     result = submit_bom_creator(bom_name)
                     if result.get("success"):
                         return {
@@ -244,7 +238,7 @@ class CommandRouterMixin:
             if batch_match:
                 batch_name = batch_match.group(1).upper()
                 try:
-                    from raven_ai_agent.agents.bom_creator_agent import create_bom_for_batch
+                    from raven_ai_agent.agents.bom_creator_agent import _create_bom_for_batch as create_bom_for_batch
                     result = create_bom_for_batch(batch_name)
                     if result.get("success"):
                         return {

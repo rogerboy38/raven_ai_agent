@@ -20,7 +20,7 @@ print("=" * 80)
 # ============================================================
 print("\n### 1. CHECKING SALES ORDER FIX STATUS ###")
 
-doc_name = "SO-00752-LEGOSAN AB"
+doc_name = "SO-00752-EXAMPLE"
 
 try:
     so = frappe.get_doc("Sales Order", doc_name)
@@ -54,7 +54,7 @@ except Exception as e:
 # ============================================================
 print("\n### 2. CHECKING ADDRESS RECORDS ###")
 
-customer = "LEGOSAN AB"
+customer = "Example Customer"
 
 # Get addresses for customer
 addresses = frappe.get_all(
@@ -115,7 +115,7 @@ else:
 # ============================================================
 print("\n### 4. CHECKING PARTY ACCOUNTS (Customer → Account) ###")
 
-# Get party accounts for LEGOSAN AB
+# Get party accounts for Example Customer
 party_accounts = frappe.get_all(
     "Party Account",
     filters={

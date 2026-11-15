@@ -10,6 +10,7 @@ import os
 @frappe.whitelist()
 def deploy_raven():
     """Deploy Raven - sends HUP signal to gunicorn"""
+    frappe.only_for("System Manager")  # TASKS-349 decision 91: this door bypasses the caller's permissions; System Manager only
     frappe.enqueue(
         'frappe.utils.execute_in_shell',
         cmd='kill -HUP $(cat /home/frappe/frappe-bench/config/gunicorn.pid 2>/dev/null) 2>&1 || echo "pid not found"; ls /home/frappe/frappe-bench/apps/raven_ai_agent/raven_ai_agent/api/account_utils.py 2>&1',

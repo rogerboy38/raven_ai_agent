@@ -21,6 +21,7 @@ Handles:
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import re
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt, add_days
@@ -60,7 +61,7 @@ class WorkflowOrchestrator:
         prerequisites at each step and stops on errors.
         
         Args:
-            so_name: Sales Order name (e.g. 'SO-00752-LEGOSAN AB')
+            so_name: Sales Order name (e.g. 'SO-00752-EXAMPLE')
             mfg_bom: Manufacturing BOM (e.g. 'BOM-0307-005' — Mix level)
             sales_bom: Sales BOM (e.g. 'BOM-0307-001' — Sales level with label)
             skip_steps: List of step numbers to skip (e.g. [1, 2] if manufacturing already done)
@@ -73,7 +74,7 @@ class WorkflowOrchestrator:
         pipeline_state = {"so_name": so_name, "errors": []}
 
         try:
-            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-LEGOSAN AB")
+            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-EXAMPLE")
             resolved_so = resolve_document_name_safe("Sales Order", so_name)
             if resolved_so:
                 so_name = resolved_so
@@ -243,7 +244,7 @@ class WorkflowOrchestrator:
             if so.docstatus == 2:
                 return {"step": 3, "success": False, "error": f"Sales Order {so.name} is cancelled."}
 
-            so.submit()
+            agent_guard.submit_doc(so)
             frappe.db.commit()
             return {
                 "step": 3, "success": True,
@@ -322,7 +323,7 @@ class WorkflowOrchestrator:
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so.name)
             dn.insert(ignore_permissions=True)
-            dn.submit()
+            agent_guard.submit_doc(dn)
             frappe.db.commit()
 
             return {
@@ -388,7 +389,7 @@ class WorkflowOrchestrator:
                 si.custom_customer_invoice_currency = so.currency
 
             si.insert(ignore_permissions=True)
-            si.submit()
+            agent_guard.submit_doc(si)
             frappe.db.commit()
 
             return {
@@ -862,8 +863,8 @@ class WorkflowOrchestrator:
             "```\n\n"
             "**Example**\n"
             "```\n"
-            "@workflow run SO-00752-LEGOSAN AB mfg-bom BOM-0307-005 sales-bom BOM-0307-001\n"
-            "@workflow status SO-00752-LEGOSAN AB\n"
+            "@workflow run SO-00752-EXAMPLE mfg-bom BOM-0307-005 sales-bom BOM-0307-001\n"
+            "@workflow status SO-00752-EXAMPLE\n"
             "```"
         )
 
@@ -874,7 +875,7 @@ class WorkflowOrchestrator:
             "**Examples:**\n"
             "- `@workflow validate SAL-QTN-2024-00753`\n"
             "- `@workflow validate 0753` (→ SAL-QTN-2024-00753)\n"
-            "- `@workflow validate SO-00752` (→ SO-00752-LEGOSAN AB)\n\n"
+            "- `@workflow validate SO-00752` (→ SO-00752-EXAMPLE)\n\n"
             "You can pass full names, partial names, or just the numeric part.\n"
             "The system will auto-resolve them using the document resolver."
         )

@@ -6,10 +6,10 @@ Created for batch migration fix of 1,058+ auto-fixable SOs.
 
 Usage:
     POST /api/method/raven_ai_agent.api.batch_sync.batch_sync_so
-    Body: {"so_names": ["SO-00744-ALBAFLOR", "SO-00745-XXX", ...]}
+    Body: {"so_names": ["SO-00744-EXAMPLE", "SO-00745-XXX", ...]}
 
     POST /api/method/raven_ai_agent.api.batch_sync.single_sync_so
-    Body: {"so_name": "SO-00744-ALBAFLOR", "confirm": true}
+    Body: {"so_name": "SO-00744-EXAMPLE", "confirm": true}
 """
 import frappe
 import json
@@ -37,7 +37,7 @@ def batch_sync_so(so_names: str = None) -> Dict:
     Batch sync multiple SOs from their source quotations.
     
     Args:
-        so_names: JSON string array of SO names, e.g. '["SO-00744-ALBAFLOR", ...]'
+        so_names: JSON string array of SO names, e.g. '["SO-00744-EXAMPLE", ...]'
     
     Returns:
         Dict with results per SO: success count, failure count, details.

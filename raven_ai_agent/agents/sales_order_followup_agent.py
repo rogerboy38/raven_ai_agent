@@ -19,6 +19,7 @@ Changes from original:
 Author: raven_ai_agent
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 from typing import Dict, List, Optional
 from frappe.utils import nowdate, getdate, flt
 import re
@@ -52,7 +53,7 @@ class SalesOrderFollowupAgent:
         """INTELLIGENT SO LOOKUP - Handle variations in SO name input.
         
         Problems this solves:
-        - Extra spaces: "SO-00769-COSMETILAB 18" vs "SO-00769-COSMETILAB-18"
+        - Extra spaces: "SO-00769-EXAMPLE" vs "SO-00769-EXAMPLE"
         - Extra dashes: "SO--00769" vs "SO-00769"
         - Case sensitivity
         - Partial matches
@@ -419,7 +420,7 @@ class SalesOrderFollowupAgent:
             if so.docstatus == 2:
                 return {"success": False, "error": f"Sales Order {so_name} is cancelled."}
 
-            so.submit()
+            agent_guard.submit_doc(so)
             frappe.db.commit()
 
             return {
@@ -864,7 +865,7 @@ class SalesOrderFollowupAgent:
             from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
             dn = make_delivery_note(so_name)
             dn.insert(ignore_permissions=True)
-            dn.submit()
+            agent_guard.submit_doc(dn)
             frappe.db.commit()
 
             return {
@@ -979,7 +980,7 @@ class SalesOrderFollowupAgent:
                 frappe.logger().warning(f"Smart validation warnings: {fix_errors}")
 
             si.insert(ignore_permissions=True)
-            si.submit()
+            agent_guard.submit_doc(si)
             frappe.db.commit()
 
             cfdi_info = ""
@@ -1013,7 +1014,7 @@ class SalesOrderFollowupAgent:
     def get_so_status(self, so_name: str) -> Dict:
         """Get detailed status of a specific Sales Order"""
         try:
-            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-LEGOSAN AB")
+            # Resolve partial SO name to full name (e.g., "SO-00752" → "SO-00752-EXAMPLE")
             resolved_so = resolve_document_name_safe("Sales Order", so_name)
             if resolved_so:
                 so_name = resolved_so
@@ -1546,8 +1547,8 @@ class SalesOrderFollowupAgent:
             "**Example (Full Cycle)**\n"
             "```\n"
             "@sales_order_follow_up create from quotation SAL-QTN-2024-00752\n"
-            "@sales_order_follow_up submit SO-00752-LEGOSAN AB\n"
-            "@sales_order_follow_up delivery SO-00752-LEGOSAN AB\n"
-            "@sales_order_follow_up invoice SO-00752-LEGOSAN AB\n"
+            "@sales_order_follow_up submit SO-00752-EXAMPLE\n"
+            "@sales_order_follow_up delivery SO-00752-EXAMPLE\n"
+            "@sales_order_follow_up invoice SO-00752-EXAMPLE\n"
             "```"
         )

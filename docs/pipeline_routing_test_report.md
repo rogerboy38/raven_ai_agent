@@ -25,9 +25,9 @@ The primary issue (**@ai pipeline commands routing to wrong bot**) has been **RE
 | 2 | `diagnose SAL-QTN-2024-00752` | task_validator | task_validator | ✅ PASS |
 | 3 | `scan SAL-QTN-2024-00752` | task_validator | task_validator | ✅ PASS |
 | 4 | `validate SAL-QTN-2024-00763` | task_validator | task_validator | ✅ PASS |
-| 5 | `scan SO-00767-BARENTZ Italia` | sales_order_follow_up | sales_order_follow_up | ✅ PASS |
-| 6 | `validate SO-00769-COSMETILAB 18` | sales_order_follow_up | sales_order_follow_up | ✅ PASS |
-| 7 | `check data SO-00767-BARENTZ Italia` | sales_order_follow_up | sales_order_follow_up | ✅ PASS |
+| 5 | `scan SO-00767-EXAMPLE-A Italia` | sales_order_follow_up | sales_order_follow_up | ✅ PASS |
+| 6 | `validate SO-00769-EXAMPLE-B` | sales_order_follow_up | sales_order_follow_up | ✅ PASS |
+| 7 | `check data SO-00767-EXAMPLE-A Italia` | sales_order_follow_up | sales_order_follow_up | ✅ PASS |
 | 8 | `scan ACC-SINV-2026-00070` | payment_bot | payment_bot | ✅ PASS |
 | 9 | `help scan` | sales_order_bot | sales_order_bot | ✅ PASS |
 
