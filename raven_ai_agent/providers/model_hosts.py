@@ -13,13 +13,12 @@ from urllib.parse import urlparse
 
 import httpx
 
-# The public provider hosts the code already names (the provider classes' BASE_URL constants, the OpenAI/Anthropic SDK
-# defaults), plus the loopback names the code already uses as the default of a local Ollama (`http://localhost:11434`).
-# PROPOSAL, not a decision: Hugh approves the list in a later ruling; the loopback names are the line to strike if a model
-# server on this machine is not wanted.
+# The six public provider hosts the code already names (the provider classes' BASE_URL constants, the OpenAI/Anthropic SDK
+# defaults), and nothing else (decision 104, TASKS-351): the loopback names `localhost`, `127.0.0.1`, `::1` are NOT on
+# it, so a model server on this machine (the default address of the IoT bot's Ollama) is refused too. The programme's
+# own model server is added later, by name, by a new ruling.
 MODEL_SERVER_HOSTS = frozenset({
     "api.openai.com", "api.deepseek.com", "api.anthropic.com", "api.minimax.io", "api.minimaxi.chat", "api.minimax.chat",
-    "localhost", "127.0.0.1", "::1",
 })
 
 
