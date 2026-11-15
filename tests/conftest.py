@@ -251,6 +251,7 @@ def setup_frappe_mock():
     
     sys.modules["frappe.model"] = MagicMock()
     sys.modules["frappe.model.document"] = MagicMock()
+    sys.modules["frappe.model.base_document"] = MagicMock()
     sys.modules["frappe.utils.data"] = MagicMock()
     sys.modules["frappe.exceptions"] = MOCK_FRAPPE.exceptions
     

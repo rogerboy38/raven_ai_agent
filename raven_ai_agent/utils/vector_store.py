@@ -17,7 +17,8 @@ class VectorStore:
     
     def __init__(self):
         settings = frappe.get_single("AI Agent Settings")
-        self.client = OpenAI(api_key=settings.openai_api_key)
+        from raven_ai_agent.providers.model_hosts import model_http_client
+        self.client = OpenAI(api_key=settings.openai_api_key, http_client=model_http_client())
     
     def get_embedding(self, text: str) -> List[float]:
         """Generate embedding for text"""

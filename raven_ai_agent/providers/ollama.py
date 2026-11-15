@@ -5,6 +5,7 @@ import frappe
 from typing import Dict, List, Optional, Generator
 from openai import OpenAI
 from .base import LLMProvider
+from .model_hosts import checked_base_url, model_http_client
 
 
 class OllamaProvider(LLMProvider):
@@ -15,14 +16,16 @@ class OllamaProvider(LLMProvider):
 
     def __init__(self, settings: Dict):
         super().__init__(settings)
-        base_url = (
-            settings.get("ollama_base_url")
-            or frappe.conf.get("ollama_base_url")
-            or self.DEFAULT_BASE_URL
+        # decision 101 (TASKS-350): a model server only on the named list; the built-in default is the programme's own
+        # host, which is not on it until it is ruled, so this refuses until then
+        base_url = checked_base_url(
+            settings.get("ollama_base_url") or frappe.conf.get("ollama_base_url"),
+            self.DEFAULT_BASE_URL,
+            "the Ollama base URL setting" if (settings.get("ollama_base_url") or frappe.conf.get("ollama_base_url")) else "the Ollama provider's built-in default",
         )
         # Ollama ignores the key, but the OpenAI SDK requires a non-empty string
         api_key = settings.get("ollama_api_key") or "ollama"
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+        self.client = OpenAI(base_url=base_url, api_key=api_key, http_client=model_http_client())
         self.default_model = (
             settings.get("ollama_model")
             or frappe.conf.get("ollama_model")

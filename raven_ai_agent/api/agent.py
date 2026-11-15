@@ -21,6 +21,7 @@ Backward compatibility:
   - Handler mixins (ManufacturingMixin, BOMMixin, etc.) still inherited
 """
 import frappe
+from raven_ai_agent.api import agent_guard
 import json
 import re
 from typing import Optional, Dict, List
@@ -476,6 +477,7 @@ def process_message(message: str, conversation_history: str = None) -> Dict:
 
 
 @frappe.whitelist()
+@agent_guard.guard_door
 def handle_raven_message(doc=None, method=None):
     """Hook for Raven message integration - handles @ai and @bot_name mentions in any channel
     

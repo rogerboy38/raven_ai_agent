@@ -39,6 +39,15 @@ doc_events = {
     "Opportunity": {
         "on_update": "raven_ai_agent.skills.crm_agent.agents.opportunity_mover.on_opportunity_update"
     },
+    "*": {
+        # TASKS-337/342: the agent write guard; one attribute read per event when no agent turn is running.
+        # before_validate runs before Frappe's ignore_validate return; the other four are never skipped.
+        "before_validate": "raven_ai_agent.api.agent_guard.on_write_event",
+        "before_insert": "raven_ai_agent.api.agent_guard.on_write_event",
+        "on_trash": "raven_ai_agent.api.agent_guard.on_write_event",
+        "on_cancel": "raven_ai_agent.api.agent_guard.on_write_event",
+        "on_update_after_submit": "raven_ai_agent.api.agent_guard.on_write_event",
+    },
     "Communication": {
         "after_insert": "raven_ai_agent.skills.crm_agent.agents.meeting_capturer.on_communication_after_insert"
     },

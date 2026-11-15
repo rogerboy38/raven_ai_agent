@@ -19,6 +19,7 @@ import httpx
 from typing import Dict, List, Optional, Generator
 from .base import LLMProvider
 from ._secrets import resolve_secret
+from .model_hosts import model_http_client
 
 
 class MiniMaxProvider(LLMProvider):
@@ -156,7 +157,7 @@ class MiniMaxProvider(LLMProvider):
         frappe.logger().debug(f"[MiniMax] Request URL: {url}")
         frappe.logger().debug(f"[MiniMax] Payload: {payload}")
         
-        with httpx.Client(timeout=60.0) as client:
+        with model_http_client(timeout=60.0) as client:
             response = client.post(
                 url,
                 headers={
@@ -191,7 +192,7 @@ class MiniMaxProvider(LLMProvider):
         """Stream response from MiniMax using OpenAI-compatible endpoint"""
         model = model or self.default_model
         
-        with httpx.Client(timeout=60.0) as client:
+        with model_http_client(timeout=60.0) as client:
             url = f"{self.BASE_URL}/chat/completions"
             with client.stream(
                 "POST",
@@ -235,7 +236,7 @@ class MiniMaxProvider(LLMProvider):
         - female-yujie: Mature female
         - male-qn-jingying: Professional male
         """
-        with httpx.Client(timeout=30.0) as client:
+        with model_http_client(timeout=30.0) as client:
             response = client.post(
                 f"{self.BASE_URL}/t2a_v2",
                 headers={

@@ -33,6 +33,16 @@ class IoTAgent:
         self.timeout = config["request_timeout"]
         self.enabled = config["enabled"]
 
+    def _model_server_refusal(self):
+        """Decision 101 (TASKS-350): the Ollama address of IoT Ollama Settings is a model-server address; it must be on
+        the named list (the default `localhost` is NOT on it since decision 104). Returns an error dict, or None when the host is listed."""
+        from raven_ai_agent.providers.model_hosts import ModelHostRefused, check_model_url
+        try:
+            check_model_url(self.ollama_url, "IoT Ollama Settings")
+        except ModelHostRefused as e:
+            return {"success": False, "error": str(e)}
+        return None
+
     def process_command(self, query):
         """Route IoT commands."""
         if not self.enabled:
@@ -67,11 +77,15 @@ class IoTAgent:
 
     def _ask_ollama(self, prompt):
         """Send prompt to Ollama and return response."""
+        refused = self._model_server_refusal()
+        if refused:
+            return refused
         try:
             resp = requests.post(
                 f"{self.ollama_url}/api/generate",
                 json={"model": self.model, "prompt": prompt, "stream": False},
-                timeout=self.timeout
+                timeout=self.timeout,
+                allow_redirects=False,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -93,8 +107,11 @@ class IoTAgent:
 
     def _ollama_status(self):
         """Check Ollama service status."""
+        refused = self._model_server_refusal()
+        if refused:
+            return refused
         try:
-            resp = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
+            resp = requests.get(f"{self.ollama_url}/api/tags", timeout=5, allow_redirects=False)
             resp.raise_for_status()
             data = resp.json()
             models = data.get("models", [])
@@ -116,11 +133,15 @@ class IoTAgent:
 
     def _pull_model(self, model_name):
         """Pull a model from Ollama registry."""
+        refused = self._model_server_refusal()
+        if refused:
+            return refused
         try:
             resp = requests.post(
                 f"{self.ollama_url}/api/pull",
                 json={"name": model_name, "stream": False},
-                timeout=600
+                timeout=600,
+                allow_redirects=False,
             )
             if resp.status_code == 200:
                 return {"success": True, "response": f"Model **{model_name}** pulled successfully."}
