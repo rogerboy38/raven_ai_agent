@@ -35,7 +35,7 @@ class IoTAgent:
 
     def _model_server_refusal(self):
         """Decision 101 (TASKS-350): the Ollama address of IoT Ollama Settings is a model-server address; it must be on
-        the named list (the default `localhost` is). Returns an error dict, or None when the host is listed."""
+        the named list (the default `localhost` is NOT on it since decision 104). Returns an error dict, or None when the host is listed."""
         from raven_ai_agent.providers.model_hosts import ModelHostRefused, check_model_url
         try:
             check_model_url(self.ollama_url, "IoT Ollama Settings")

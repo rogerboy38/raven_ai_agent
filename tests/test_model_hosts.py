@@ -22,8 +22,14 @@ LOOPBACK = ("localhost", "127.0.0.1", "::1")
 
 
 class TestTheList(unittest.TestCase):
-    def test_the_list_is_exactly_the_public_provider_hosts_the_code_names_plus_loopback(self):
-        self.assertEqual(mh.MODEL_SERVER_HOSTS, frozenset(PUBLIC + LOOPBACK))
+    def test_the_list_is_exactly_the_six_public_provider_hosts(self):
+        self.assertEqual(mh.MODEL_SERVER_HOSTS, frozenset(PUBLIC))
+
+    def test_the_loopback_names_are_not_on_it(self):
+        for h in LOOPBACK:                                   # decision 104 (TASKS-351)
+            self.assertNotIn(h, mh.MODEL_SERVER_HOSTS)
+            with self.assertRaises(mh.ModelHostRefused):
+                mh.check_model_url(f"http://{'[::1]' if h == '::1' else h}:11434/v1", "a test")
 
     def test_the_programmes_own_model_host_is_not_on_it(self):
         from raven_ai_agent.providers.ollama import OllamaProvider
@@ -93,7 +99,8 @@ class TestWhereTheAddressIsTaken(unittest.TestCase):
         with mock.patch.object(frappe, "conf", conf, create=True):
             self.assertRefused(lambda: OllamaProvider({"ollama_base_url": UNLISTED}))
             self.assertRefused(lambda: OllamaProvider({}), "built-in default")      # the programme's own host
-            OllamaProvider({"ollama_base_url": "http://localhost:11434/v1"})        # a listed host constructs
+            self.assertRefused(lambda: OllamaProvider({"ollama_base_url": "http://localhost:11434/v1"}))   # decision 104
+            OllamaProvider({"ollama_base_url": "https://api.openai.com/v1"})        # a listed host constructs
         conf.get.side_effect = lambda k, d=None: UNLISTED if k == "ollama_base_url" else d
         with mock.patch.object(frappe, "conf", conf, create=True):
             self.assertRefused(lambda: OllamaProvider({}), "Ollama base URL setting")
@@ -131,15 +138,24 @@ class TestWhereTheAddressIsTaken(unittest.TestCase):
             with mock.patch.object(iot_agent, "get_ollama_config", return_value=cfg):
                 return iot_agent.IoTAgent(user="u")
         with mock.patch.object(iot_agent.requests, "post") as post, mock.patch.object(iot_agent.requests, "get") as get:
-            for url in ("https://own-model.example.org", "http://10.0.0.7:11434"):
+            for url in ("https://own-model.example.org", "http://10.0.0.7:11434", "http://127.0.0.1:11434"):
                 a = agent(url)
                 for r in (a._ask_ollama("hi"), a._ollama_status(), a._pull_model("m")):
                     self.assertFalse(r["success"])
                     self.assertIn("approved list", r["error"])
+            # decision 104: the IoT bot's own default address is refused too
+            r = agent("http://localhost:11434")._ask_ollama("hi")
+            self.assertFalse(r["success"])
+            self.assertIn("approved list", r["error"])
             post.assert_not_called()
             get.assert_not_called()
+            # with a host that IS on the list the call goes out, once, with redirects off
+            import sys
+
+            live = sys.modules["raven_ai_agent.providers.model_hosts"]
             post.return_value.json.return_value = {"response": "ok"}
-            self.assertTrue(agent("http://localhost:11434")._ask_ollama("hi")["success"])
+            with mock.patch.object(live, "MODEL_SERVER_HOSTS", frozenset({"iot-model.example.org"})):
+                self.assertTrue(agent("https://iot-model.example.org")._ask_ollama("hi")["success"])
             post.assert_called_once()
             self.assertIs(post.call_args.kwargs["allow_redirects"], False)
 
