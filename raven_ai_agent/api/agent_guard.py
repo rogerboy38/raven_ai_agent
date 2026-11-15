@@ -57,11 +57,10 @@ WORKFLOW_SIDE_EFFECT_DOCTYPES = frozenset({
 })
 # enqueue() targets that are framework plumbing: dropped during a dry run, run normally when armed.
 SILENT_ENQUEUE_PREFIXES = ("frappe.", "raven.", "raven_ai_agent.bug_reporter.")
-# Hosts a dry run may still call (the model providers and the local model server).
-PROVIDER_HOSTS = frozenset({
-    "api.openai.com", "api.deepseek.com", "api.anthropic.com", "api.minimax.io", "api.minimaxi.chat",
-    "api.minimax.chat", "localhost", "127.0.0.1", "::1",
-})
+# Hosts a dry run may still call: the model servers on the named list (decision 101, TASKS-350). The list lives in
+# `providers/model_hosts.py`, is a literal, and is changed only by a ruling: no setting, site-config key or class
+# constant adds a host to it.
+from raven_ai_agent.providers.model_hosts import MODEL_SERVER_HOSTS as PROVIDER_HOSTS  # noqa: E402
 
 # Hosts the agent may READ from (GET/HEAD only): the named list of ruling 89, approved by decision 90 (TASKS-349). A
 # host is added only by a new ruling; anything else is refused. The model providers are not in this list (they need
@@ -834,40 +833,11 @@ def _host_of(url) -> str:
         return ""
 
 
-_PROVIDER_HOSTS_CACHE = {}
-
-
 def _provider_hosts() -> frozenset:
-    """The model providers' own hosts: the fixed list, the base URLs written in the provider classes, the Ollama URL
-    in the settings, and a site-config list `raven_agent_outbound_allow`."""
-    hosts = set(PROVIDER_HOSTS)
-    if "classes" not in _PROVIDER_HOSTS_CACHE:
-        found = set()
-        try:
-            import importlib
-
-            for mod in ("minimax", "deepseek", "ollama", "openai_provider", "claude"):
-                m = importlib.import_module(f"raven_ai_agent.providers.{mod}")
-                for attr in ("BASE_URL", "DEFAULT_BASE_URL"):
-                    for obj in vars(m).values():
-                        u = getattr(obj, attr, None) if isinstance(obj, type) else None
-                        if isinstance(u, str) and u.startswith("http"):
-                            found.add(_host_of(u))
-        except Exception:
-            pass
-        _PROVIDER_HOSTS_CACHE["classes"] = {h for h in found if h}
-    hosts |= _PROVIDER_HOSTS_CACHE["classes"]
-    try:
-        u = frappe.db.get_single_value("AI Agent Settings", "ollama_base_url")
-        if u:
-            hosts.add(_host_of(u))
-    except Exception:
-        pass
-    try:
-        hosts |= {str(h).lower() for h in (frappe.conf.get("raven_agent_outbound_allow") or [])}
-    except Exception:
-        pass
-    return frozenset(hosts)
+    """The model servers a prompt may go to: the named list, nothing else (decision 101). The Ollama URL of the settings,
+    the site-config key `ollama_base_url`, a `base_url` setting and the former site-config list `raven_agent_outbound_allow`
+    do NOT add a host; a host that comes from a setting and is not on the list is refused."""
+    return frozenset(PROVIDER_HOSTS)
 
 
 def _check_outbound(url, method="GET"):

@@ -31,12 +31,14 @@ class EnhancedSearch:
         """Initialize LLM client"""
         try:
             from openai import OpenAI
+            from raven_ai_agent.providers.model_hosts import checked_base_url, model_http_client
             settings = frappe.get_doc("AI Agent Settings")
             api_key = settings.get_password("api_key")
-            base_url = settings.get("base_url") or "https://api.openai.com/v1"
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
-        except Exception:
-            pass
+            # decision 101 (TASKS-350): a model server only on the named list, whatever the setting says
+            base_url = checked_base_url(settings.get("base_url"), "https://api.openai.com/v1", "the AI Agent Settings base_url")
+            self.client = OpenAI(api_key=api_key, base_url=base_url, http_client=model_http_client())
+        except Exception as e:
+            frappe.logger().warning(f"EnhancedSearch: no client: {e}")
     
     def search_with_scoring(self, query: str, limit: int = 10, 
                            min_confidence: float = 0.3) -> List[Dict]:

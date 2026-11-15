@@ -38,7 +38,8 @@ class BaseMixin:
     def __init__(self, user: str):
         self.user = user
         self.settings = self._get_settings()
-        self.client = OpenAI(api_key=self.settings.get("openai_api_key"))
+        from raven_ai_agent.providers.model_hosts import model_http_client
+        self.client = OpenAI(api_key=self.settings.get("openai_api_key"), http_client=model_http_client())
         self.model = self.settings.get("model", "gpt-4o-mini")
         self.autonomy_level = 1  # Default to COPILOT
         

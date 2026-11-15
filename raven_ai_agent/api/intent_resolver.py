@@ -341,6 +341,10 @@ Return ONLY valid JSON, no additional text:"""
                 import openai
                 api_key = settings.get_password("openai_api_key") if hasattr(settings, "get_password") else None
                 if api_key:
+                    import os
+                    from raven_ai_agent.providers.model_hosts import check_model_url
+                    # decision 101 (TASKS-350): the module-level client takes its address from the module/environment
+                    check_model_url(getattr(openai, "base_url", None) or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1", "the OpenAI module or its environment variable")
                     openai.api_key = api_key
                     
                     response = openai.ChatCompletion.create(

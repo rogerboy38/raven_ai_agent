@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Generator
 from openai import OpenAI
 from .base import LLMProvider
 from ._secrets import resolve_secret
+from .model_hosts import model_http_client
 
 
 class OpenAIProvider(LLMProvider):
@@ -35,7 +36,7 @@ class OpenAIProvider(LLMProvider):
             label="OpenAI API key",
         )
         self.api_key = api_key
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, http_client=model_http_client())
         self.default_model = settings.get("model", self.DEFAULT_MODEL)
     
     def chat(
