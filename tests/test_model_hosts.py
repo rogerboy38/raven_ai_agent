@@ -237,7 +237,7 @@ class TestEverySiteGoesThroughTheHelper(unittest.TestCase):
                 sites.append(rel)
                 kw = {k.arg: ast.unparse(k.value) for k in n.keywords}
                 self.assertIn("model_http_client()", kw.get("http_client", ""), f"{rel}:{n.lineno} builds {name} without the checked client")
-        self.assertGreaterEqual(len(sites), 9, sites)
+        self.assertGreaterEqual(len(sites), 8, sites)   # 9 in the first slice; the second slice deletes the unused handlers/base.py
 
     def test_no_bare_httpx_client_outside_the_helper(self):
         for rel, n in self._calls():
