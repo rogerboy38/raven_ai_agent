@@ -120,7 +120,7 @@ class TestHumanReadableFormatting:
         )
         snap = {
             "won": [], "moved": [],
-            "stalled": [{"name": "CRM-OPP-1", "party_name": "Barentz",
+            "stalled": [{"name": "CRM-OPP-1", "party_name": "Example Customer A",
                          "status": "Open", "opportunity_amount": 112000,
                          "currency": "USD"}],
             "open": [],

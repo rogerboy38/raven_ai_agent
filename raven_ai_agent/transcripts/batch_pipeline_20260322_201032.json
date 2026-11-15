@@ -8,8 +8,8 @@
         "actual_payment_option": "PPD",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00752 payment_schedule has credit_days=30",
-          "Template DB: Last invoice for LEGOSAN AB has mx_cfdi_use=G03",
-          "Template DB: Last invoice for LEGOSAN AB has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for EXAMPLE CUSTOMER A has mx_cfdi_use=G03",
+          "Template DB: Last invoice for EXAMPLE CUSTOMER A has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G03",
         "expected_payment_option": "PPD",
@@ -24,7 +24,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "LEGOSAN AB",
+          "customer": "EXAMPLE CUSTOMER A",
           "docstatus": 1,
           "grand_total": 15271.5,
           "name": "SAL-QTN-2024-00752",
@@ -41,7 +41,7 @@
           "currency": "USD",
           "docstatus": 1,
           "grand_total": 15271.5,
-          "name": "SO-00752-LEGOSAN AB",
+          "name": "SO-00752-EXAMPLE-A",
           "payment_terms": "30 days after Invoice Date",
           "status": "Completed"
         }
@@ -61,8 +61,8 @@
         "actual_payment_option": "PUE",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00753 payment_schedule has credit_days=30",
-          "Template DB: Last invoice for GREENTECH S.A has mx_cfdi_use=G01",
-          "Template DB: Last invoice for GREENTECH S.A has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for EXAMPLE CUSTOMER B has mx_cfdi_use=G01",
+          "Template DB: Last invoice for EXAMPLE CUSTOMER B has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G01",
         "expected_payment_option": "PPD",
@@ -77,7 +77,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "GREENTECH S.A",
+          "customer": "EXAMPLE CUSTOMER B",
           "docstatus": 0,
           "grand_total": 187200.0,
           "name": "SAL-QTN-2024-00753",
@@ -170,8 +170,8 @@
         "actual_payment_option": "PPD",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00755 payment_schedule has credit_days=30",
-          "Template DB: Last invoice for CHARKIT CHEMICAL CORP, INC. has mx_cfdi_use=G01",
-          "Template DB: Last invoice for CHARKIT CHEMICAL CORP, INC. has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for EXAMPLE CUSTOMER C has mx_cfdi_use=G01",
+          "Template DB: Last invoice for EXAMPLE CUSTOMER C has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G01",
         "expected_payment_option": "PPD",
@@ -186,7 +186,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "CHARKIT CHEMICAL CORP, INC.",
+          "customer": "EXAMPLE CUSTOMER C",
           "docstatus": 1,
           "grand_total": 13844.0,
           "name": "SAL-QTN-2024-00755",
@@ -223,8 +223,8 @@
         "actual_payment_option": "PPD",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00756 payment_schedule has credit_days=60",
-          "Template DB: Last invoice for Barentz Italia S.p.A. has mx_cfdi_use=G03",
-          "Template DB: Last invoice for Barentz Italia S.p.A. has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for Example Customer D has mx_cfdi_use=G03",
+          "Template DB: Last invoice for Example Customer D has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G03",
         "expected_payment_option": "PPD",
@@ -239,7 +239,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "Barentz Italia S.p.A.",
+          "customer": "Example Customer D",
           "docstatus": 1,
           "grand_total": 35385.0,
           "name": "SAL-QTN-2024-00756",
@@ -256,7 +256,7 @@
           "currency": "USD",
           "docstatus": 1,
           "grand_total": 35385.0,
-          "name": "SO-00756-BARENTZ Italia S.p.A",
+          "name": "SO-00756-EXAMPLE-E Italia S.p.A",
           "payment_terms": "60 days after Invoice Date",
           "status": "Completed"
         }
@@ -276,8 +276,8 @@
         "actual_payment_option": "PPD",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00757 payment_schedule has credit_days=30",
-          "Template DB: Last invoice for ALBAFLOR has mx_cfdi_use=G03",
-          "Template DB: Last invoice for ALBAFLOR has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for EXAMPLE CUSTOMER F has mx_cfdi_use=G03",
+          "Template DB: Last invoice for EXAMPLE CUSTOMER F has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G03",
         "expected_payment_option": "PPD",
@@ -292,7 +292,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "ALBAFLOR",
+          "customer": "EXAMPLE CUSTOMER F",
           "docstatus": 1,
           "grand_total": 5973.0,
           "name": "SAL-QTN-2024-00757",
@@ -309,7 +309,7 @@
           "currency": "USD",
           "docstatus": 1,
           "grand_total": 5973.0,
-          "name": "SO-00757-ALBAFLOR",
+          "name": "SO-00757-EXAMPLE-F",
           "payment_terms": "30 days after Invoice Date",
           "status": "Completed"
         }
@@ -382,8 +382,8 @@
         "actual_payment_option": "PPD",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00759 payment_schedule has credit_days=45",
-          "Template DB: Last invoice for ALBAAD DEUTSCHLAND GMBH has mx_cfdi_use=G03",
-          "Template DB: Last invoice for ALBAAD DEUTSCHLAND GMBH has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for EXAMPLE CUSTOMER G has mx_cfdi_use=G03",
+          "Template DB: Last invoice for EXAMPLE CUSTOMER G has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G03",
         "expected_payment_option": "PPD",
@@ -398,7 +398,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "ALBAAD DEUTSCHLAND GMBH",
+          "customer": "EXAMPLE CUSTOMER G",
           "docstatus": 1,
           "grand_total": 13500.0,
           "name": "SAL-QTN-2024-00759",
@@ -435,8 +435,8 @@
         "actual_payment_option": "PPD",
         "audit": [
           "QTN Traceback: Source QTN SAL-QTN-2024-00760 payment_schedule has credit_days=45",
-          "Template DB: Last invoice for ALBAAD DEUTSCHLAND GMBH has mx_cfdi_use=G03",
-          "Template DB: Last invoice for ALBAAD DEUTSCHLAND GMBH has mode_of_payment=Wire Transfer"
+          "Template DB: Last invoice for EXAMPLE CUSTOMER G has mx_cfdi_use=G03",
+          "Template DB: Last invoice for EXAMPLE CUSTOMER G has mode_of_payment=Wire Transfer"
         ],
         "expected_cfdi_use": "G03",
         "expected_payment_option": "PPD",
@@ -451,7 +451,7 @@
         },
         "quotation": {
           "currency": "USD",
-          "customer": "ALBAAD DEUTSCHLAND GMBH",
+          "customer": "EXAMPLE CUSTOMER G",
           "docstatus": 1,
           "grand_total": 13500.0,
           "name": "SAL-QTN-2024-00760",

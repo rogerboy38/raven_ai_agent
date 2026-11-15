@@ -72,7 +72,7 @@ Drive/
 | Stock Entry | `Drive/Stock Entries/{name}/` | `SUPPLIER_INVOICE_{name}.pdf` |
 
 ### Notes
-- `{name}` is replaced with the actual document name (e.g., SO-00752-LEGOSAN AB)
+- `{name}` is replaced with the actual document name (e.g., SO-00752-EXAMPLE-A)
 - Spaces in names are handled by the system during file creation
 - All folders are created under the private Drive root (not `/public/files`)
 
@@ -155,7 +155,7 @@ Central configuration that defines for each doctype/file role:
 
 ### Reuse Existing Components
 The document resolver from `raven_ai_agent` will be used for bulk import:
-- `resolve_document_name("Sales Order", "0752")` → `SO-00752-LEGOSAN AB`
+- `resolve_document_name("Sales Order", "0752")` → `SO-00752-EXAMPLE-A`
 - This enables auto-attachment of legacy files based on naming conventions
 
 ### Future Integration Points

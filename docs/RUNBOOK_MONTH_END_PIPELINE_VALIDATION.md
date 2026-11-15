@@ -24,7 +24,7 @@ You can pass:
 
 Raven will auto-resolve:
 - `0753` → `SAL-QTN-2024-00753`
-- `SO-00752` → `SO-00752-LEGOSAN AB`
+- `SO-00752` → `SO-00752-EXAMPLE-A`
 
 And then validate: Quotation → Sales Order → Delivery Note → Sales Invoice
 
