@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Generator
 from openai import OpenAI
 from .base import LLMProvider
 from ._secrets import resolve_secret
+from .model_hosts import model_http_client
 
 
 class DeepSeekProvider(LLMProvider):
@@ -55,6 +56,7 @@ class DeepSeekProvider(LLMProvider):
         self.client = OpenAI(
             api_key=api_key,
             base_url=self.BASE_URL,
+            http_client=model_http_client(),
         )
         
         self.default_model = settings.get("deepseek_model") or self.DEFAULT_MODEL

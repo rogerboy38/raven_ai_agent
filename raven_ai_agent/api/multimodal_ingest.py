@@ -43,23 +43,27 @@ class MultimodalIngest:
         """Initialize LLM client with vision support"""
         try:
             from openai import OpenAI
+            from raven_ai_agent.providers.model_hosts import checked_base_url, model_http_client
             
             # Try to get settings - handle case where not configured
             try:
                 settings = frappe.get_doc("AI Agent Settings")
                 api_key = settings.get_password("api_key")
-                base_url = settings.get("base_url") or "https://api.openai.com/v1"
+                candidate, source = settings.get("base_url"), "the AI Agent Settings base_url"
             except:
                 # Fallback: try environment variables
                 import os
                 api_key = os.environ.get("OPENAI_API_KEY")
-                base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+                candidate, source = os.environ.get("OPENAI_BASE_URL"), "the OPENAI_BASE_URL environment variable"
+            # decision 101 (TASKS-350): a model server only on the named list; checked OUTSIDE the settings try, so a
+            # refused host is refused and does not fall back to the environment
+            base_url = checked_base_url(candidate, "https://api.openai.com/v1", source)
             
             if not api_key:
                 frappe.logger().warning("MultimodalIngest: No API key found")
                 return
                 
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
+            self.client = OpenAI(api_key=api_key, base_url=base_url, http_client=model_http_client())
         except Exception as e:
             frappe.logger().error(f"MultimodalIngest: Failed to init client: {e}")
     

@@ -12,6 +12,7 @@ import frappe
 from typing import Dict, List, Optional, Generator
 from .base import LLMProvider
 from ._secrets import resolve_secret
+from .model_hosts import model_http_client
 
 try:
     from anthropic import Anthropic
@@ -65,7 +66,7 @@ class ClaudeProvider(LLMProvider):
             label="Claude API key",
         )
         self.api_key = api_key
-        self.client = Anthropic(api_key=api_key)
+        self.client = Anthropic(api_key=api_key, http_client=model_http_client())
         self.default_model = settings.get("claude_model", self.DEFAULT_MODEL)
     
     def chat(

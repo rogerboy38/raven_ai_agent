@@ -298,7 +298,7 @@ class TestProviderHosts(unittest.TestCase):
         import importlib
 
         want = set()
-        for mod in ("minimax", "deepseek", "ollama"):
+        for mod in ("minimax", "deepseek"):       # the public providers; Ollama's built-in default is the programme's own host (decision 101: not on the list)
             m = importlib.import_module(f"raven_ai_agent.providers.{mod}")
             for obj in vars(m).values():
                 for attr in ("BASE_URL", "DEFAULT_BASE_URL"):
@@ -307,6 +307,11 @@ class TestProviderHosts(unittest.TestCase):
                         want.add(g._host_of(u))
         self.assertTrue(want, "no provider base URL found")
         self.assertTrue(want <= set(g._provider_hosts()), want - set(g._provider_hosts()))
+
+    def test_the_ollama_built_in_default_host_is_not_allowed_until_it_is_ruled(self):
+        from raven_ai_agent.providers.ollama import OllamaProvider
+
+        self.assertNotIn(g._host_of(OllamaProvider.DEFAULT_BASE_URL), g._provider_hosts())
 
     def test_a_random_host_is_not_allowed(self):
         self.assertNotIn("example.org", g._provider_hosts())
