@@ -1,16 +1,19 @@
 """
 MiniMax LLM Provider - The Jewel of the Crown 👑
-https://api.minimax.chat/
+https://api.minimax.io/v1
 
-Models:
-- abab6.5s-chat - Latest flagship model (MiniMax-Text-01)
-- abab6.5g-chat - General purpose
-- abab5.5-chat - Legacy model
+Models (live IDs, verified against api.minimax.io on 2026-11-19):
+- MiniMax-M3         - flagship, 1M context, multimodal, agentic coding
+- MiniMax-M3.1-Flash - cheapest current model, high throughput
+
+Retired by MiniMax - the API answers HTTP 404 "no longer available":
+- MiniMax-M2, MiniMax-M2.1, MiniMax-M2-Stable
+- abab6.5-chat, abab5.5-chat, abab6.5s-chat, abab6.5g-chat
 
 Special Features:
 - Excellent Chinese language support
 - Voice synthesis integration (T2A)
-- Long context (up to 1M tokens with abab6.5s)
+- Long context (up to 1M tokens with MiniMax-M3)
 - Very competitive pricing
 """
 
@@ -26,7 +29,7 @@ class MiniMaxProvider(LLMProvider):
     MiniMax API Provider - Chinese AI Powerhouse
     
     Features:
-    - 1M token context window (abab6.5s)
+    - 1M token context window (MiniMax-M3)
     - Excellent Chinese/English bilingual
     - Voice synthesis built-in
     - Competitive pricing
@@ -36,19 +39,21 @@ class MiniMaxProvider(LLMProvider):
     name = "minimax"
     BASE_URL = "https://api.minimax.io/v1"
     
+    # Only IDs MiniMax still serves. Model IDs are retired without notice and
+    # a retired one answers HTTP 404 "no longer available", so anything absent
+    # from this dict is refused by design.
     MODELS = {
-        "MiniMax-M2": "Agentic capabilities, Advanced reasoning",
-        "MiniMax-M2-Stable": "High concurrency and commercial use",
-        "MiniMax-M2.1": "Coding Plan model - polyglot programming mastery",
+        "MiniMax-M3": "Flagship - 1M context, multimodal, agentic coding",
+        "MiniMax-M3.1-Flash": "Cheapest current model - high throughput",
     }
     
+    # USD per 1M tokens, standard tier (platform.minimax.io pricing)
     PRICING = {
-        "MiniMax-M2": {"input": 1.00, "output": 4.00},
-        "MiniMax-M2-Stable": {"input": 1.00, "output": 4.00},
-        "MiniMax-M2.1": {"input": 0, "output": 0},  # Included in Coding Plan
+        "MiniMax-M3": {"input": 0.30, "output": 1.20},
+        "MiniMax-M3.1-Flash": {"input": 0.15, "output": 0.60},
     }
     
-    DEFAULT_MODEL = "MiniMax-M2.1"  # Default to Coding Plan model
+    DEFAULT_MODEL = "MiniMax-M3"  # Served by both CP (sk-cp-) and regular keys
     
     def __init__(self, settings: Dict):
         super().__init__(settings)
@@ -90,10 +95,32 @@ class MiniMaxProvider(LLMProvider):
 
         self.api_key = api_key
         self.group_id = group_id
-        # Use M2.1 for Coding Plan keys (sk-cp-), M2 for regular keys
-        default = "MiniMax-M2.1" if api_key.startswith("sk-cp-") else "MiniMax-M2"
-        self.default_model = settings.get("minimax_model") or default
+        # Model selection: the Desk value (AI Agent Settings.minimax_model)
+        # wins, but only when it still names a live model. The stored value
+        # outlives the model - MiniMax retires IDs without notice and the
+        # retired one answers HTTP 404 "no longer available" - so a retired or
+        # unknown value falls back to the current flagship instead of failing
+        # every call. The key prefix no longer selects a model: both Coding
+        # Plan (sk-cp-) and regular keys are served by the current generation.
+        self.default_model = self._resolve_model(settings.get("minimax_model"))
         self.model = self.default_model
+    
+    def _resolve_model(self, configured: Optional[str]) -> str:
+        """Return a live model ID, falling back to the flagship.
+        
+        `configured` is the raw value of AI Agent Settings.minimax_model. It is
+        honoured only when it names a model MiniMax still serves; a retired ID,
+        a typo or a leftover from another provider falls back to
+        DEFAULT_MODEL with a warning in the log.
+        """
+        if configured and configured in self.MODELS:
+            return configured
+        if configured:
+            frappe.logger().warning(
+                f"[MiniMax] model {configured!r} is retired or unknown; "
+                f"using {self.DEFAULT_MODEL}"
+            )
+        return self.DEFAULT_MODEL
     
     def chat(
         self,
@@ -159,11 +186,16 @@ class MiniMaxProvider(LLMProvider):
                 json=payload
             )
             
-            # Log response for debugging
+            # Log response for debugging. On 404 MiniMax names the model in
+            # the body ("... is no longer available"), so surface that body
+            # instead of a bare HTTPStatusError - it is the whole diagnosis.
             if response.status_code != 200:
                 frappe.logger().error(f"[MiniMax] Error {response.status_code}: {response.text}")
-            
-            response.raise_for_status()
+                if response.status_code == 404:
+                    raise Exception(
+                        f"MiniMax model {model!r} is not available (HTTP 404): {response.text[:300]}"
+                    )
+                response.raise_for_status()
             data = response.json()
             
             # Check for API-level errors
@@ -201,6 +233,16 @@ class MiniMaxProvider(LLMProvider):
                     "stream": True
                 }
             ) as response:
+                # A retired model answers 404 with no SSE body, so without this
+                # check the stream yields nothing and the caller sees an empty
+                # answer instead of an error.
+                if response.status_code != 200:
+                    body = response.read().decode("utf-8", "replace")
+                    frappe.logger().error(f"[MiniMax] Stream error {response.status_code}: {body}")
+                    raise Exception(
+                        f"MiniMax model {model!r} is not available "
+                        f"(HTTP {response.status_code}): {body[:300]}"
+                    )
                 for line in response.iter_lines():
                     if line.startswith("data: "):
                         import json

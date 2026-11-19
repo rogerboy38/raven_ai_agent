@@ -502,7 +502,7 @@ def get_available_providers() -> Dict:
         "minimax": {
             "name": "MiniMax",
             "configured": bool(settings.get_password("minimax_api_key") if hasattr(settings, "minimax_api_key") else None),
-            "models": ["abab6.5-chat", "abab5.5-chat"]
+            "models": ["MiniMax-M3", "MiniMax-M3.1-Flash"]
         }
     }
     

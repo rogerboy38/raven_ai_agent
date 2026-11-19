@@ -39,7 +39,7 @@ Raymond-Lucy AI Agent for ERPNext with Raven Integration - Enhanced with OpenCla
 | **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo | Default provider |
 | **DeepSeek** | deepseek-chat, deepseek-reasoner | Cost-effective, reasoning mode |
 | **Claude** | claude-3-5-sonnet, claude-3-opus | Strong analysis |
-| **MiniMax** | abab6.5-chat, abab5.5-chat | Multilingual |
+| **MiniMax** | MiniMax-M3, MiniMax-M3.1-Flash | Multilingual |
 | **Ollama** | llama3.x, qwen, mistral, etc. | On-prem / offline |
 
 All five providers transparently work with the **FallbackChain** pattern — if the primary provider fails or returns empty, the chain falls through to the next one in your configured order.

@@ -61,9 +61,8 @@ class CostMonitor:
         "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
         
         # MiniMax
-        "abab6.5s-chat": {"input": 1.00, "output": 4.00},
-        "abab6.5g-chat": {"input": 0.50, "output": 2.00},
-        "abab5.5-chat": {"input": 0.20, "output": 0.80},
+        "MiniMax-M3": {"input": 0.30, "output": 1.20},
+        "MiniMax-M3.1-Flash": {"input": 0.15, "output": 0.60},
     }
     
     def __init__(self):

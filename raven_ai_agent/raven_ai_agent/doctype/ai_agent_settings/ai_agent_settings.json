@@ -71,8 +71,9 @@
    "default": "OpenAI",
    "fieldname": "default_provider",
    "fieldtype": "Select",
-   "label": "Default Provider",
-   "options": "OpenAI\nDeepSeek\nClaude\nMiniMax"
+   "label": "Default AI Provider",
+   "options": "OpenAI\nDeepSeek\nClaude\nMiniMax\nOllama",
+   "reqd": 1
   },
   {
    "fieldname": "fallback_provider",
@@ -165,11 +166,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "abab6.5-chat",
+   "default": "MiniMax-M3",
    "fieldname": "minimax_model",
    "fieldtype": "Select",
    "label": "MiniMax Model",
-   "options": "abab6.5-chat\nabab5.5-chat"
+   "options": "MiniMax-M3\nMiniMax-M3.1-Flash"
   },
   {
    "fieldname": "sb_settings",

@@ -182,7 +182,7 @@ agent.process_query("scan migration 2024")
 | OpenAI | `openai_api_key` | gpt-4o, gpt-4o-mini |
 | DeepSeek | `deepseek_api_key` | deepseek-chat, deepseek-reasoner |
 | Claude | `claude_api_key` | claude-3-5-sonnet |
-| MiniMax | `minimax_cp_key` | MiniMax-M2.1 |
+| MiniMax | `minimax_cp_key` | MiniMax-M3 |
 | Ollama | `ollama_base_url` | llama3.1:8b |
 
 ---
